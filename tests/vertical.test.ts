@@ -41,6 +41,25 @@ test('kontrakt odrzuca wartość bez statusu i brak oznaczony jako zero', () => 
   assert.equal(daysSchema.safeParse([{ date: '2026-01-01', value: 0, status: 'missing', note: '', revision: 1 }]).success, false);
 });
 
+test('serwer ponawia odczyt bazy, która pojawiła się po uruchomieniu', async () => {
+  const demo = createDemoDatabase();
+  const source = new DatabaseSync(':memory:');
+  initializeTakeoutStore(source);
+  let available = false;
+  const server = createApp(demo, () => available ? source : undefined);
+  after(() => { server.close(); demo.close(); source.close(); });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== 'string');
+  const base = `http://127.0.0.1:${address.port}`;
+  const cookie = (await fetch(`${base}/api/session`)).headers.get('set-cookie')?.split(';')[0];
+  assert.ok(cookie);
+  const options = { headers: { Cookie: cookie } };
+  assert.equal((await fetch(`${base}/api/source-records?kind=weight`, options)).status, 503);
+  available = true;
+  assert.equal((await fetch(`${base}/api/source-records?kind=weight`, options)).status, 200);
+});
+
 test('uszkodzony wynik zwraca błąd bez ujawnienia treści rekordu', async () => {
   const db = createDemoDatabase();
   db.prepare('INSERT INTO days VALUES (?, ?, ?, ?, ?)').run('invalid-date', 1, 'valid', 'private content', 1);
@@ -73,7 +92,7 @@ test('chroniony odczyt surowych danych pokazuje tekstowe pola bez kwalifikowania
   const cookie = (await fetch(`${base}/api/session`)).headers.get('set-cookie')?.split(';')[0];
   assert.ok(cookie);
   const response = await fetch(`${base}/api/source-records?kind=weight`, { headers: { Cookie: cookie } });
-  assert.deepEqual(await response.json(), { rows: [{ timestamp: '2026-01-01T00:00:00Z', value: '72500.00', source: 'Example' }], next: null });
+  assert.deepEqual(await response.json(), { rows: [{ timestamp: '2026-01-01T00:00:00Z', value: '72500.00', source: 'Example', converted: { status: 'parsed', value: '72.50000', unit: 'kg' } }], next: null });
   assert.equal((await fetch(`${base}/api/source-records?kind=weight&after=-1`, { headers: { Cookie: cookie } })).status, 400);
   const insert = source.prepare('INSERT INTO artifact_rows VALUES (?, ?, ?)');
   for (let i = 1; i <= 100; i++) insert.run(1, i, JSON.stringify(['2026-01-01T00:00:00Z', String(i), 'Example']));
@@ -82,4 +101,9 @@ test('chroniony odczyt surowych danych pokazuje tekstowe pola bez kwalifikowania
   const last = await (await fetch(`${base}/api/source-records?kind=weight&after=${first.next}`, { headers: { Cookie: cookie } })).json() as { rows: unknown[]; next: null };
   assert.equal(last.rows.length, 1);
   assert.equal(last.next, null);
+  insert.run(1, 101, JSON.stringify(['2026-01-02T23:00:00-05:00', '80000', 'Example']));
+  const dated = await (await fetch(`${base}/api/source-records?kind=weight&date=2026-01-02`, { headers: { Cookie: cookie } })).json() as { rows: { timestamp: string }[] };
+  assert.equal(dated.rows.length, 1);
+  assert.equal(dated.rows[0]?.timestamp, '2026-01-02T23:00:00-05:00');
+  assert.equal((await fetch(`${base}/api/source-records?kind=weight&date=2026-02-30`, { headers: { Cookie: cookie } })).status, 400);
 });

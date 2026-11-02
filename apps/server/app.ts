@@ -4,8 +4,9 @@ import type { DatabaseSync } from 'node:sqlite';
 import { listDays } from '../../packages/storage/days.ts';
 import { sourceKindSchema } from '../../packages/contracts/source-records.ts';
 import { listSourceRecords } from '../../packages/storage/source-records.ts';
+import { z } from 'zod';
 
-export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync): Server {
+export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => DatabaseSync | undefined)): Server {
   const session = randomBytes(32).toString('hex');
   const server = createServer((request, response) => {
     const address = server.address();
@@ -29,13 +30,15 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync): Server {
       const kind = sourceKindSchema.safeParse(url.searchParams.get('kind'));
       const cursorText = url.searchParams.get('after') ?? '0';
       const cursor = Number(cursorText);
-      if (!kind.success || !/^\d+$/.test(cursorText) || !Number.isSafeInteger(cursor) || cursor < 0) {
+      const sourceDate = url.searchParams.get('date');
+      if (!kind.success || !/^\d+$/.test(cursorText) || !Number.isSafeInteger(cursor) || cursor < 0 || (sourceDate !== null && !z.iso.date().safeParse(sourceDate).success)) {
         response.writeHead(400, { 'Cache-Control': 'no-store' }).end();
         return;
       }
-      if (!sourceDb) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
+      const source = typeof sourceDb === 'function' ? sourceDb() : sourceDb;
+      if (!source) { response.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify({ error: 'source_unavailable' })); return; }
       try {
-        const page = listSourceRecords(sourceDb, kind.data, cursor);
+        const page = listSourceRecords(source, kind.data, cursor, sourceDate);
         response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
         response.end(JSON.stringify(page));
       } catch {

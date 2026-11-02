@@ -1,30 +1,41 @@
 /** The caller supplies only accepted measurements already assigned to the same day. */
 export interface AcceptedMeasurement {
   identity: string;
-  value: number;
+  value: string;
 }
 
 export type DailyMean =
   | { status: 'missing'; value: null; count: 0 }
-  | { status: 'valid'; value: number; count: number };
+  | { status: 'valid'; value: { numerator: string; denominator: string }; count: number };
+
+function decimal(value: string): { numerator: bigint; scale: number } {
+  if (value.length > 512 || !/^\d+(?:\.\d+)?$/.test(value)) throw new Error('Nieprawidłowy zaakceptowany pomiar');
+  const [whole, fraction = ''] = value.split('.');
+  return { numerator: BigInt(`${whole}${fraction}`), scale: fraction.length };
+}
+
+function gcd(a: bigint, b: bigint): bigint {
+  while (b !== 0n) [a, b] = [b, a % b];
+  return a;
+}
 
 /** Repeated identities represent the same accepted measurement, not extra samples. */
 export function dailyMean(measurements: readonly AcceptedMeasurement[]): DailyMean {
-  const unique = new Map<string, number>();
+  const unique = new Map<string, { numerator: bigint; scale: number }>();
   for (const measurement of measurements) {
-    if (!measurement.identity.trim() || !Number.isFinite(measurement.value)) {
-      throw new Error('Nieprawidłowy zaakceptowany pomiar');
-    }
-    if (unique.has(measurement.identity) && unique.get(measurement.identity) !== measurement.value) {
+    if (!measurement.identity.trim()) throw new Error('Nieprawidłowy zaakceptowany pomiar');
+    const next = decimal(measurement.value);
+    const previous = unique.get(measurement.identity);
+    if (previous && previous.numerator * 10n ** BigInt(next.scale) !== next.numerator * 10n ** BigInt(previous.scale)) {
       throw new Error('Sprzeczne wartości tego samego pomiaru');
     }
-    unique.set(measurement.identity, measurement.value);
+    unique.set(measurement.identity, next);
   }
   if (unique.size === 0) return { status: 'missing', value: null, count: 0 };
-
-  // Sort identities to keep the result independent of input and import order.
-  const values = [...unique.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
-  const mean = values.reduce((sum, [, value]) => sum + value / values.length, 0);
-  if (!Number.isFinite(mean)) throw new Error('Wartość poza zakresem obliczeń');
-  return { status: 'valid', value: mean, count: values.length };
+  const values = [...unique.values()];
+  const scale = values.reduce((maximum, value) => Math.max(maximum, value.scale), 0);
+  const numerator = values.reduce((sum, value) => sum + value.numerator * 10n ** BigInt(scale - value.scale), 0n);
+  const denominator = BigInt(values.length) * 10n ** BigInt(scale);
+  const divisor = gcd(numerator, denominator);
+  return { status: 'valid', value: { numerator: (numerator / divisor).toString(), denominator: (denominator / divisor).toString() }, count: values.length };
 }

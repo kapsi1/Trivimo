@@ -1,13 +1,14 @@
 import { createHash } from 'node:crypto';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { sourceKindSchema } from '../../packages/contracts/source-records.ts';
 import { listSourceRecords } from '../../packages/storage/source-records.ts';
+import { takeoutDatabasePath } from '../../packages/storage/location.ts';
 
 let stage = 'otwarcie';
 try {
-  if (!process.argv[2] && !process.env.LOCALAPPDATA) throw new Error('Missing data directory');
-  const path = process.argv[2] ? resolve(process.argv[2]) : join(process.env.LOCALAPPDATA!, 'Trivimo', 'takeout-raw.sqlite');
+  const path = process.argv[2] ? resolve(process.argv[2]) : takeoutDatabasePath();
+  if (!path) throw new Error('Missing data directory');
   const db = new DatabaseSync(path, { readOnly: true });
   try {
     stage = 'integralność';
@@ -26,7 +27,10 @@ try {
     const incomplete = db.prepare("SELECT COUNT(*) AS count FROM import_sessions WHERE state != 'complete'").get();
     if (incomplete?.count !== 0) throw new Error('Incomplete import');
     stage = 'odczyt';
-    for (const kind of sourceKindSchema.options) listSourceRecords(db, kind, 0);
+    for (const kind of sourceKindSchema.options) {
+      listSourceRecords(db, kind, 0);
+      listSourceRecords(db, kind, 0, '2026-01-01');
+    }
     console.log('Weryfikacja bazy importu: integralność, skróty oryginałów, liczby wierszy i odczyt typów poprawne.');
   } finally { db.close(); }
 } catch {

@@ -1,11 +1,13 @@
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { backupToNewFile } from '../../packages/storage/backup.ts';
+import { takeoutDatabasePath } from '../../packages/storage/location.ts';
 
 async function main() {
   const destination = process.argv[2];
-  if (!destination || !process.env.LOCALAPPDATA) throw new Error('Brak katalogu danych lub celu kopii');
-  const source = new DatabaseSync(join(process.env.LOCALAPPDATA, 'Trivimo', 'takeout-raw.sqlite'), { readOnly: true });
+  const sourcePath = takeoutDatabasePath();
+  if (!destination || !sourcePath) throw new Error('Brak katalogu danych lub celu kopii');
+  const source = new DatabaseSync(sourcePath, { readOnly: true });
   try { await backupToNewFile(source, resolve(destination)); } finally { source.close(); }
   console.log('Utworzono kopię bazy. Plik nie jest szyfrowany przez aplikację.');
 }

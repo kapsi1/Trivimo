@@ -15,7 +15,7 @@ W drugim terminalu w tym samym katalogu:
 npm run dev:web
 ```
 
-Otwórz adres podany przez Vite i wybierz „Import Takeout”. `npm test` uruchamia testy syntetyczne, `npm run typecheck` sprawdza typy, a `npm run build` sprawdza typy i buduje interfejs.
+Otwórz adres podany przez Vite i wybierz „Dane Takeout”. Zakładka służy do przeglądania danych; import kolejnego katalogu uruchamia się obecnie poleceniem opisanym poniżej. Widok pokazuje oryginał i, dla znanych jednostek, dokładne przeliczenie bez kwalifikacji pomiaru. Filtr daty odnosi się do tekstu czasu w źródle, nie do doby Europe/Warsaw. `npm test` uruchamia testy syntetyczne, `npm run typecheck` sprawdza typy, a `npm run build` sprawdza typy i buduje interfejs.
 
 Schemat przykładu ma wersję `user_version = 1` i powstaje w transakcji. Test sprawdza również syntetyczną bazę plikową, jej ponowne otwarcie oraz kopię przez SQLite backup API i odtworzenie do nowego pliku. Dane przykładowe pozostają w pamięci; magazyn importu jest osobnym plikiem. Funkcja kopii nie jest jeszcze podłączona do migracji i nie obejmuje załączników, szyfrowania ani polityki retencji; nie jest gotowym rozwiązaniem kopii danych zdrowia.
 
@@ -29,6 +29,7 @@ Wskaż tylko wybrany, rozpakowany katalog eksportu. Bez wyszukiwania archiwów n
 npm run preview:takeout -- "C:\sciezka\do\eksportu"
 npm run import:takeout -- "C:\sciezka\do\eksportu"
 npm run verify:takeout
+npm run verify:takeout -- "C:\chroniony-katalog\kopia.sqlite"
 npm run backup:takeout -- "C:\chroniony-katalog\kopia.sqlite"
 ```
 
@@ -36,6 +37,8 @@ Na czas importu zamknij serwer. Import zachowuje pliki z katalogu Google Health;
 
 Magazyn `%LOCALAPPDATA%\Trivimo\takeout-raw.sqlite` jest poza repozytorium i nie jest szyfrowany przez aplikację. Polega na uprawnieniach i ochronie dysku systemu; nie ma jeszcze kompletnego mechanizmu szyfrowanych kopii. `verify:takeout` sprawdza integralność bazy, skróty oryginałów i liczbę zapisanych wierszy, nie zgodność znaczenia z Google Health. Rozpoznawane CSV wymagają UTF-8, maksymalnie 200 000 wierszy, 256 kolumn i 65 536 znaków na rekord; każdy plik jest ograniczony do 32 MiB, a cały plan do 5 000 plików. Import nie rozpakowuje ZIP i pomija napotkane linki symboliczne. Do większych eksportów potrzebne jest strumieniowanie i dalsza obsługa limitów.
 
-Polecenie kopii korzysta z SQLite backup API, wymaga nowej nazwy i nie nadpisuje istniejącego pliku; tworzy nieszyfrowaną kopię samej bazy. Wymaga docelowego systemu plików obsługującego dowiązania twarde. Wybierz odpowiednio chronioną lokalizację. Mechanizm kopii i odtwarzanie sprawdzono na syntetycznej bazie; kopia prywatnej bazy nie została wykonana automatycznie.
+Serwer oraz polecenia importu, weryfikacji i kopii używają tego samego katalogu. Opcjonalna zmienna `TRIVIMO_DATA_DIR` wskazuje katalog zawierający `takeout-raw.sqlite`. Jeśli środowisko izolowane nie ma dostępu do właściwej bazy, uruchom serwer w zwykłym terminalu użytkownika; przycisk „Spróbuj ponownie” ponawia odczyt bez restartu, gdy plik stanie się dostępny.
+
+Polecenie kopii korzysta z SQLite backup API, wymaga nowej nazwy i nie nadpisuje istniejącego pliku; tworzy nieszyfrowaną kopię samej bazy. Wymaga docelowego systemu plików obsługującego dowiązania twarde. Wybierz odpowiednio chronioną lokalizację. Mechanizm kopii i odtwarzanie sprawdzono na syntetycznej bazie; wykonano i zweryfikowano także prywatną kopię w lokalizacji wskazanej przez użytkownika.
 
 Opcjonalna próba starych parserów: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/spike-takeout.ps1`. Wymaga sąsiedniego kodu `C:\dev\health-sync`, lokalnego cache Gradle z Kotlin 2.0.21 i wskazanej w skrypcie Javy Android Studio. Test używa wyłącznie syntetycznych ciągów; nie jest częścią CI ani importem. Lokalny launcher obchodzi niezgodność rozpoznania JDK 25 przez starszy kompilator, bez zmiany JDK ani starego projektu.

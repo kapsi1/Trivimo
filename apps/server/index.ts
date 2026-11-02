@@ -1,11 +1,15 @@
 import { createApp } from './app.ts';
 import { createDemoDatabase } from '../../packages/storage/days.ts';
 import { DatabaseSync } from 'node:sqlite';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { takeoutDatabasePath } from '../../packages/storage/location.ts';
 
-const sourcePath = process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, 'Trivimo', 'takeout-raw.sqlite') : null;
-const sourceDb = sourcePath && existsSync(sourcePath) ? new DatabaseSync(sourcePath, { readOnly: true }) : undefined;
-createApp(createDemoDatabase(), sourceDb).listen(3000, '127.0.0.1', () => {
+const sourcePath = takeoutDatabasePath();
+let sourceDb: DatabaseSync | undefined;
+function getSourceDb(): DatabaseSync | undefined {
+  if (sourceDb || !sourcePath) return sourceDb;
+  try { sourceDb = new DatabaseSync(sourcePath, { readOnly: true }); } catch { return undefined; }
+  return sourceDb;
+}
+createApp(createDemoDatabase(), getSourceDb).listen(3000, '127.0.0.1', () => {
   console.log('Lokalne API: http://127.0.0.1:3000');
 });

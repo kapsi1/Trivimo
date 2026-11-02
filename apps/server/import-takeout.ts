@@ -1,16 +1,16 @@
 import { lstatSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { importTakeout, initializeTakeoutStore } from '../../packages/adapters/takeout/import.ts';
+import { takeoutDatabasePath } from '../../packages/storage/location.ts';
 
 const directory = process.argv[2];
-const localAppData = process.env.LOCALAPPDATA;
-if (!directory || !localAppData) {
+const dbPath = takeoutDatabasePath();
+if (!directory || !dbPath) {
   console.error('Podaj katalog Takeout i uruchom polecenie w środowisku Windows z LOCALAPPDATA.');
   process.exit(1);
 }
-const dataDir = join(localAppData, 'Trivimo');
-const dbPath = join(dataDir, 'takeout-raw.sqlite');
+const dataDir = dirname(dbPath);
 try {
   mkdirSync(dataDir, { recursive: true });
   if (lstatSync(dataDir).isSymbolicLink()) throw new Error('Niedozwolony katalog danych');
