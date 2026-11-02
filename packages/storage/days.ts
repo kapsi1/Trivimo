@@ -1,13 +1,11 @@
 import { DatabaseSync } from 'node:sqlite';
 import { daysSchema, type Day } from '../contracts/day.ts';
+import { migrateDatabase } from './migrations.ts';
 
 // The P0 database contains only synthetic projections, not source health data.
 export function createDemoDatabase(): DatabaseSync {
   const db = new DatabaseSync(':memory:');
-  db.exec(`CREATE TABLE days (
-    date TEXT PRIMARY KEY, value REAL, status TEXT NOT NULL,
-    note TEXT NOT NULL, revision INTEGER NOT NULL
-  ) STRICT`);
+  migrateDatabase(db);
   const insert = db.prepare('INSERT INTO days VALUES (?, ?, ?, ?, ?)');
   insert.run('2026-01-01', 72.4, 'valid', '', 1);
   insert.run('2026-01-02', null, 'missing', 'Brak pomiaru', 1);

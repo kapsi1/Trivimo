@@ -17,4 +17,6 @@ npm run dev:web
 
 Otwórz adres podany przez Vite. `npm test` uruchamia test kontraktu i przepływu SQLite → HTTP, `npm run typecheck` sprawdza typy, a `npm run build` sprawdza typy i buduje interfejs.
 
-To demonstracja, nie magazyn danych zdrowotnych: brak trwałej bazy, migracji, uwierzytelnienia, sesji, ochrony Origin/Host i importu. Nie używaj jej z prawdziwymi danymi ani nie udostępniaj z sieci. Wykres prezentuje abstrakcyjne wartości, nie metrykę medyczną.
+Schemat przykładu ma wersję `user_version = 1` i powstaje w transakcji. Test sprawdza również syntetyczną bazę plikową i ponowne jej otwarcie. Przykład serwera nadal korzysta wyłącznie z bazy w pamięci. Przed dodaniem migracji istniejącej bazy trzeba wdrożyć i sprawdzić mechanizm bezpiecznej kopii; obecny kod nie stanowi rozwiązania backup/restore.
+
+To demonstracja, nie magazyn danych zdrowotnych: brak trwałej bazy aplikacji, uwierzytelnienia, sesji, ochrony Origin/Host i importu. Nie używaj jej z prawdziwymi danymi ani nie udostępniaj z sieci. Wykres prezentuje abstrakcyjne wartości, nie metrykę medyczną.

@@ -4,7 +4,9 @@ Cel: użyteczna tabela/wykresy dla 2026 i nowych dni, oparta na własnej bazie. 
 
 ## P0: przygotowanie i małe próby
 
-Rozpoczęto syntetyczny przepływ SQLite → REST → tabela/wykres. Pozostają m.in. trwała baza i migracje, weryfikacja UI oraz próba parsera; szczegóły i ograniczenia są w [raporcie](../test-results.md).
+Rozpoczęto syntetyczny przepływ SQLite → REST → tabela/wykres oraz wersjonowanie schematu. Pozostają m.in. trwała baza aplikacji, kopia przed przyszłymi migracjami, weryfikacja UI oraz praktyczna próba parsera; szczegóły i ograniczenia są w [raporcie](../test-results.md).
+
+Wstępny przegląd kodu Health Sync: parsery walidują nagłówki i limity CSV, czas oraz jednostki; waga występuje w gramach, a total i active mają osobne kolumny. Mapowanie nazw konkretnych urządzeń oraz porównania/zapisy Connect nie są ogólną polityką pochodzenia Trivimo. Należy wykonać zaplanowaną próbę na syntetycznym CSV przed decyzją o przeniesieniu reguł; sam przegląd nie potwierdza zgodności importu ani definicji kalorii.
 
 - [ ] Potwierdzić stos, sposób uruchomienia na Windows, manager pakietów, wspólne schematy walidacji, migracje DB i runner testów. Dodać README z rzeczywistymi poleceniami, lockfile i minimalne CI dopiero po utworzeniu kodu. Brak frameworka pełnej synchronizacji na zapas.
 - [ ] Uruchomić pionowy syntetyczny przykład: repozytorium DB → zapytanie dnia → REST → ciemna tabela i mały wykres. Pokazać liczbę, brak, potwierdzone zero i uwagę. Bez prawdziwych danych w repo.
