@@ -1,6 +1,6 @@
 # Plan realizacji i zależności
 
-Wszystkie etapy są niewykonane. Plan przygotowany 2026-11-02; nie jest poleceniem uruchomienia integracji ani zapisu danych. Szczegóły semantyki mają jedno miejsce w [kontraktach](../data-contracts.md).
+P0 rozpoczęto od syntetycznego przykładu; pozostałe etapy są niewykonane. Plan przygotowany 2026-11-02; nie jest poleceniem uruchomienia integracji ani zapisu danych. Szczegóły semantyki mają jedno miejsce w [kontraktach](../data-contracts.md).
 
 | Etap | Wynik i zależności | Plan |
 | --- | --- | --- |

@@ -1,9 +1,10 @@
 # Indeks dokumentacji
 
-Stan: projekt i plany, 2026-11-02; brak implementacji.
+Stan: rozpoczęte P0; działa syntetyczny przykład, bez integracji danych zdrowia.
 
 | Potrzeba | Dokument |
 | --- | --- |
+| Uruchomienie i wykonane kontrole | [Środowisko](development.md), [Raport testów](test-results.md) |
 | Cel, pierwszy zakres i start agenta | [README](../README.md), [AGENTS](../AGENTS.md) |
 | Moduły, baza, proponowany stos i umiejscowienie serwera | [Architektura](architecture.md) |
 | Definicje metryk, pochodzenie, kalorie i uwagi | [Kontrakty danych](data-contracts.md) |
@@ -20,4 +21,4 @@ Stan: projekt i plany, 2026-11-02; brak implementacji.
 | Kopie, zabezpieczenia, testy i eksploatacja | [Jakość i operacje](plan/09-quality-operations.md) |
 | Dokumenty producentów, zakres potwierdzenia i dawne materiały | [Źródła](references.md) |
 
-Wymagania są opisem celu, checkboxy pozostałą pracą, a przykładowe modele propozycją implementacyjną. Żaden wpis w tym katalogu nie dowodzi, że funkcja już działa.
+Wymagania są opisem celu, checkboxy pozostałą pracą, a przykładowe modele propozycją implementacyjną. Faktyczny zakres i wyniki kontroli opisano w raporcie testów.

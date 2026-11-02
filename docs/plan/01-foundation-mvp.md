@@ -4,6 +4,8 @@ Cel: użyteczna tabela/wykresy dla 2026 i nowych dni, oparta na własnej bazie. 
 
 ## P0: przygotowanie i małe próby
 
+Rozpoczęto syntetyczny przepływ SQLite → REST → tabela/wykres. Pozostają m.in. trwała baza i migracje, weryfikacja UI oraz próba parsera; szczegóły i ograniczenia są w [raporcie](../test-results.md).
+
 - [ ] Potwierdzić stos, sposób uruchomienia na Windows, manager pakietów, wspólne schematy walidacji, migracje DB i runner testów. Dodać README z rzeczywistymi poleceniami, lockfile i minimalne CI dopiero po utworzeniu kodu. Brak frameworka pełnej synchronizacji na zapas.
 - [ ] Uruchomić pionowy syntetyczny przykład: repozytorium DB → zapytanie dnia → REST → ciemna tabela i mały wykres. Pokazać liczbę, brak, potwierdzone zero i uwagę. Bez prawdziwych danych w repo.
 - [ ] Ocenić parsery Kotlin przez syntetyczny CSV z ważeniami i dziennymi energiami. Zanotować, które reguły przenosimy, które są specyficzne dla dawnych zapisów Connect. Nie przepisywać całej aplikacji przed wynikiem próby.

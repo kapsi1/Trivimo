@@ -16,7 +16,7 @@ Nowe wymaganie pełnego katalogu API zastępuje dla tej aplikacji dawne ogranicz
 
 ## Proponowane domyślne decyzje techniczne
 
-To propozycje do zatwierdzenia w P0, nie wymagania użytkownika: TypeScript dla domeny/serwera/web, React, SQLite, jeden serwis i proces roboczy; szczegóły w [architekturze](architecture.md). Lokalny serwis na komputerze dla pierwszego MVP. REST jako stabilna granica przypadków użycia; MCP później jako adapter do tych samych komend.
+Na potrzeby pierwszej próby P0 wybrano TypeScript, React, SQLite i lokalny serwis Node z REST; szczegóły i ograniczenia są w [środowisku developerskim](development.md). Próbę parserów Kotlin należy jeszcze wykonać przed ostateczną oceną stosu. MCP pozostaje przyszłym adapterem tych samych komend.
 
 Kanoniczny dzień: Europe/Warsaw, zachowanie czasu źródła i jawnie osobnych podsumowań cywilnych producenta. Masa/tłuszcz: średnia arytmetyczna unikalnych zaakceptowanych pomiarów dnia; ostatni pomiar dostępny jako osobne pole, bez cichej zamiany znaczenia.
 

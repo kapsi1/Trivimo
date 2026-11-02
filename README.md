@@ -11,9 +11,11 @@ Docelowo: wszystkie odczytywalne dane Health API, dashboardy i treningi z tętne
 ## Jak zacząć pracę
 
 1. Agent czyta [AGENTS.md](AGENTS.md), [architekturę](docs/architecture.md) i [kontrakty](docs/data-contracts.md).
-2. Wybiera jeden etap w [indeksie planu](docs/plan/README.md); domyślny pierwszy etap to P0, potem M1. Obecne zlecenie dotyczy przygotowania dokumentacji, nie uruchomienia tych etapów.
+2. Wybiera jeden etap w [indeksie planu](docs/plan/README.md); rozpoczęto P0, potem M1.
 3. Sprawdza [decyzje i kwestie otwarte](docs/decisions.md), następnie źródła danego adaptera. Nie odczytuje całej dokumentacji automatycznie.
-4. Rozdziela działający kod, test automatyczny i potwierdzenie prawdziwego konta/telefonu. Obecnie żadnego z nich tu nie ma.
+4. Rozdziela działający kod, test automatyczny i potwierdzenie prawdziwego konta/telefonu. Obecny przykład używa wyłącznie danych syntetycznych.
+
+Uruchomienie i ograniczenia przykładu opisuje [środowisko developerskie](docs/development.md), a wykonane kontrole [raport testów](docs/test-results.md).
 
 [Indeks dokumentacji](docs/README.md) · [Etapy](docs/plan/README.md) · [Nazwy i sprawdzenie kolizji](docs/names.md) · [Źródła i ograniczenia weryfikacji](docs/references.md)
 
