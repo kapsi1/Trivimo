@@ -4,13 +4,9 @@ Cel: użyteczna tabela/wykresy dla 2026 i nowych dni, oparta na własnej bazie. 
 
 ## P0: przygotowanie i małe próby
 
-Rozpoczęto syntetyczny przepływ SQLite → REST → tabela/wykres oraz wersjonowanie schematu. Pozostają m.in. trwała baza aplikacji, kopia przed przyszłymi migracjami, weryfikacja UI oraz praktyczna próba parsera; szczegóły i ograniczenia są w [raporcie](../test-results.md).
-
-Wstępny przegląd kodu Health Sync: parsery walidują nagłówki i limity CSV, czas oraz jednostki; waga występuje w gramach, a total i active mają osobne kolumny. Mapowanie nazw konkretnych urządzeń oraz porównania/zapisy Connect nie są ogólną polityką pochodzenia Trivimo. Należy wykonać zaplanowaną próbę na syntetycznym CSV przed decyzją o przeniesieniu reguł; sam przegląd nie potwierdza zgodności importu ani definicji kalorii.
+Wykonane próby syntetycznego przepływu i parserów opisuje [P0 — wykonane](../completed/01-p0-probes.md). Pozostają m.in. trwała baza aplikacji i kopia przed przyszłymi migracjami; szczegóły i ograniczenia są w [raporcie](../test-results.md).
 
 - [ ] Potwierdzić stos, sposób uruchomienia na Windows, manager pakietów, wspólne schematy walidacji, migracje DB i runner testów. Dodać README z rzeczywistymi poleceniami, lockfile i minimalne CI dopiero po utworzeniu kodu. Brak frameworka pełnej synchronizacji na zapas.
-- [ ] Uruchomić pionowy syntetyczny przykład: repozytorium DB → zapytanie dnia → REST → ciemna tabela i mały wykres. Pokazać liczbę, brak, potwierdzone zero i uwagę. Bez prawdziwych danych w repo.
-- [ ] Ocenić parsery Kotlin przez syntetyczny CSV z ważeniami i dziennymi energiami. Zanotować, które reguły przenosimy, które są specyficzne dla dawnych zapisów Connect. Nie przepisywać całej aplikacji przed wynikiem próby.
 - [ ] W autoryzowanym etapie integracji skonfigurować osobnego klienta OAuth i próbę read-only kilku dni: rekordy waga/tłuszcz, kroki/dystans, total/active, pochodzenie. Sprawdzić `Operation`/metody tylko w dokumentacji; nie testować zapisu w tym etapie.
 - [ ] Ustalić politykę kalorii na małej próbce: dzień z noszeniem, bez noszenia, niepełny, BMR-only i potwierdzone zero, jeśli występują. Oddzielić brak metadanych od braku pomiarów. Jeśli brak dowodu porównywalności, zachować lukę i opisać kryterium; nie wymyślać kwalifikatora dla pełności tabeli.
 - [ ] Porównać API/Takeout dla tego samego konta, zakończonych dat, strefy, jednostek i wersji. Wynik próby zapisać prywatnie poza repo, a w docs tylko reguły i ograniczenia.

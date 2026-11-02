@@ -1,10 +1,11 @@
 # Indeks dokumentacji
 
-Stan: rozpoczęte P0; działa syntetyczny przykład, bez integracji danych zdrowia.
+Stan: rozpoczęte P0/M1; działa przykład syntetyczny i lokalny import oryginałów Google Health, z podglądem surowych wierszy sześciu typów, bez połączenia z kontem i wyników dziennych.
 
 | Potrzeba | Dokument |
 | --- | --- |
 | Uruchomienie i wykonane kontrole | [Środowisko](development.md), [Raport testów](test-results.md) |
+| Ukończone próby P0 | [P0 — wykonane](completed/01-p0-probes.md) |
 | Cel, pierwszy zakres i start agenta | [README](../README.md), [AGENTS](../AGENTS.md) |
 | Moduły, baza, proponowany stos i umiejscowienie serwera | [Architektura](architecture.md) |
 | Definicje metryk, pochodzenie, kalorie i uwagi | [Kontrakty danych](data-contracts.md) |

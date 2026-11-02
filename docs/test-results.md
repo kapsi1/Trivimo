@@ -1,5 +1,22 @@
 # Raport weryfikacji
 
+## 2026-11-02 — lokalny import Takeout
+
+- `npm test`: 21 testów syntetycznych zaliczonych na Node 24.22.1; obejmują zachowanie plików i pól CSV, nieinterpretowanych oryginałów, limity, powtórzenie importu, przerwanie i wznowienie, wykrycie zmienionego pliku, nieznany schemat, chroniony odczyt oryginałów i obsługę błędu kopii. Test HTTP wymagał połączenia loopback poza ograniczeniem sandboxa.
+- `npm run build`: typy i build interfejsu poprawne na Node 24.22.1.
+- `npm run preview:takeout -- <wskazany katalog>` oraz `npm run import:takeout -- <wskazany katalog>`: zakończone powodzeniem dla plików Google Health z prywatnego eksportu; wiersze odczytano dla sześciu typów, pozostałe pliki zachowano bez interpretacji. Pomiary i rekordowe ID nie zostały zapisane w dokumentacji ani fixture'ach.
+- `npm run verify:takeout`: integralność SQLite, skróty zachowanych plików, powiązania i liczby wierszy poprawne; sprawdzono też odczyt pierwszej strony sześciu typów bez wypisywania wartości. Odczyt prywatnej bazy w tym środowisku wymagał uruchomienia poza sandboxem. To nie jest porównanie z UI Google Health ani walidacja znaczenia kalorii.
+- Przeglądarka: w osobnej syntetycznej bazie sprawdzono sesję, wyświetlenie oryginalnych pól oraz stan pustego typu. Prywatnych pomiarów nie wyświetlano w narzędziach weryfikacji.
+- Ograniczenia: rozpoznano wiersze tylko sześciu typów; interpretacja pozostałych plików, rozpakowywanie ZIP, kwalifikacja i uzgadnianie replik, dzienne projekcje, kopia prywatnej bazy, szyfrowanie oraz realne porównanie z innym źródłem pozostają niewykonane.
+
+## 2026-11-02 — próby P0 i reguły domenowe
+
+- `npm test`: 16 testów zaliczonych na Node 24.22.1; obejmują m.in. ograniczony czytnik CSV, kopię i odtworzenie syntetycznej bazy, DST, średnią unikalnych pomiarów, konflikt rewizji i atomowość, Host/Origin oraz przebieg SQLite → REST. Test HTTP wymagał połączenia loopback poza ograniczeniem sandboxa.
+- `npm run build`: typy i build interfejsu poprawne na Node 24.22.1.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/spike-takeout.ps1`: syntetyczna próba kompilacji i wykonania wybranych parserów Kotlin zakończona powodzeniem; lokalny kompilator wypisał ostrzeżenie o przestarzałym API JDK. Zakres i wnioski: [próby P0](completed/01-p0-probes.md).
+- Przeglądarka na lokalnym Vite: tabela i wykres pokazały liczbę, brak, zero i uwagę, a `/api/days` zwróciło 200. Po celowym zatrzymaniu API pokazano komunikat błędu. Nie sprawdzano telefonu, konta ani danych rzeczywistych.
+- Dzień warszawski korzysta z bazy stref środowiska wykonawczego. Test obejmuje przejścia DST 2026 i sąsiednie granice, nie każdą przyszłą zmianę przepisów strefowych. Nowe reguły i czytnik CSV nie są jeszcze podłączone do importu ani produkcyjnego magazynu. Kopia nie obejmuje załączników, szyfrowania ani automatycznej migracji.
+
 ## 2026-11-02 — migracja syntetycznego schematu
 
 - `npm test`: 5 testów zaliczonych na Node 24.22.1; obejmują ponowne otwarcie syntetycznej bazy plikowej, ponowienie migracji, spójność null/zero, odrzucenie przyszłej wersji i rollback po błędzie. Lokalny test HTTP wykonano poza ograniczeniem sandboxa dla loopback.

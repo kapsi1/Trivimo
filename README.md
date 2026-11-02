@@ -13,7 +13,7 @@ Docelowo: wszystkie odczytywalne dane Health API, dashboardy i treningi z tętne
 1. Agent czyta [AGENTS.md](AGENTS.md), [architekturę](docs/architecture.md) i [kontrakty](docs/data-contracts.md).
 2. Wybiera jeden etap w [indeksie planu](docs/plan/README.md); rozpoczęto P0, potem M1.
 3. Sprawdza [decyzje i kwestie otwarte](docs/decisions.md), następnie źródła danego adaptera. Nie odczytuje całej dokumentacji automatycznie.
-4. Rozdziela działający kod, test automatyczny i potwierdzenie prawdziwego konta/telefonu. Obecny przykład używa wyłącznie danych syntetycznych.
+4. Rozdziela działający kod, test automatyczny i potwierdzenie prawdziwego konta/telefonu. Lokalny import zachowuje pliki Google Health, a sześć typów ma widok surowych wierszy; nie ma jeszcze dziennej projekcji ani połączenia z kontem.
 
 Uruchomienie i ograniczenia przykładu opisuje [środowisko developerskie](docs/development.md), a wykonane kontrole [raport testów](docs/test-results.md).
 

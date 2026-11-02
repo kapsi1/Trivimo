@@ -1,6 +1,6 @@
 # Plan realizacji i zależności
 
-P0 rozpoczęto od syntetycznego przykładu; pozostałe etapy są niewykonane. Plan przygotowany 2026-11-02; nie jest poleceniem uruchomienia integracji ani zapisu danych. Szczegóły semantyki mają jedno miejsce w [kontraktach](../data-contracts.md).
+P0 rozpoczęto od syntetycznego przykładu; w M1 rozpoczęto lokalny import surowych plików Takeout, bez dziennych wyników i odczytu API. Plan przygotowany 2026-11-02; szczegóły semantyki mają jedno miejsce w [kontraktach](../data-contracts.md).
 
 | Etap | Wynik i zależności | Plan |
 | --- | --- | --- |

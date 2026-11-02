@@ -3,15 +3,22 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "engines": { "node": ">=24 <25" },
+  "engines": {
+    "node": ">=24 <25"
+  },
   "scripts": {
     "dev": "tsx watch apps/server/index.ts",
     "dev:web": "vite --host 127.0.0.1",
+    "import:takeout": "tsx apps/server/import-takeout.ts",
+    "preview:takeout": "tsx apps/server/preview-takeout.ts",
+    "verify:takeout": "tsx apps/server/verify-takeout.ts",
+    "backup:takeout": "tsx apps/server/backup-takeout.ts",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
+    "csv-parse": "6.1.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "zod": "4.3.6"

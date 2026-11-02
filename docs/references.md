@@ -21,6 +21,8 @@ Doświadczenia analizy danych: możliwa obecność Connect-only historii, różn
 
 ## Google — źródła pierwotne
 
+Ponowne sprawdzenie 2026-11-02, przed czytnikiem CSV: [instrukcja eksportu Google Health](https://support.google.com/googlehealth/answer/14236615?hl=en) i [instrukcja Google Takeout](https://support.google.com/fit/answer/3024190?hl=en) opisują drogę eksportu i informacje o formatach dołączone do archiwum. Nie stanowią potwierdzenia konkretnych nagłówków, jednostek ani kompletności plików dla tego konta; dokumenty bez wskazanej wersji schematu. Czytnik jest na razie ogólny i testowany syntetycznie.
+
 | Dokument | Co sprawdzono / co nadal wymaga potwierdzenia |
 | --- | --- |
 | [Katalog Health API](https://developers.google.com/health/data-types) | Typy, reprezentacje i deklarowane operacje/scopes; tabela i szeroki scope nie dowodzą działania zapisu ani dostępności dla konta |

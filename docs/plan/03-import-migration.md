@@ -4,6 +4,8 @@ Zależność M1: własny magazyn oryginałów i reguły sześciu metryk. Import 
 
 ## Odczyt archiwum i sesja importu
 
+Rozpoczęto import rozpakowanego katalogu Google Health: zachowanie bajtów plików, odczyt wierszy sześciu typów, podgląd, zamrożone skróty oraz checkpoint i wznowienie per plik. Pozostałe oryginały pozostają nieinterpretowane. Ograniczenia i weryfikacja są w [raporcie](../test-results.md); inne typy, kwalifikacja i projekcje są nadal niewykonane.
+
 - [ ] Użytkownik wskazuje plik/katalog. Nie szukać prywatnych archiwów po komputerze. Dla danych z dotychczasowego projektu używać wyłącznie wskazanego `C:\dev\health-sync\test-data\`; niczego z niego nie kopiować do repo/fixture'ów.
 - [ ] ZIP: limity liczby plików, wielkości i współczynnika rozpakowania, streaming, ochrona przed path traversal/symlinkami i nadpisaniem plików. Obsługa wieloczęściowego eksportu z jawnym manifestem, jeśli format tego wymaga; nie udawać kompletności jednej części.
 - [ ] Sprawdzić README/nagłówki/schemat i jednostki konkretnego eksportu. Czytnik CSV obsługuje cudzysłowy, przecinki, nowe linie, kodowanie/BOM i puste pola. Nazwa pliku/dzień wygenerowania nie jest czasem pomiaru. Schemat nieznany lub sprzeczny kieruje rekord do kwarantanny z powodem, bez zgadywania kolumn.

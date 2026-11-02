@@ -2,6 +2,8 @@
 
 Projekt, nie opis implementacji. Decyzje użytkownika: [rejestr](decisions.md); semantyka: [kontrakty](data-contracts.md).
 
+Zaimplementowano przykład syntetyczny, odrębne reguły domenowe oraz lokalny magazyn oryginalnych plików Google Health i surowych wierszy sześciu typów, opisane w [raporcie](test-results.md). Inne pliki są zachowane bez interpretacji. Magazyn surowy nie jest jeszcze pełną bazą kanoniczną ani projekcją dnia.
+
 ## Granice i przepływ
 
 ```text
