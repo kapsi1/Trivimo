@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+data/
+private/
+test-data/
+backups/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.zip
+*.tcx
+*.gpx
+node_modules/
+dist/

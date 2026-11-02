@@ -1,0 +1,39 @@
+# Jakość, prywatność i utrzymanie
+
+Wymagania przekrojowe od P0. Dobierać testy do ryzyka i wpływu; nie tworzyć testów odtwarzających implementację ani uruchamiać pełnych drogich zestawów po każdej korekcie tekstu.
+
+## Bezpieczeństwo i dane prywatne
+
+- [ ] Serwis lokalny domyślnie tylko loopback, z sesją i kontrolą Origin/Host, ochroną CSRF, ograniczonym CORS oraz bezpiecznym uploadem. Loopback sam nie chroni przed innymi stronami/programami. Dostęp spoza komputera wymaga wybranego modelu TLS/auth; nie otwierać portu na 0.0.0.0 bez decyzji wdrożeniowej.
+- [ ] Tokeny i klucze w systemowym/serwerowym secret store, oddzielone od DB dostępnej UI. Nie umieszczać w localStorage, kodzie bundla, URL, logach, nazwach eksportów ani promptach. Google OAuth, sesja aplikacji i autoryzacja MCP są różnymi relacjami.
+- [ ] Prywatny katalog danych poza repo, restrykcyjne prawa OS, szyfrowanie dysku i chronione kopie. Osobne zasady dla dużych oryginałów, tras, audio i zdjęć. Szyfrowanie pliku bazy, jeśli potrzebne, z wybranym mechanizmem zarządzania kluczem; nie obiecywać go przez samo użycie SQLite.
+- [ ] Domyślnie bez zewnętrznej analityki i wysyłania pomiarów do raportowania błędów. Logi: kod błędu, typ operacji, lokalne niejawne correlation ID i postęp; bez payloadów, route bounds, identyfikatorów kont i tokenów. Debug z prywatnymi danymi tylko świadomie, poza repo i z retencją.
+- [ ] Importowane pliki, wyniki modeli i strony produktów niezaufane. Limity ZIP/XML/obrazów/audio/JSON, walidacja jednostek i czasu, odrzucanie nieobsługiwanych treści. Prompt injection nie może zmienić uprawnień ani wykonać arbitralnego URL/SQL. Eksport tabel chroniony przed CSV/formula injection.
+- [ ] AI, mapy i katalogi mają jawny przepływ danych, minimalny zakres i osobne ustawienia. Usunięcie z aplikacji wyjaśnia, co pozostaje u dostawcy i w kopiach; nie deklarować kasowania chmury bez potwierdzenia.
+
+## Testy domeny i adapterów
+
+- [ ] Jednostkowe: przeliczenia, int64/precyzja, null/zero, semantyka energii, wiele pomiarów dnia, fazy snu/strefy, DST/podróże, pokrycie i wersje definicji. Fixture'y wyłącznie syntetyczne.
+- [ ] Własności/metamorphic: wynik nie zależy od kolejności i powtórzenia importu, wielkości porcji i pozycji dnia w zakresie; replikacja nie zwiększa sumy; zmiana prezentacyjnego zaokrąglenia nie zmienia danych; restart daje tę samą zatwierdzoną decyzję.
+- [ ] Adaptery HTTP fake: paginacja, 429/5xx/401/403, ograniczenia zakresu, wygaśnięcie tokena, częściowa odpowiedź, zmiana schematu, nieznany enum i brak wsparcia typu. Częściowy sukces nie potwierdza kompletnego checkpointu.
+- [ ] DB: migracja na kopii, transakcja checkpoint+records, rewizja wynik+uwagi, outbox i uncertain writes, odzyskanie po przerwaniu i konflikt dwóch klientów. Sprawdzić nieutracenie korekty po aktualizacji raw.
+- [ ] UI: ładowanie/empty/error/stale, ciemny motyw i kontrast, klawiatura, długie tabele, duże serie, brak map/LLM, mobile form i polskie jednostki/daty. Testy danych w UI odwołują się do definicji domeny, bez drugiego niezależnego algorytmu sum.
+
+## Weryfikacja prawdziwych źródeł
+
+- [ ] Najpierw ograniczony read-only zakres i porównanie tych samych dat, definicji, offsetów i dat snapshotów. Potem większa historia. Nie wnioskować o równości Health UI/API/Takeout tylko z nazwy pola.
+- [ ] Zanotować prywatnie zakres prób i rozbieżności, a publicznie w docs tylko definicje i ograniczenia, bez pomiarów/tras. Test automatyczny nie dowodzi dostępności konta ani działania telefonu.
+- [ ] Zapisy zewnętrzne dopiero w ich etapie, po sprawdzeniu macierzy i podglądzie konkretnego własnego wpisu. Oddzielić dowód API, widoku Health i Connect oraz uwzględnić opóźnienie dostawcy.
+- [ ] Odbiór ChatGPT na telefonie jest odrębny od testu MCP/API desktop. Próba z wyłączonym hostem musi mieć oczekiwany stan i instrukcję odzyskania, bez pozornego sukcesu.
+
+## Kopie, odtwarzanie i eksploatacja
+
+- [ ] Spójna kopia bazy oraz manifestu plików, wersji kontraktów i decyzji importu. SQLite przez wspierany mechanizm backup/checkpoint, nie przypadkowe kopiowanie otwartego pliku bez WAL. Zaszyfrowana kopia poza tym samym dyskiem; zasady kluczy i retencji.
+- [ ] Odtworzyć w pustym katalogu: rekordy, wersje, receptury, załączniki, projekcje i niedokończone zadania. Po restore wstrzymać niepewne publikacje do uzgodnienia zdalnego stanu, zamiast odtworzyć stare create i podwoić dane.
+- [ ] Migracje wersjonowane, kopia przed zmianą schematu i test na syntetycznej bazie starej wersji. Zmiana kontraktu może wymagać lokalnego przeliczenia/backfill; nie przepisywać historii przez zmianę nazwy kolumny.
+- [ ] Status operacyjny: ostatni sukces i zakres per adapter, kolejki, budżety i błędy możliwe do naprawienia. Eksport danych użytkownika w udokumentowanym formacie; osobne czyszczenie cache, raw, historii i konta z podglądem zależności.
+- [ ] Zmierzyć wielkość raw/serii/załączników, czas importu 2026 i render dużej tabeli na środowisku docelowym. Wydajność poprawiać według pomiaru: indeksy, batch, decymacja do wykresu; nie usuwać oryginałów po cichu.
+
+## Raportowanie
+
+Po rozpoczęciu implementacji utworzyć `docs/development.md` z faktycznymi komendami oraz `docs/test-results.md`: data, komenda, wynik i ograniczenia. Stan obecny: tylko dokumentacja, brak builda/testów aplikacji. Nie przenosić wyników Gradle z Health Sync jako dowodu nowej aplikacji.
