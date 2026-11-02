@@ -19,6 +19,7 @@ const types: Record<string, { kind: string; value: string; file: RegExp }> = {
 };
 
 type PlannedFile = { path: string; kind: string; digest: string; rows: number };
+export type TakeoutPlan = { root: string; files: PlannedFile[]; pendingId: string | null };
 type Content = { bytes: Buffer; header: string[]; rows: string[][]; digest: string };
 
 function within(root: string, path: string): boolean {
@@ -67,7 +68,7 @@ function readContent(root: string, path: string, kind: string): Content {
 }
 
 /** Discover only supported files under the explicitly selected directory; never follow links. */
-export function planTakeout(directory: string): { root: string; files: PlannedFile[] } {
+export function planTakeout(directory: string): TakeoutPlan {
   const root = realpathSync(directory);
   if (!lstatSync(root).isDirectory()) throw new Error('Nieprawidłowy katalog eksportu');
   const files: PlannedFile[] = [];
@@ -92,7 +93,21 @@ export function planTakeout(directory: string): { root: string; files: PlannedFi
   visit(root, 0);
   files.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
   if (!files.length) throw new Error('Nie znaleziono obsługiwanych plików eksportu');
-  return { root, files };
+  return { root, files, pendingId: null };
+}
+
+/** Resume the saved decisions instead of recalculating a partially executed plan. */
+export function previewTakeout(directory: string, db?: DatabaseSync): TakeoutPlan {
+  const root = realpathSync(directory);
+  const pending = db?.prepare("SELECT id, root FROM import_sessions WHERE state = 'running' ORDER BY rowid LIMIT 1").get();
+  if (!pending) return planTakeout(root);
+  if (pending.root !== root || typeof pending.id !== 'string') throw new Error('Niedokończony import dotyczy innego katalogu');
+  const rows = db!.prepare('SELECT path, kind, digest, row_count FROM import_files WHERE session_id = ? ORDER BY path').all(pending.id);
+  const files = rows.map((row) => {
+    if (typeof row.path !== 'string' || typeof row.kind !== 'string' || typeof row.digest !== 'string' || typeof row.row_count !== 'number') throw new Error('Nieprawidłowy plan importu');
+    return { path: row.path, kind: row.kind, digest: row.digest, rows: row.row_count };
+  });
+  return { root, files, pendingId: pending.id };
 }
 
 /** This isolated P0 store retains artifacts and rows, without claiming canonical metrics. */
@@ -116,15 +131,17 @@ export function initializeTakeoutStore(db: DatabaseSync): void {
   } catch (error) { db.exec('ROLLBACK'); throw error; }
 }
 
-export function importTakeout(db: DatabaseSync, directory: string, onPreview?: (files: number, rows: number) => void): { files: number; rows: number } {
+export function importTakeout(db: DatabaseSync, directory: string, onPreview?: (files: number, rows: number) => void, approvedPlan?: TakeoutPlan): { files: number; rows: number } {
   const root = realpathSync(directory);
   const pending = db.prepare("SELECT id, root FROM import_sessions WHERE state = 'running' ORDER BY rowid LIMIT 1").get();
   let sessionId: string;
   if (pending) {
     if (pending.root !== root || typeof pending.id !== 'string') throw new Error('Niedokończony import dotyczy innego katalogu');
+    if (approvedPlan && approvedPlan.pendingId !== pending.id) throw new Error('Plan importu zmienił się od podglądu');
     sessionId = pending.id;
   } else {
-    const plan = planTakeout(root);
+    if (approvedPlan && (approvedPlan.root !== root || approvedPlan.pendingId !== null)) throw new Error('Plan importu zmienił się od podglądu');
+    const plan = approvedPlan ?? planTakeout(root);
     onPreview?.(plan.files.length, plan.files.reduce((sum, file) => sum + file.rows, 0));
     sessionId = randomUUID();
     db.exec('BEGIN IMMEDIATE');

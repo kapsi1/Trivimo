@@ -1,0 +1,68 @@
+import assert from 'node:assert/strict';
+import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+import { test } from 'node:test';
+import { createApp } from '../apps/server/app.ts';
+import { TakeoutService } from '../apps/server/takeout-service.ts';
+import { createDemoDatabase } from '../packages/storage/days.ts';
+
+test('interfejs wymaga sesji i Origin, pokazuje podgląd i wznawia zatwierdzony plan', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'trivimo-web-import-'));
+  const weight = join(root, 'export', 'Google Health', 'Physical Activity_GoogleData', 'Weight');
+  const databasePath = join(root, 'private', 'raw.sqlite');
+  mkdirSync(weight, { recursive: true });
+  const file = join(weight, 'weight.csv');
+  const content = 'timestamp,weight grams,data source\n2026-01-01T00:00:00Z,70000,Example\n';
+  writeFileSync(file, content);
+  const demo = createDemoDatabase();
+  let source: DatabaseSync | undefined;
+  const server = createApp(demo, () => {
+    if (!existsSync(databasePath)) return undefined;
+    source ??= new DatabaseSync(databasePath, { readOnly: true });
+    return source;
+  }, new TakeoutService(databasePath));
+  try {
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    assert.ok(address && typeof address !== 'string');
+    const base = `http://127.0.0.1:${address.port}`;
+    const session = await fetch(`${base}/api/session`);
+    const cookie = session.headers.get('set-cookie')?.split(';')[0];
+    assert.ok(cookie);
+    const jsonHeaders = { Cookie: cookie, 'Content-Type': 'application/json', 'X-Trivimo-Request': '1' };
+    const body = JSON.stringify({ path: join(root, 'export') });
+    assert.equal((await fetch(`${base}/api/takeout/preview`, { method: 'POST', headers: { Origin: 'http://localhost:5173', 'Content-Type': 'application/json', 'X-Trivimo-Request': '1' }, body })).status, 401);
+    assert.equal((await fetch(`${base}/api/takeout/preview`, { method: 'POST', headers: jsonHeaders, body })).status, 403);
+    assert.equal((await fetch(`${base}/api/takeout/preview`, { method: 'POST', headers: { ...jsonHeaders, Origin: 'https://example.test' }, body })).status, 403);
+    assert.equal((await fetch(`${base}/api/takeout/preview`, { method: 'POST', headers: { Cookie: cookie, Origin: 'http://localhost:5173', 'Content-Type': 'application/json' }, body })).status, 403);
+    const headers = { ...jsonHeaders, Origin: 'http://localhost:5173' };
+    const first = await fetch(`${base}/api/takeout/preview`, { method: 'POST', headers, body });
+    assert.equal(first.status, 200);
+    const preview = await first.json() as { token: string; files: number; rows: number; resuming: boolean };
+    assert.deepEqual([preview.files, preview.rows, preview.resuming], [1, 1, false]);
+    assert.equal(existsSync(databasePath), false);
+    const extra = join(root, 'export', 'Google Health', 'notes.txt');
+    writeFileSync(extra, 'nowy plik po podglądzie');
+    writeFileSync(file, content.replace('70000', '71000'));
+    const changed = await fetch(`${base}/api/takeout/import`, { method: 'POST', headers, body: JSON.stringify({ token: preview.token }) });
+    assert.equal(changed.status, 400);
+    assert.deepEqual(await changed.json(), { error: 'plan_changed' });
+    writeFileSync(file, content);
+    const resumed = await (await fetch(`${base}/api/takeout/preview`, { method: 'POST', headers, body })).json() as { token: string; resuming: boolean };
+    assert.equal(resumed.resuming, true);
+    const result = await fetch(`${base}/api/takeout/import`, { method: 'POST', headers, body: JSON.stringify({ token: resumed.token }) });
+    assert.equal(result.status, 200);
+    assert.deepEqual(await result.json(), { files: 1, rows: 1 });
+    assert.equal((await fetch(`${base}/api/takeout/import`, { method: 'POST', headers, body: JSON.stringify({ token: resumed.token }) })).status, 400);
+    const read = await fetch(`${base}/api/source-records?kind=weight`, { headers: { Cookie: cookie } });
+    assert.equal(read.status, 200);
+    const data = await read.json() as { rows: { value: string }[] };
+    assert.equal(data.rows[0]?.value, '70000');
+    assert.equal(source?.prepare('SELECT COUNT(*) AS count FROM artifacts').get()?.count, 1);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    source?.close(); demo.close(); rmSync(root, { recursive: true, force: true });
+  }
+});

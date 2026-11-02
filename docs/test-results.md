@@ -1,5 +1,12 @@
 # Raport weryfikacji
 
+## 2026-11-02 — import z interfejsu i ponowne uruchomienie
+
+- `npm test` i `npm run build`: testy syntetyczne oraz build poprawne na Node 24.22.1. Test HTTP obejmuje sesję, Origin, wymagany nagłówek, podgląd bez zapisu, zatwierdzenie, zmianę pliku, wznowienie zapisanego planu i ponowne użycie tokenu.
+- Przeglądarka `localhost:5173` i osobna syntetyczna baza: podgląd, potwierdzenie importu i widok zaimportowanego wiersza działają. Nie użyto prywatnych danych w narzędziu przeglądarkowym.
+- `scripts/start-trivimo.ps1`: uruchomienie z syntetyczną bazą poprawne. Po uruchomieniu poza sandboxem z właściwą bazą lokalne żądanie odczytu zwróciło HTTP 200; sprawdzono sam status bez wyświetlania pomiarów. Procesy uruchomione przez narzędzia mogą zakończyć się wraz z ich sesją; `start-trivimo.cmd` służy do uruchomienia przez użytkownika poza sandboxem.
+- Ograniczenia: wybór katalogu wymaga wpisania pełnej ścieżki, a nie systemowego okna wyboru. Import nadal zachowuje pozostałe pliki jako oryginały, bez interpretacji i bez wyliczenia wyników dziennych.
+
 ## 2026-11-02 — niedostępna baza w serwerze
 
 - `npm test`: 26 testów zaliczonych na Node 24.22.1, w tym wybór lokalizacji bazy i ponowny odczyt po jej udostępnieniu. `npm run build`: poprawny.
