@@ -3,14 +3,15 @@ import { lstatSync } from 'node:fs';
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { listBodyPage } from '../../packages/adapters/google-health/body-read.ts';
-import { dailyRollupPage } from '../../packages/adapters/google-health/daily-rollup.ts';
+import { dailyRollupPage, dailyRollupTypes, maxRollupDays, type DailyRollupType } from '../../packages/adapters/google-health/daily-rollup.ts';
 import { commitGooglePage, createGoogleReadJob, type GoogleJobKind } from '../../packages/storage/google-pages.ts';
 import type { GoogleAuth } from './google-auth.ts';
 
 const bodyScope = 'https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly';
 const activityScope = 'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly';
-const scopeFor = (kind: GoogleJobKind) => kind === 'steps' || kind === 'distance' ? activityScope : bodyScope;
-const jobSchema = z.object({ account_digest: z.string().regex(/^[0-9a-f]{64}$/), kind: z.enum(['weight', 'body-fat', 'steps', 'distance']), range_start: z.string().max(40), range_end: z.string().max(40), cursor: z.string().nullable(), state: z.literal('running') });
+const isDaily = (kind: GoogleJobKind): kind is DailyRollupType => (dailyRollupTypes as readonly string[]).includes(kind);
+const scopeFor = (kind: GoogleJobKind) => isDaily(kind) ? activityScope : bodyScope;
+const jobSchema = z.object({ account_digest: z.string().regex(/^[0-9a-f]{64}$/), kind: z.enum(['weight', 'body-fat', ...dailyRollupTypes]), range_start: z.string().max(40), range_end: z.string().max(40), cursor: z.string().nullable(), state: z.literal('running') });
 
 async function accountDigest(token: string, send: typeof fetch): Promise<string> {
   const response = await send('https://health.googleapis.com/v4/users/me/identity', { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(15000) });
@@ -33,7 +34,7 @@ export async function readGoogleJobPage(db: DatabaseSync, auth: GoogleAuth, jobI
   const job = jobSchema.parse(row);
   const page = await auth.withAccessToken(scopeFor(job.kind), async (token) => {
     if (await accountDigest(token, send) !== job.account_digest) throw new Error('account_changed');
-    if (job.kind === 'steps' || job.kind === 'distance') return dailyRollupPage({ type: job.kind, start: job.range_start, end: job.range_end, ...(job.cursor ? { pageToken: job.cursor } : {}) }, token, send);
+    if (isDaily(job.kind)) return dailyRollupPage({ type: job.kind, start: job.range_start, end: job.range_end, ...(job.cursor ? { pageToken: job.cursor } : {}) }, token, send);
     return listBodyPage({ type: job.kind, start: job.range_start, end: job.range_end, ...(job.cursor ? { pageToken: job.cursor } : {}) }, token, send);
   });
   return commitGooglePage(db, jobId, job.cursor, page.rawJson);
@@ -48,7 +49,7 @@ export class GoogleReadService {
       if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('invalid_store');
       db = new DatabaseSync(this.path);
     } catch { throw new Error('store_unavailable'); }
-    if (db.prepare('PRAGMA application_id').get()?.application_id !== 1414682185 || db.prepare('PRAGMA user_version').get()?.user_version !== 6) { db.close(); throw new Error('migration_required'); }
+    if (db.prepare('PRAGMA application_id').get()?.application_id !== 1414682185 || db.prepare('PRAGMA user_version').get()?.user_version !== 7) { db.close(); throw new Error('migration_required'); }
     return db;
   }
   list() {
@@ -57,7 +58,7 @@ export class GoogleReadService {
     finally { db.close(); }
   }
   async start(kind: GoogleJobKind, start: string, end: string) {
-    if (Date.parse(end) - Date.parse(start) > (kind === 'steps' || kind === 'distance' ? 90 : 31) * 86400000) throw new Error('range_too_large');
+    if (Date.parse(end) - Date.parse(start) > (isDaily(kind) ? maxRollupDays(kind) : 31) * 86400000) throw new Error('range_too_large');
     const db = this.open();
     try { return { id: await startGoogleReadJob(db, this.auth, kind, start, end, this.send) }; } finally { db.close(); }
   }

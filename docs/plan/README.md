@@ -26,6 +26,15 @@ Syntetyczna brama P0 została wykonana i opisana w [ukończonych próbach](../co
 - [ ] M5: realny wpis z telefonu w wybranym wariancie, odczyt potwierdzenia, korekta, ponowienie bez duplikatu i zachowanie po niedostępności hosta. Nie wymaga własnej aplikacji Android.
 - [ ] M7: dowód per typ/operacja, wybrany własny rekord, timeout i restart, brak pętli, jawne niewspierane cele; żadnego masowego czyszczenia Connect.
 
+## Dane rzeczywiste w pracy deweloperskiej
+
+Decyzja użytkownika z 2026-11-03: gdy do dalszej pracy potrzebna jest rzeczywista wartość, kształt odpowiedzi lub przypadek brzegowy, agent może odczytać wartości z Google Health API (przez własną autoryzację aplikacji) oraz z Takeout, zamiast je zgadywać. Przypuszczenia o formatach i znaczeniu pól wolno przyjmować tylko tymczasowo i trzeba je oznaczyć jako niepotwierdzone.
+
+- Eksport Takeout do pracy leży w katalogu `test-data/` w repozytorium; jest w `.gitignore` i nie trafia do gita. Poza nim, poza bazą aplikacji i API nie szukaj danych zdrowotnych po dysku.
+- Czytaj najmniejszy zakres potrzebny do rozstrzygnięcia pytania (kilka dni, jeden typ, jedna strona); nie przeglądaj całych archiwów bez potrzeby. Odczyt jest tylko do odczytu: nic nie jest zapisywane do dostawcy ani nie zmienia danych.
+- Wartości, rekordowe ID, konta, tokeny i trasy nie trafiają do `docs/`, fixture'ów testów, logów ani commitów. W dokumentacji zapisuj reguły, kształty i ograniczenia, a w testach przypadki syntetyczne odtwarzające znaleziony kształt. Raport z wartościami zapisuj poza repo.
+- Odczyt rzeczywisty nie zastępuje walidacji użytkownika: zgodność z UI Health i znaczenie metryk nadal wymagają porównania i są opisywane z datą oraz ograniczeniami.
+
 ## Zasada rozliczania pracy
 
 Przed implementacją zadania agent wybiera mały pionowy zakres i podaje kryteria. Po wykonaniu usuwa ukończone checkboxy z planu do `docs/completed/` oraz zapisuje wynik bieżących testów. Nie oznacza całego etapu jako niewykonanego wyłącznie przez pojedynczą pozostałą próbę telefonu; nie oznacza jako ukończonego bez tej próby, jeśli jest kryterium etapu.

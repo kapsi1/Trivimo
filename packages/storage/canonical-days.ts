@@ -69,10 +69,11 @@ export async function migrateGooglePages(db: DatabaseSync, backupPath: string): 
     ) STRICT; PRAGMA user_version = 5;`);
 }
 
-/** Allow civil-day aggregate jobs (steps, distance); the tables are rebuilt because SQLite cannot alter a CHECK. */
-export async function migrateDailyRollups(db: DatabaseSync, backupPath: string): Promise<void> {
-  await migrateWithBackup(db, backupPath, 5, `CREATE TABLE google_read_jobs_v6 (
-      id TEXT PRIMARY KEY, account_digest TEXT NOT NULL CHECK(length(account_digest) = 64), kind TEXT NOT NULL CHECK(kind IN ('weight','body-fat','steps','distance')),
+/** The job tables are rebuilt because SQLite cannot alter a CHECK; rows, pages and the foreign key are preserved. */
+async function rebuildGoogleJobs(db: DatabaseSync, backupPath: string, from: number, kinds: string[]): Promise<void> {
+  const to = from + 1;
+  await migrateWithBackup(db, backupPath, from, `CREATE TABLE google_read_jobs_v6 (
+      id TEXT PRIMARY KEY, account_digest TEXT NOT NULL CHECK(length(account_digest) = 64), kind TEXT NOT NULL CHECK(kind IN (${kinds.map((kind) => `'${kind}'`).join(',')})),
       range_start TEXT NOT NULL, range_end TEXT NOT NULL, cursor TEXT, state TEXT NOT NULL CHECK(state IN ('running','complete')),
       created_at TEXT NOT NULL
     ) STRICT;
@@ -86,10 +87,20 @@ export async function migrateDailyRollups(db: DatabaseSync, backupPath: string):
     DROP TABLE google_read_pages; DROP TABLE google_read_jobs;
     ALTER TABLE google_read_jobs_v6 RENAME TO google_read_jobs;
     ALTER TABLE google_read_pages_v6 RENAME TO google_read_pages;
-    PRAGMA user_version = 6;`, () => {
+    PRAGMA user_version = ${to};`, () => {
     const before = db.prepare('SELECT (SELECT COUNT(*) FROM google_read_jobs) AS jobs, (SELECT COUNT(*) FROM google_read_pages) AS pages').get();
     if (!before || db.prepare('PRAGMA foreign_key_check').all().length > 0) throw new Error('Niespójna migracja zadań Google');
   });
+}
+
+/** Version 6: civil-day aggregate jobs for steps and distance. */
+export async function migrateDailyRollups(db: DatabaseSync, backupPath: string): Promise<void> {
+  await rebuildGoogleJobs(db, backupPath, 5, ['weight', 'body-fat', 'steps', 'distance']);
+}
+
+/** Version 7: civil-day aggregate jobs for total and active calories. */
+export async function migrateCalorieJobs(db: DatabaseSync, backupPath: string): Promise<void> {
+  await rebuildGoogleJobs(db, backupPath, 6, ['weight', 'body-fat', 'steps', 'distance', 'total-calories', 'active-energy-burned']);
 }
 
 export function publishCanonicalDay(db: DatabaseSync, input: DaySnapshotInput, expectedRevision: number | null) {

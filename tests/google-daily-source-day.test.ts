@@ -32,6 +32,18 @@ test('agregaty dzienne: dokładne przeliczenie, jawne zero, brak nie jest zerem,
   } finally { db.close(); }
 });
 
+test('agregaty dzienne: kalorie są pokazane jako kcal bez kwalifikacji, total i active osobno', () => {
+  const db = store();
+  try {
+    const kcal = (key: string, value: string) => ({ civilStartTime: { date: { year: 2026, month: 3, day: 1 } }, civilEndTime: { date: { year: 2026, month: 3, day: 2 } }, [key]: { kcalSum: 1 } });
+    db.prepare("INSERT INTO google_read_jobs VALUES ('t', ?, 'total-calories', '2026-03-01', '2026-03-02', NULL, 'complete', 'x')").run('a'.repeat(64));
+    db.prepare("INSERT INTO google_read_pages VALUES ('t', 1, NULL, NULL, ?, 'd', 'x')").run(JSON.stringify({ rollupDataPoints: [kcal('totalCalories', '1')] }).replace('"kcalSum":1', '"kcalSum":2234.5'));
+    const total = readGoogleDailySourceDay(db, 'total-calories', '2026-03-01');
+    assert.deepEqual(total.rows.map((row) => [row.originalValue, row.unit, row.converted]), [['2234.5', 'kcal', { value: '2234.5', unit: 'kcal' }]]);
+    assert.equal(readGoogleDailySourceDay(db, 'active-energy-burned', '2026-03-01').jobs.length, 0);
+  } finally { db.close(); }
+});
+
 test('agregaty dzienne: powtórzone odczyty nie są sumowane, a różne konta są oznaczone', () => {
   const db = store();
   try {

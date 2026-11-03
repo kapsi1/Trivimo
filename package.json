@@ -15,6 +15,7 @@
     "backup:takeout": "tsx apps/server/backup-takeout.ts",
     "verify:restore": "tsx scripts/verify-restore.ts",
     "migrate:canonical": "tsx apps/server/migrate-canonical.ts",
+    "google:read": "tsx apps/server/google-read-cli.ts",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts"

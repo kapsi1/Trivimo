@@ -25,6 +25,8 @@ API sprawdza Host i Origin dla lokalnego adresu oraz Vite na porcie 5173, a dost
 
 ## Lokalny import Takeout
 
+Eksport Takeout do pracy deweloperskiej znajduje się w katalogu `test-data/` w repozytorium (pominięty przez `.gitignore`). Zasady odczytu rzeczywistych wartości opisuje [plan](plan/README.md#dane-rzeczywiste-w-pracy-deweloperskiej).
+
 Wskaż tylko wybrany, rozpakowany katalog eksportu. Bez wyszukiwania archiwów na dysku:
 
 ```powershell

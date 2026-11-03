@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
-import { parseDailyRollup } from '../adapters/google-health/daily-rollup.ts';
+import { parseDailyRollup, type DailyRollupType } from '../adapters/google-health/daily-rollup.ts';
 import { parseSourceValue } from '../domain/source-units.ts';
 
 /** Millimetres to kilometres by shifting the decimal point six places, without floating point. */
@@ -10,13 +10,13 @@ function millimetresToKm(value: string): string {
 }
 
 /** Bounded review of saved producer-civil-day aggregates for one date; never deduplicates, qualifies or sums. */
-export function readGoogleDailySourceDay(db: DatabaseSync, kind: 'steps' | 'distance', date: string) {
+export function readGoogleDailySourceDay(db: DatabaseSync, kind: DailyRollupType, date: string) {
   z.iso.date().parse(date);
   const jobRows = db.prepare(`SELECT id, range_start, range_end, state FROM google_read_jobs
     WHERE kind = ? AND range_start <= ? AND range_end > ? ORDER BY created_at DESC, id LIMIT 51`).all(kind, date, date);
   const jobs = jobRows.slice(0, 50).map((job) => z.object({ id: z.string(), range_start: z.string(), range_end: z.string(), state: z.enum(['running', 'complete']) }).parse(job));
   const accounts = db.prepare('SELECT COUNT(DISTINCT account_digest) AS n FROM google_read_jobs WHERE kind = ? AND range_start <= ? AND range_end > ?').get(kind, date, date)?.n;
-  const rows: { originalValue: string; unit: 'steps' | 'mm'; converted: { value: string; unit: 'szt.' | 'km' } | null; receivedAt: string }[] = [];
+  const rows: { originalValue: string; unit: 'steps' | 'mm' | 'kcal'; converted: { value: string; unit: 'szt.' | 'km' | 'kcal' } | null; receivedAt: string }[] = [];
   const pages = db.prepare('SELECT raw_json, received_at FROM google_read_pages WHERE job_id = ? ORDER BY page_number LIMIT 51');
   let truncated = jobRows.length > 50;
   for (const job of jobs) {
@@ -27,7 +27,7 @@ export function readGoogleDailySourceDay(db: DatabaseSync, kind: 'steps' | 'dist
       for (const day of parseDailyRollup(page.raw_json, kind).days) {
         if (day.date !== date) continue;
         const parsed = kind === 'steps' ? parseSourceValue('steps', day.value) : null;
-        const converted = kind === 'steps' ? (parsed?.status === 'parsed' ? { value: parsed.value, unit: 'szt.' as const } : null) : { value: millimetresToKm(day.value), unit: 'km' as const };
+        const converted = kind === 'steps' ? (parsed?.status === 'parsed' ? { value: parsed.value, unit: 'szt.' as const } : null) : kind === 'distance' ? { value: millimetresToKm(day.value), unit: 'km' as const } : { value: day.value, unit: 'kcal' as const };
         rows.push({ originalValue: day.value, unit: day.unit, converted, receivedAt: page.received_at });
       }
     }

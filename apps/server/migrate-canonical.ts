@@ -3,7 +3,7 @@ import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { initializeTakeoutStore } from '../../packages/adapters/takeout/import.ts';
-import { migrateCanonicalDays, migrateUserNotes, migrateSourceAccounts, migrateGooglePages, migrateDailyRollups } from '../../packages/storage/canonical-days.ts';
+import { migrateCanonicalDays, migrateUserNotes, migrateSourceAccounts, migrateGooglePages, migrateDailyRollups, migrateCalorieJobs } from '../../packages/storage/canonical-days.ts';
 import { takeoutDatabasePath } from '../../packages/storage/location.ts';
 import { verifyTakeout } from '../../packages/storage/verify-takeout.ts';
 
@@ -25,6 +25,7 @@ async function main() {
     else if (version === 3) await migrateSourceAccounts(db, destination, process.argv[3] === 'confirm-existing-one-account');
     else if (version === 4) await migrateGooglePages(db, destination);
     else if (version === 5) await migrateDailyRollups(db, destination);
+    else if (version === 6) await migrateCalorieJobs(db, destination);
     else throw new Error('unsupported_version');
   } finally { db.close(); }
   verifyTakeout(source);

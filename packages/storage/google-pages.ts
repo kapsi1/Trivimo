@@ -1,14 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
-import { parseDailyRollup } from '../adapters/google-health/daily-rollup.ts';
+import { dailyRollupTypes, maxRollupDays, parseDailyRollup, type DailyRollupType } from '../adapters/google-health/daily-rollup.ts';
 
-export type GoogleJobKind = 'weight' | 'body-fat' | 'steps' | 'distance';
-const kinds = z.enum(['weight', 'body-fat', 'steps', 'distance']);
-const isDaily = (kind: string) => kind === 'steps' || kind === 'distance';
+export type GoogleJobKind = 'weight' | 'body-fat' | DailyRollupType;
+const kinds = z.enum(['weight', 'body-fat', ...dailyRollupTypes]);
+const isDaily = (kind: string): kind is DailyRollupType => (dailyRollupTypes as readonly string[]).includes(kind);
 /** Body jobs hold UTC instants; daily aggregate jobs hold half-open producer civil dates. */
 function validRange(kind: string, start: string, end: string): boolean {
-  if (isDaily(kind)) { if (!z.iso.date().safeParse(start).success || !z.iso.date().safeParse(end).success) return false; const days = (Date.parse(end) - Date.parse(start)) / 86400000; return days >= 1 && days <= 90; }
+  if (isDaily(kind)) { if (!z.iso.date().safeParse(start).success || !z.iso.date().safeParse(end).success) return false; const days = (Date.parse(end) - Date.parse(start)) / 86400000; return days >= 1 && days <= maxRollupDays(kind); }
   return z.iso.datetime().safeParse(start).success && z.iso.datetime().safeParse(end).success && Date.parse(start) < Date.parse(end);
 }
 
@@ -29,7 +29,7 @@ export function commitGooglePage(db: DatabaseSync, jobId: string, expectedCursor
   try {
     const job = db.prepare('SELECT kind, cursor, state FROM google_read_jobs WHERE id = ?').get(jobId);
     if (!job || job.state !== 'running' || job.cursor !== expectedCursor) throw new Error('job_conflict');
-    if (job.kind === 'steps' || job.kind === 'distance') parseDailyRollup(rawJson, job.kind);
+    if (typeof job.kind === 'string' && isDaily(job.kind)) parseDailyRollup(rawJson, job.kind);
     if (nextCursor && (nextCursor === expectedCursor || db.prepare('SELECT 1 FROM google_read_pages WHERE job_id = ? AND request_cursor = ?').get(jobId, nextCursor))) throw new Error('cursor_cycle');
     const pageNumber = Number(db.prepare('SELECT COALESCE(MAX(page_number), 0) + 1 AS n FROM google_read_pages WHERE job_id = ?').get(jobId)?.n);
     const digest = createHash('sha256').update(rawJson, 'utf8').digest('hex');

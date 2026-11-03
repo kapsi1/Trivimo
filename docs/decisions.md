@@ -6,6 +6,8 @@
 
 2026-11-03: autoryzacja Google ma przetrwać restart serwera. Zapisywany jest wyłącznie token odświeżania i lista zakresów, zaszyfrowane Windows DPAPI (zakres CurrentUser), w pliku `google-token.dpapi` obok bazy Takeout; przeglądarka nie widzi sekretów, a token dostępu pozostaje w pamięci. Jawne odrzucenie odświeżenia (400/401) usuwa zapis; timeout i 5xx go zachowują. Poza Windows zapis nie działa i autoryzacja zostaje w pamięci. Plik nie jest przenośny między kontami ani komputerami.
 
+2026-11-03: telefon bez opaski również szacuje spalone kalorie. Użytkownik uznał, że takie wartości można porównywać z wartościami z opaski, o ile oznaczone jest źródło szacunku (opaska albo telefon). To zmienia decyzję 5 poniżej w części „dni bez porównywalnych danych opaski pozostają puste": dla kalorii dzień bez opaski nie jest już z góry pusty, ale musi nieść jawne oznaczenie źródła. Sposób ustalania źródła i kwalifikacji pozostaje do wyznaczenia na danych (kandydaci: filtr `google-wearables` w API, tętno z urządzenia opaski, źródło wiersza w Takeout). Użytkownik zgłosił też, że w aplikacji Health widzi spalone kalorie jako wykres godzinowy i oczekuje go w Trivimo.
+
 1. Rozwój Health Sync zostaje wstrzymany. Powstaje nowa aplikacja, teraz jej dokumentacja. Nie migrujemy ani nie usuwamy danych podczas planowania.
 2. Własna baza jest źródłem prawdy. API jest głównym bieżącym źródłem Google; Takeout importem historii; własny adapter Connect opcjonalny.
 3. Desktop w przeglądarce najpierw, możliwy Android później. UI początkowo prosty i ciemny, z tabelami, wykresami i później mapami/szczegółami.

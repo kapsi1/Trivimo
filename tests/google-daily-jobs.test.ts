@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { initializeTakeoutStore } from '../packages/adapters/takeout/import.ts';
-import { migrateCanonicalDays, migrateUserNotes, migrateSourceAccounts, migrateGooglePages, migrateDailyRollups } from '../packages/storage/canonical-days.ts';
+import { migrateCanonicalDays, migrateUserNotes, migrateSourceAccounts, migrateGooglePages, migrateDailyRollups, migrateCalorieJobs } from '../packages/storage/canonical-days.ts';
 import { commitGooglePage, createGoogleReadJob } from '../packages/storage/google-pages.ts';
 import { verifyTakeout } from '../packages/storage/verify-takeout.ts';
 
@@ -18,11 +18,14 @@ test('migracja v6 zachowuje zadania i strony, naprawia klucz obcy i dopuszcza za
     const old = createGoogleReadJob(db, 'a'.repeat(64), 'weight', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z');
     commitGooglePage(db, old, null, '{"dataPoints":[{"v":1}],"nextPageToken":"n"}');
     assert.throws(() => createGoogleReadJob(db, 'a'.repeat(64), 'steps', '2026-01-01', '2026-01-02'));
-    await assert.rejects(migrateDailyRollups(db, join(dir, 'v4-wrong.sqlite')).then(() => migrateDailyRollups(db, join(dir, 'again.sqlite'))));
+    await migrateDailyRollups(db, join(dir, 'v5.sqlite'));
+    assert.throws(() => createGoogleReadJob(db, 'a'.repeat(64), 'total-calories', '2026-01-01', '2026-01-02'));
+    await assert.rejects(migrateDailyRollups(db, join(dir, 'again.sqlite')));
+    await migrateCalorieJobs(db, join(dir, 'v6.sqlite'));
   } finally { db.close(); }
   const reopened = new DatabaseSync(path);
   try {
-    assert.equal(reopened.prepare('PRAGMA user_version').get()?.user_version, 6);
+    assert.equal(reopened.prepare('PRAGMA user_version').get()?.user_version, 7);
     assert.equal(reopened.prepare('SELECT COUNT(*) AS n FROM google_read_jobs').get()?.n, 1);
     assert.equal(reopened.prepare('SELECT raw_json FROM google_read_pages').get()?.raw_json, '{"dataPoints":[{"v":1}],"nextPageToken":"n"}');
     assert.equal(reopened.prepare("SELECT \"table\" AS t FROM pragma_foreign_key_list('google_read_pages')").get()?.t, 'google_read_jobs');
@@ -30,6 +33,9 @@ test('migracja v6 zachowuje zadania i strony, naprawia klucz obcy i dopuszcza za
     const steps = createGoogleReadJob(reopened, 'b'.repeat(64), 'steps', '2026-03-01', '2026-03-02');
     assert.throws(() => createGoogleReadJob(reopened, 'b'.repeat(64), 'steps', '2026-03-01T00:00:00Z', '2026-03-02T00:00:00Z'), /invalid_range/);
     assert.throws(() => createGoogleReadJob(reopened, 'b'.repeat(64), 'distance', '2026-03-01', '2026-06-30'), /invalid_range/);
+    assert.throws(() => createGoogleReadJob(reopened, 'b'.repeat(64), 'total-calories', '2026-03-01', '2026-03-16'), /invalid_range/);
+    createGoogleReadJob(reopened, 'b'.repeat(64), 'total-calories', '2026-03-01', '2026-03-15');
+    createGoogleReadJob(reopened, 'b'.repeat(64), 'active-energy-burned', '2026-03-01', '2026-03-02');
     const day = (d: number, extra: object) => ({ civilStartTime: { date: { year: 2026, month: 3, day: d } }, civilEndTime: { date: { year: 2026, month: 3, day: d + 1 } }, ...extra });
     assert.throws(() => commitGooglePage(reopened, steps, null, JSON.stringify({ rollupDataPoints: [{ ...day(1, { steps: { countSum: '1' } }), civilEndTime: { date: { year: 2026, month: 3, day: 5 } } }] })), /unexpected_window/);
     assert.equal(reopened.prepare('SELECT COUNT(*) AS n FROM google_read_pages WHERE job_id = ?').get(steps)?.n, 0);

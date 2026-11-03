@@ -19,6 +19,35 @@ test('dzienny agregat odrzuca okna inne niż pełna doba, duplikaty i nieliczbow
   assert.throws(() => parseDailyRollup(JSON.stringify({ rollupDataPoints: [day(1, { steps: { countSum: '-1' } })] }), 'steps'));
 });
 
+test('kalorie: kcalSum zachowuje zapis liczby bez zaokrąglenia, zero jest jawne, BMR nie jest rozdzielany', () => {
+  const raw = '{"rollupDataPoints":[{"civilStartTime":{"date":{"year":2026,"month":3,"day":1}},"civilEndTime":{"date":{"year":2026,"month":3,"day":2}},"totalCalories":{"kcalSum":2234.123456789012}},{"civilStartTime":{"date":{"year":2026,"month":3,"day":2}},"civilEndTime":{"date":{"year":2026,"month":3,"day":3}},"totalCalories":{"kcalSum":0}},{"civilStartTime":{"date":{"year":2026,"month":3,"day":3}},"civilEndTime":{"date":{"year":2026,"month":3,"day":4}},"activeEnergyBurned":{"kcalSum":310.5}}]}';
+  assert.deepEqual(parseDailyRollup(raw, 'total-calories').days, [{ date: '2026-03-01', value: '2234.123456789012', unit: 'kcal' }, { date: '2026-03-02', value: '0', unit: 'kcal' }]);
+  assert.deepEqual(parseDailyRollup(raw, 'active-energy-burned').days, [{ date: '2026-03-03', value: '310.5', unit: 'kcal' }]);
+  assert.throws(() => parseDailyRollup(raw.replace('2234.123456789012', '-5'), 'total-calories'));
+  assert.deepEqual(parseDailyRollup(raw.replace('2234.123456789012', '1.5e3'), 'total-calories').days[0]?.value, '1500');
+  assert.deepEqual(parseDailyRollup(raw.replace('2234.123456789012', '245.12345678901234'), 'total-calories').days[0]?.value, '245.12345678901234');
+  assert.deepEqual(parseDailyRollup(raw.replace('2234.123456789012', '1.25E-5'), 'total-calories').days[0]?.value, '0.0000125');
+  assert.deepEqual(parseDailyRollup(raw.replace('2234.123456789012', '2.50'), 'total-calories').days[0]?.value, '2.5');
+});
+
+test('rodzina źródeł jest jawna: domyślnie wszystkie źródła, można wskazać google-wearables, inne odrzucone', async () => {
+  const families: unknown[] = [];
+  const fake: typeof fetch = async (_url, init) => { families.push((JSON.parse(String(init!.body)) as Record<string, unknown>).dataSourceFamily); return Response.json({}); };
+  await dailyRollupPage({ type: 'steps', start: '2026-03-01', end: '2026-03-02' }, 't', fake);
+  await dailyRollupPage({ type: 'steps', start: '2026-03-01', end: '2026-03-02', family: 'google-wearables' }, 't', fake);
+  await assert.rejects(dailyRollupPage({ type: 'steps', start: '2026-03-01', end: '2026-03-02', family: 'users/me/dataSourceFamilies/self-sources' as 'all-sources' }, 't', fake));
+  assert.deepEqual(families, ['users/me/dataSourceFamilies/all-sources', 'users/me/dataSourceFamilies/google-wearables']);
+});
+
+test('kalorie total: limit 14 dni i pageSize 14, aktywne do 90 dni', async () => {
+  const bodies: Record<string, unknown>[] = [];
+  const fake: typeof fetch = async (_url, init) => { bodies.push(JSON.parse(String(init!.body)) as Record<string, unknown>); return Response.json({}); };
+  await dailyRollupPage({ type: 'total-calories', start: '2026-03-01', end: '2026-03-15' }, 't', fake);
+  await assert.rejects(dailyRollupPage({ type: 'total-calories', start: '2026-03-01', end: '2026-03-16' }, 't', fake), /invalid_range/);
+  await dailyRollupPage({ type: 'active-energy-burned', start: '2026-03-01', end: '2026-05-30' }, 't', fake);
+  assert.deepEqual(bodies.map((body) => body.pageSize), [14, 90]);
+});
+
 test('żądanie dailyRollUp: POST, doby cywilne, wszystkie źródła, token tylko w nagłówku', async () => {
   let seen: { url: string; init: RequestInit } | undefined;
   const fake: typeof fetch = async (url, init) => { seen = { url: String(url), init: init! }; return Response.json({ rollupDataPoints: [day(1, { steps: { countSum: '7' } })] }); };

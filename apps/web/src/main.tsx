@@ -89,7 +89,7 @@ function GoogleConnection() {
   </section>;
 }
 
-const googleJobSchema = z.object({ id: z.uuid(), kind: z.enum(['weight', 'body-fat', 'steps', 'distance']), start: z.string().max(40), end: z.string().max(40), state: z.enum(['running', 'complete']), createdAt: z.iso.datetime(), pages: z.number().int().nonnegative() });
+const googleJobSchema = z.object({ id: z.uuid(), kind: z.enum(['weight', 'body-fat', 'steps', 'distance', 'total-calories', 'active-energy-burned']), start: z.string().max(40), end: z.string().max(40), state: z.enum(['running', 'complete']), createdAt: z.iso.datetime(), pages: z.number().int().nonnegative() });
 function googleJobsError(error: unknown): string {
   const code = error instanceof Error ? error.message : '';
   if (code === 'migration_required') return 'Wersja magazynu wymaga migracji z kopią zapasową.';
@@ -100,9 +100,13 @@ function googleJobsError(error: unknown): string {
 }
 function GoogleReadJobs() {
   const [jobs, setJobs] = useState<z.infer<typeof googleJobSchema>[] | null>(null);
-  const [kind, setKind] = useState<'weight' | 'body-fat' | 'steps' | 'distance'>('weight');
+  const [kind, setKind] = useState<'weight' | 'body-fat' | 'steps' | 'distance' | 'total-calories' | 'active-energy-burned'>('weight');
   const [date, setDate] = useState(() => { const d = new Date(`${warsawToday()}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); });
+  const [lastDate, setLastDate] = useState('');
   const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false);
+  const daily = kind !== 'weight' && kind !== 'body-fat';
+  const nextCivilDay = (value: string) => new Date(Date.parse(`${value}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
+  const rangeInvalid = daily && !!lastDate && (lastDate < date || (Date.parse(lastDate) - Date.parse(date)) / 86400000 + 1 > (kind === 'total-calories' ? 14 : 90));
   async function refresh() {
     const response = await fetch('/api/google/jobs');
     if (!response.ok) {
@@ -119,19 +123,20 @@ function GoogleReadJobs() {
     setBusy(true); setMessage('');
     try {
       const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Trivimo-Request': '1' }, body: JSON.stringify(body) });
-      if (!response.ok) { const data = await response.json() as { error?: string }; throw new Error(data.error); }
+      if (!response.ok) { const data = await response.json() as { error?: string; detail?: string }; throw Object.assign(new Error(data.error), { detail: data.detail }); }
       setMessage(path.endsWith('/next') ? 'Strona została zapisana; nie przeliczono wyników dnia.' : 'Zadanie zapisano. Możesz pobrać pierwszą stronę.');
       try { await refresh(); } catch { setMessage('Operacja zakończona, ale nie udało się odświeżyć listy zadań. Odśwież listę przed kolejną operacją.'); setJobs(null); }
-    } catch (error) { const code = error instanceof Error ? error.message : ''; setMessage(code === 'account_changed' ? 'Zadanie należy do innego konta Google.' : code === 'authorization_required' || code === 'scope_missing' ? 'Ponów autoryzację z wymaganym zakresem.' : 'Nie udało się wykonać operacji. Zapisane strony i postęp pozostają bez zmian.'); }
+    } catch (error) { const code = error instanceof Error ? error.message : ''; setMessage(code === 'account_changed' ? 'Zadanie należy do innego konta Google.' : code === 'authorization_required' || code === 'scope_missing' ? 'Ponów autoryzację z wymaganym zakresem.' : `Nie udało się wykonać operacji. Zapisane strony i postęp pozostają bez zmian.${error instanceof Error && 'detail' in error && typeof error.detail === 'string' ? ` Kod: ${error.detail}.` : ''}`); }
     finally { setBusy(false); }
   }
-  return <section><h3>Odczyt próbny</h3><p>Jedno zadanie obejmuje wybrany dzień i rodzaj pomiaru; masa i tłuszcz używają dnia warszawskiego, kroki i dystans doby cywilnej producenta. Przygotowanie zapisuje zadanie; pobranie strony odczytuje jedną porcję danych Google. Oryginały nie są jeszcze kwalifikowane ani łączone z Takeout.</p>
-    <label>Rodzaj <select value={kind} disabled={busy} onChange={(event) => setKind(event.target.value as typeof kind)}><option value="weight">Masa ciała</option><option value="body-fat">Tkanka tłuszczowa</option><option value="steps">Kroki (suma doby)</option><option value="distance">Dystans (suma doby)</option></select></label>{' '}
+  return <section><h3>Odczyt próbny</h3><p>Jedno zadanie obejmuje wybrany dzień i rodzaj pomiaru; masa i tłuszcz używają dnia warszawskiego, kroki, dystans i kalorie doby cywilnej producenta. Przygotowanie zapisuje zadanie; pobranie strony odczytuje jedną porcję danych Google. Oryginały nie są jeszcze kwalifikowane ani łączone z Takeout.</p>
+    <label>Rodzaj <select value={kind} disabled={busy} onChange={(event) => setKind(event.target.value as typeof kind)}><option value="weight">Masa ciała</option><option value="body-fat">Tkanka tłuszczowa</option><option value="steps">Kroki (suma doby)</option><option value="distance">Dystans (suma doby)</option><option value="total-calories">Kalorie total (zawiera BMR)</option><option value="active-energy-burned">Kalorie aktywne</option></select></label>{' '}
     <label>Data w Warszawie <input type="date" min="2026-01-01" max="9998-12-31" value={date} disabled={busy} onChange={(event) => setDate(event.target.value)} /></label>{' '}
-    <button type="button" disabled={busy || !date || !jobs} onClick={() => void run('/api/google/jobs', { kind, date })}>Przygotuj zadanie</button>
+    {daily && <><label>Do dnia (włącznie, opcjonalnie; do {kind === 'total-calories' ? 14 : 90} dób) <input type="date" min={date} max="9998-12-31" value={lastDate} disabled={busy} onChange={(event) => setLastDate(event.target.value)} /></label>{' '}</>}
+    <button type="button" disabled={busy || !date || !jobs || rangeInvalid} onClick={() => void run('/api/google/jobs', daily && lastDate ? { kind, start: date, end: nextCivilDay(lastDate) } : { kind, date })}>Przygotuj zadanie</button>
     {message && <p role="status">{message}</p>}
     {!jobs && <button type="button" disabled={busy} onClick={retry}>Ponów odczyt listy zadań</button>}
-    {jobs && jobs.length > 0 && <div className="table-wrap"><table><thead><tr><th>Typ</th><th>Zakres UTC / doby</th><th>Stan</th><th>Strony</th><th>Akcja</th></tr></thead><tbody>{jobs.map((job) => <tr key={job.id}><td>{({ weight: 'Masa ciała', 'body-fat': 'Tkanka tłuszczowa', steps: 'Kroki', distance: 'Dystans' })[job.kind]}</td><td>{job.start} – {job.end}{job.kind === 'steps' || job.kind === 'distance' ? ' (doba producenta)' : ''}</td><td>{job.state === 'complete' ? 'Odczyt zakończony' : 'Do kontynuacji'}</td><td>{job.pages}</td><td>{job.state === 'running' && <button type="button" disabled={busy} onClick={() => void run('/api/google/jobs/next', { id: job.id })}>Pobierz stronę</button>}</td></tr>)}</tbody></table></div>}
+    {jobs && jobs.length > 0 && <div className="table-wrap"><table><thead><tr><th>Typ</th><th>Zakres UTC / doby</th><th>Stan</th><th>Strony</th><th>Akcja</th></tr></thead><tbody>{jobs.map((job) => <tr key={job.id}><td>{({ weight: 'Masa ciała', 'body-fat': 'Tkanka tłuszczowa', steps: 'Kroki', distance: 'Dystans', 'total-calories': 'Kalorie total', 'active-energy-burned': 'Kalorie aktywne' })[job.kind]}</td><td>{job.start} – {job.end}{job.kind === 'weight' || job.kind === 'body-fat' ? '' : ' (doba producenta)'}</td><td>{job.state === 'complete' ? 'Odczyt zakończony' : 'Do kontynuacji'}</td><td>{job.pages}</td><td>{job.state === 'running' && <button type="button" disabled={busy} onClick={() => void run('/api/google/jobs/next', { id: job.id })}>Pobierz stronę</button>}</td></tr>)}</tbody></table></div>}
   </section>;
 }
 
@@ -246,15 +251,17 @@ function BodyComparison({ date }: { date: string }) {
     <h3>Agregaty dzienne Google</h3>
     <GoogleDailyCandidates key="daily-steps" date={date} kind="steps" />
     <GoogleDailyCandidates key="daily-distance" date={date} kind="distance" />
+    <GoogleDailyCandidates key="daily-total" date={date} kind="total-calories" />
+    <GoogleDailyCandidates key="daily-active" date={date} kind="active-energy-burned" />
   </div>;
 }
 
 const dailyReviewSchema = z.object({
-  rows: z.array(z.object({ originalValue: z.string(), unit: z.enum(['steps', 'mm']), converted: z.object({ value: z.string(), unit: z.enum(['szt.', 'km']) }).nullable(), receivedAt: z.string() })),
+  rows: z.array(z.object({ originalValue: z.string(), unit: z.enum(['steps', 'mm', 'kcal']), converted: z.object({ value: z.string(), unit: z.enum(['szt.', 'km', 'kcal']) }).nullable(), receivedAt: z.string() })),
   truncated: z.boolean(), coverage: z.literal('unknown'), multipleAccounts: z.boolean(),
   jobs: z.array(z.object({ start: z.string(), end: z.string(), state: z.enum(['running', 'complete']) })),
 });
-function GoogleDailyCandidates({ date, kind }: { date: string; kind: 'steps' | 'distance' }) {
+function GoogleDailyCandidates({ date, kind }: { date: string; kind: 'steps' | 'distance' | 'total-calories' | 'active-energy-burned' }) {
   const [result, setResult] = useState<z.infer<typeof dailyReviewSchema> | null>(null);
   const [error, setError] = useState(false);
   useEffect(() => {
@@ -266,13 +273,13 @@ function GoogleDailyCandidates({ date, kind }: { date: string; kind: 'steps' | '
       .catch(() => { if (!controller.signal.aborted) setError(true); });
     return () => controller.abort();
   }, [date, kind]);
-  return <div><h4>Google Health API — {kind === 'steps' ? 'kroki' : 'dystans'} (doba producenta)</h4>
+  return <div><h4>Google Health API — {({ steps: 'kroki', distance: 'dystans', 'total-calories': 'kalorie total (zawiera BMR)', 'active-energy-burned': 'kalorie aktywne' })[kind]} (doba producenta)</h4>
     {error ? <p role="alert">Nie udało się odczytać zapisanych agregatów.</p> : !result ? <p>Ładowanie…</p> : <>
       {result.multipleAccounts && <p>Zapisane zadania obejmują więcej niż jedno konto Google. Konta nie zostały połączone.</p>}
-      {result.rows.length === 0 ? <p>{result.jobs.length ? 'Zapisane zadania nie zawierają wartości dla tej doby; brak wartości nie oznacza zera.' : 'Brak zapisanego zadania dla tej doby.'} Kompletność źródła jest nieznana.</p> : <div className="table-wrap"><table><thead><tr><th>Oryginał ({kind === 'steps' ? 'kroki' : 'mm'})</th><th>Po przeliczeniu</th><th>Zapisano</th></tr></thead><tbody>
-        {result.rows.map((row, index) => <tr key={index}><td>{row.originalValue}</td><td>{row.converted ? `${row.converted.value.replace('.', ',')} ${row.converted.unit}` : 'Nie można przeliczyć'}</td><td>{row.receivedAt}</td></tr>)}
+      {result.rows.length === 0 ? <p>{result.jobs.length ? 'Zapisane zadania nie zawierają wartości dla tej doby; brak wartości nie oznacza zera.' : 'Brak zapisanego zadania dla tej doby.'} Kompletność źródła jest nieznana.</p> : <div className="table-wrap"><table><thead><tr><th>Oryginał ({({ steps: 'kroki', distance: 'mm', 'total-calories': 'kcal', 'active-energy-burned': 'kcal' })[kind]})</th><th>Po przeliczeniu</th><th>Zapisano</th><th>Odczyt</th></tr></thead><tbody>
+        {result.rows.map((row, index) => <tr key={index}><td>{row.originalValue}</td><td>{row.converted ? `${row.converted.value.replace('.', ',')} ${row.converted.unit}` : 'Nie można przeliczyć'}</td><td>{row.receivedAt}</td><td>{index === 0 ? 'Najnowszy' : 'Wcześniejszy'}</td></tr>)}
       </tbody></table></div>}
-      {result.rows.length > 1 && <p>Dla tej doby zapisano kilka odczytów; nie zostały uzgodnione ani zsumowane.</p>}
+      {result.rows.length > 1 && <p>Dla tej doby zapisano kilka odczytów (każde pobranie zadania zachowuje swój oryginał, także gdy doba jeszcze trwa i wartość rośnie); nie zostały uzgodnione ani zsumowane, a najnowszy jest pierwszy.</p>}
       {result.truncated && <p>Wyniki są ograniczone.</p>}
       <p>Wartość jest sumą doby cywilnej producenta, a nie dnia warszawskiego; nie jest kwalifikowana ani porównywana z Takeout.</p>
     </>}

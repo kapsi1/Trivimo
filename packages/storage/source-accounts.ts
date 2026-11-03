@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 
 /** Return an account only when every import referencing an artifact agrees explicitly. */
 export function resolveArtifactAccount(db: DatabaseSync, artifactId: number): string | null {
-  if (![4, 5, 6].includes(Number(db.prepare('PRAGMA user_version').get()?.user_version))) return null;
+  if (![4, 5, 6, 7].includes(Number(db.prepare('PRAGMA user_version').get()?.user_version))) return null;
   const references = db.prepare(`SELECT d.account_id FROM artifacts a
     JOIN import_files f ON f.kind = a.kind AND f.digest = a.digest
     LEFT JOIN import_account_decisions d ON d.session_id = f.session_id AND d.revision = (
@@ -15,7 +15,7 @@ export function resolveArtifactAccount(db: DatabaseSync, artifactId: number): st
 
 /** An unassigned completed import is never silently merged into an existing account. */
 export function unassignedSessions(db: DatabaseSync): string[] {
-  if (![4, 5, 6].includes(Number(db.prepare('PRAGMA user_version').get()?.user_version))) return [];
+  if (![4, 5, 6, 7].includes(Number(db.prepare('PRAGMA user_version').get()?.user_version))) return [];
   return db.prepare(`SELECT s.id FROM import_sessions s WHERE s.state = 'complete'
     AND NOT EXISTS (SELECT 1 FROM import_account_decisions d WHERE d.session_id = s.id) ORDER BY s.id`).all().map((row) => {
     if (typeof row.id !== 'string') throw new Error('Nieprawidłowa sesja');
