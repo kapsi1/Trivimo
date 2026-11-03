@@ -1,5 +1,10 @@
 # Raport weryfikacji
 
+## 2026-11-03 — ponawianie 503
+
+- `npm test`: 107 testów zaliczonych (nowe: 503 z `Retry-After` w adapterze, 500 bez opóźnienia; ponawianie 503 listy i tożsamości konta, 500 i 401 bez ponowień; przebieg serwisu z krótkimi 503 kończy się sukcesem bez zdublowanych zadań, a trwałe 503 kończy przebieg kodem `google_http_503` bez wstrzymania kolejnych przebiegów). `npm run build`: poprawny.
+- Ograniczenia: tylko odpowiedzi syntetyczne; na koncie nie wykonano nowego przebiegu.
+
 ## 2026-11-03 — kolumna źródeł (wersja 10)
 
 - `npm test`: 106 testów zaliczonych (nowe: parsowanie listy źródeł i parametry żądania `fields`/`prettyPrint`, odrzucenie zakresu ponad 14 dni, 429; migracja 10 zachowuje zadania, strony i metadane odczytów, przyjmuje nowe rodzaje i odrzuca je przed migracją; źródła dnia — najnowszy odczyt wygrywa, odczyt bez wpisów to pusta lista, dzień bez odczytu nieznany; backfill obejmuje listy źródeł). `npm run build`: poprawny.

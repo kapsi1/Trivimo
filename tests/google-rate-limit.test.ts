@@ -13,20 +13,27 @@ test('Retry-After: sekundy i data HTTP; brak lub nieczytelna wartość to niezna
   for (const value of [null, '', ' ', '-5', '1.5', 'soon', '2026-03-10']) assert.equal(parseRetryAfter(value, now), null);
 });
 
-test('adapter: 429 zachowuje kod błędu i opóźnienie producenta', async () => {
+test('adapter: 429 i 503 zachowują kod błędu i opóźnienie producenta, inne kody bez opóźnienia', async () => {
   const error = await dailyRollupPage({ type: 'steps', start: '2026-03-01', end: '2026-03-02' }, 't', async () => new Response('', { status: 429, headers: { 'Retry-After': '12' } })).catch((caught: unknown) => caught);
   assert.ok(error instanceof GoogleHttpError);
   assert.deepEqual([error.message, error.retryAfterMs], ['google_http_429', 12000]);
-  const other = await dailyRollupPage({ type: 'steps', start: '2026-03-01', end: '2026-03-02' }, 't', async () => new Response('', { status: 503, headers: { 'Retry-After': '12' } })).catch((caught: unknown) => caught);
+  const unavailable = await dailyRollupPage({ type: 'steps', start: '2026-03-01', end: '2026-03-02' }, 't', async () => new Response('', { status: 503, headers: { 'Retry-After': '12' } })).catch((caught: unknown) => caught);
+  assert.ok(unavailable instanceof GoogleHttpError);
+  assert.deepEqual([unavailable.message, unavailable.retryAfterMs], ['google_http_503', 12000]);
+  const other = await dailyRollupPage({ type: 'steps', start: '2026-03-01', end: '2026-03-02' }, 't', async () => new Response('', { status: 500, headers: { 'Retry-After': '12' } })).catch((caught: unknown) => caught);
   assert.ok(other instanceof GoogleHttpError);
-  assert.deepEqual([other.message, other.retryAfterMs], ['google_http_503', null]);
+  assert.deepEqual([other.message, other.retryAfterMs], ['google_http_500', null]);
 });
 
-test('ponowienie: tylko 429, opóźnienie producenta, w przeciwnym razie rosnący odstęp z rozrzutem', async () => {
+test('ponowienie: tylko 429 i 503, opóźnienie producenta, w przeciwnym razie rosnący odstęp z rozrzutem', async () => {
   const sleeps: number[] = []; const sleep = async (ms: number) => { sleeps.push(ms); };
   let calls = 0;
   const value = await withRateLimitRetry(async () => { if (++calls < 3) throw new GoogleHttpError('google_http_429', calls === 1 ? 5000 : null); return 'ok'; }, { now: () => now, sleep, random: () => 1 });
   assert.deepEqual([value, calls, sleeps], ['ok', 3, [5000, 4000]]);
+
+  sleeps.length = 0; calls = 0;
+  const identity = await withRateLimitRetry(async () => { if (++calls < 3) throw new GoogleHttpError(calls === 1 ? 'google_identity_http_503' : 'google_http_503', null); return 'ok'; }, { now: () => now, sleep, random: () => 0 });
+  assert.deepEqual([identity, calls, sleeps], ['ok', 3, [1000, 2000]]);
 
   sleeps.length = 0; calls = 0;
   await assert.rejects(withRateLimitRetry(async () => { calls++; throw new GoogleHttpError('google_http_500', null); }, { now: () => now, sleep }), /google_http_500/);

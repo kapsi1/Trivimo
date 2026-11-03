@@ -200,3 +200,25 @@ test('backfill: czyta wszystkie luki, wznawia bez powtórzeń, zatrzymuje się p
     assert.deepEqual([service.backfillStatus().state, service.backfillStatus().readsThisRun, rollups], ['done', 0, 0]);
   } finally { env.db.close(); rmSync(env.dir, { recursive: true, force: true }); }
 });
+
+test('serwis odświeżania: krótkie 503 jest ponawiane, trwałe 503 kończy przebieg kodem bez wstrzymywania kolejnych', async () => {
+  const env = migrated();
+  try {
+    await env.ready();
+    let unavailable = 2; let identity503 = 1; const sleeps: number[] = [];
+    const send: typeof fetch = async (address) => {
+      if (String(address).endsWith('/identity')) return identity503-- > 0 ? new Response('', { status: 503 }) : Response.json({ healthUserId: 'synthetic-account' });
+      return unavailable-- > 0 ? new Response('', { status: 503 }) : Response.json({});
+    };
+    let clock = Date.parse('2026-03-10T12:00:00Z');
+    const service = new GoogleSyncService(env.path, await authorized(), { intervalMinutes: 60, now: () => clock, send, sleep: async (ms) => { sleeps.push(ms); clock += ms; }, random: () => 0 });
+    const outcome = await service.runOnce();
+    assert.deepEqual([outcome.result, outcome.reads, sleeps.length], ['ok', syncKinds.length * 2, 3]);
+    assert.equal(env.db.prepare("SELECT COUNT(*) AS n FROM google_read_jobs WHERE state != 'complete'").get()?.n, 0);
+
+    unavailable = Infinity; clock = Date.parse('2026-03-11T12:00:00Z');
+    const failed = await service.runOnce();
+    assert.deepEqual([failed.result, failed.code, failed.retryAt], ['error', 'google_http_503', undefined]);
+    assert.equal(service.status().pausedUntil, null);
+  } finally { env.db.close(); rmSync(env.dir, { recursive: true, force: true }); }
+});
