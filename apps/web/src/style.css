@@ -15,3 +15,9 @@ nav { display: flex; gap: .5rem; margin: 1.5rem 0; } button, select, input { fon
 .metric-cell { margin: 0; padding: .25rem .4rem; background: transparent; border-color: transparent; } .metric-cell:hover { border-color: #70c6b0; }
 
 .empty-results { margin-top: 1rem; padding: .8rem 1rem; border-left: 3px solid #70c6b0; background: #19232c; } .empty-results p { margin: 0 0 .65rem; }
+
+:root { --trend-mark: #70c6b0; --trend-legacy-bg: #26313c; }
+.trend-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: 1rem; } .trend-card { margin: 0; padding: .8rem; border: 1px solid #34404d; border-radius: .35rem; } .trend-card figcaption { color: #b4c0ce; font-size: .85rem; margin-bottom: .4rem; }
+.trend { width: 100%; height: auto; display: block; } .trend-axis { stroke: #34404d; } .trend-label { fill: #8b9aab; font-size: 10px; }
+.trend-mark { fill: var(--trend-mark); } .trend-mark.provisional, .trend-dot.provisional { opacity: .45; } .trend-line { fill: none; stroke: var(--trend-mark); stroke-width: 2; } .trend-dot { fill: var(--trend-mark); stroke: #10151b; stroke-width: 2; }
+.trend-dates { display: flex; justify-content: space-between; color: #8b9aab; font-size: .75rem; }

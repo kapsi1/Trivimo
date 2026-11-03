@@ -5,6 +5,7 @@ import { bodyReviewSchema, sourcePageSchema, type SourceKind, type SourcePage } 
 import { dayResponseSchema, daySnapshotSchema, userNoteSchema } from '../../../packages/contracts/day-snapshot.ts';
 import { z } from 'zod';
 import { compareDailyRows } from './sort-days.ts';
+import { lastMeasurement, segments, trendPoints, trendSummary, type TrendMetric, type TrendPoint } from './trends.ts';
 import './style.css';
 
 function App() {
@@ -356,6 +357,67 @@ function DailyTable({ onViewSources }: { onViewSources: () => void }) {
   </section>;
 }
 
+const trendMetrics: { key: TrendMetric; label: string; unit: string; decimals: number; form: 'bar' | 'line' }[] = [
+  { key: 'weight', label: 'Masa ciała', unit: 'kg', decimals: 2, form: 'line' }, { key: 'body_fat', label: 'Tkanka tłuszczowa', unit: '%', decimals: 1, form: 'line' },
+  { key: 'steps', label: 'Kroki', unit: 'szt.', decimals: 0, form: 'bar' }, { key: 'distance', label: 'Dystans', unit: 'km', decimals: 2, form: 'bar' },
+  { key: 'total_energy', label: 'Spalone kalorie', unit: 'kcal', decimals: 0, form: 'bar' }, { key: 'active_energy', label: 'Aktywne kalorie', unit: 'kcal', decimals: 0, form: 'bar' },
+];
+const number = (value: number, decimals: number) => value.toLocaleString('pl-PL', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+
+/** One metric over the period: bars from zero for daily totals, a line for measurements; a gap is left empty, never bridged. */
+function TrendChart({ points, form, unit, decimals, label }: { points: TrendPoint[]; form: 'bar' | 'line'; unit: string; decimals: number; label: string }) {
+  const width = 600, height = 120, top = 8, bottom = 104;
+  const values = points.flatMap((point) => point.value === null ? [] : [point.value]);
+  if (!values.length) return <p>Brak wartości w tym okresie.</p>;
+  const max = Math.max(...values), min = form === 'bar' ? 0 : Math.min(...values);
+  const span = max - min || Math.max(1, Math.abs(max) * 0.02);
+  const low = form === 'bar' ? 0 : min - span * 0.1, high = max + span * 0.1;
+  const y = (value: number) => bottom - ((value - low) / (high - low)) * (bottom - top);
+  const step = width / points.length, x = (index: number) => step * index + step / 2;
+  const tip = (point: TrendPoint) => `${point.date}: ${point.value === null ? 'brak wartości' : `${number(point.value, decimals)} ${unit}`}${point.provisional ? ' (częściowy)' : ''}${point.legacy ? ' (starszy model kalorii)' : ''}`;
+  return <svg className="trend" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${label}: ${values.length} dób z wartością z ${points.length}`}>
+    <defs><pattern id="legacy-hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="4" height="4" fill="var(--trend-legacy-bg)" /><line x1="0" y1="0" x2="0" y2="4" stroke="var(--trend-mark)" strokeWidth="2" /></pattern></defs>
+    <line x1="0" x2={width} y1={bottom} y2={bottom} className="trend-axis" />
+    <text x="2" y={top + 4} className="trend-label">{number(high, decimals)}</text>
+    {form === 'line' && <text x="2" y={bottom - 4} className="trend-label">{number(low, decimals)}</text>}
+    {form === 'bar' ? points.map((point, index) => point.value === null ? null : <rect key={point.date} x={step * index + Math.min(1, step * 0.15)} width={Math.max(1, step - Math.min(2, step * 0.3))} y={y(point.value)} height={Math.max(0, bottom - y(point.value))} rx={Math.min(2, step / 4)}
+        className={point.provisional ? 'trend-mark provisional' : 'trend-mark'} fill={point.legacy ? 'url(#legacy-hatch)' : undefined}><title>{tip(point)}</title></rect>)
+      : <>{segments(points).map((run) => <polyline key={run[0]} className="trend-line" points={run.map((index) => `${x(index)},${y(points[index]!.value!)}`).join(' ')} />)}
+        {points.map((point, index) => point.value === null ? null : <circle key={point.date} cx={x(index)} cy={y(point.value)} r="3" className={point.provisional ? 'trend-dot provisional' : 'trend-dot'}><title>{tip(point)}</title></circle>)}</>}
+  </svg>;
+}
+
+/** Trends of the six metrics up to the selected day, from the same day snapshots as the table. */
+function Trends({ to }: { to: string }) {
+  const [length, setLength] = useState(90);
+  const [result, setResult] = useState<z.infer<typeof rangeSchema> | null>(null);
+  const [error, setError] = useState(false);
+  const from = to ? new Date(Date.parse(`${to}T00:00:00Z`) - (length - 1) * 86400000).toISOString().slice(0, 10) : '';
+  useEffect(() => {
+    setResult(null); setError(false);
+    if (!to) return;
+    const controller = new AbortController();
+    fetch(`/api/day-range?from=${from}&to=${to}`, { signal: controller.signal })
+      .then((response) => { if (!response.ok) throw new Error('Trendy'); return response.json(); })
+      .then((data: unknown) => setResult(rangeSchema.parse(data)))
+      .catch(() => { if (!controller.signal.aborted) setError(true); });
+    return () => controller.abort();
+  }, [from, to]);
+  const days = result?.state === 'ready' ? result.days : null;
+  return <section><h2>Trendy</h2>
+    <label>Okres <select value={length} onChange={(event) => setLength(Number(event.target.value))}><option value={30}>30 dni</option><option value={90}>90 dni</option><option value={365}>365 dni</option></select></label>
+    <p>Od {from || '—'} do {to || '—'}. Średnie liczą tylko doby potwierdzone; pusta kolumna albo przerwa w linii to doba bez wartości, nie zero. Słupek półprzezroczysty to doba częściowa, kreskowany — kalorie ze starszego modelu (bez rozkładu godzinowego). Wartości dnia: najedź na słupek albo zobacz tabelę dni.</p>
+    {error ? <p role="alert">Nie udało się odczytać trendów.</p> : !result ? <p>Ładowanie…</p> : !days ? <p>Wyniki dzienne nie są jeszcze przygotowane.</p> : <>
+      <p>{(['weight', 'body_fat'] as const).map((key) => { const metric = trendMetrics.find((item) => item.key === key)!; const last = lastMeasurement(trendPoints(days, key)); return <span key={key}>{metric.label}: {last ? `ostatni pomiar ${number(last.value, metric.decimals)} ${metric.unit} (${last.date})` : 'brak pomiaru w tym okresie'}. </span>; })}</p>
+      <div className="trend-grid">{trendMetrics.map((metric) => { const points = trendPoints(days, metric.key); const summary = trendSummary(points); return <figure key={metric.key} className="trend-card">
+        <figcaption><strong>{metric.label} ({metric.unit})</strong> — {summary.mean === null ? 'brak potwierdzonych dób' : `średnia ${number(summary.mean, metric.decimals)} ${metric.unit}`}; dób potwierdzonych: {summary.valid} z {summary.total}, luk: {summary.gaps}</figcaption>
+        <TrendChart points={points} form={metric.form} unit={metric.unit} decimals={metric.decimals} label={metric.label} />
+        <div className="trend-dates"><span>{points[0]?.date}</span><span>{points.at(-1)?.date}</span></div>
+      </figure>; })}</div>
+    </>}
+  </section>;
+}
+
 function DailyOverview({ dirty, busy, onDirty, onBusy }: { dirty: boolean; busy: boolean; onDirty: (value: boolean) => void; onBusy: (value: boolean) => void }) {
   const [date, setDate] = useState(warsawToday);
   const [response, setResponse] = useState<DayResponse | null>(null);
@@ -370,7 +432,7 @@ function DailyOverview({ dirty, busy, onDirty, onBusy }: { dirty: boolean; busy:
       .catch(() => { if (!controller.signal.aborted) setError(true); });
     return () => controller.abort();
   }, [date]);
-  return <section><h2>Przegląd dnia</h2>
+  return <section><Trends to={date} /><h2>Przegląd dnia</h2>
     <label>Data <input type="date" value={date} disabled={busy} onChange={(event) => { if (dirty && !window.confirm('Notatka ma niezapisane zmiany. Zmienić datę?')) { event.currentTarget.value = date; return; } onDirty(false); setDate(event.target.value); }} /></label>
     <p>Dzień aplikacji: Europe/Warsaw.</p>
     {!date ? <p>Wybierz datę.</p> : error ? <p role="alert">Nie udało się odczytać wyniku dnia.</p> : !response ? <p>Ładowanie…</p> : response.state === 'not_ready' ? <p>Wyniki dzienne nie są jeszcze przygotowane. Oryginalne dane znajdziesz w zakładce „Dane Takeout”.</p> : <>

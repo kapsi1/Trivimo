@@ -139,14 +139,31 @@ export function projectGoogleDays(db: DatabaseSync, from: string, to: string, no
   return snapshots;
 }
 
+/** What a day's snapshot says (everything except its revision and the notes derived from issues). */
+const content = (day: DaySnapshotInput) => JSON.stringify({ metrics: day.metrics, issues: day.issues, energy: day.energy, activity: day.activity, body: day.body });
+
 /** Publish a new revision only for days whose projection changed; values, issues and evidence move together. */
 export function publishGoogleDays(db: DatabaseSync, from: string, to: string, nowMs: number): { published: number; unchanged: number } {
   let published = 0, unchanged = 0;
-  const content = (day: DaySnapshotInput) => JSON.stringify({ metrics: day.metrics, issues: day.issues, energy: day.energy, activity: day.activity, body: day.body });
   for (const snapshot of projectGoogleDays(db, from, to, nowMs)) {
     const current = readCanonicalDay(db, snapshot.date);
     if (current && content(current) === content(snapshot)) { unchanged++; continue; }
     publishCanonicalDay(db, snapshot, current?.revision ?? null); published++;
   }
   return { published, unchanged };
+}
+
+/**
+ * Restore check: the projection rebuilt from the saved originals must equal the newest published snapshot of every
+ * day up to `to` (rules of this code version). `nowMs` is the moment of the copy, so day progress is judged as it was.
+ */
+export function compareGoogleDays(db: DatabaseSync, from: string, to: string, nowMs: number): { matched: number; differing: string[]; unpublished: string[] } {
+  const result = { matched: 0, differing: [] as string[], unpublished: [] as string[] };
+  for (const snapshot of projectGoogleDays(db, from, to, nowMs)) {
+    const current = readCanonicalDay(db, snapshot.date);
+    if (!current) result.unpublished.push(snapshot.date);
+    else if (content(current) === content(snapshot)) result.matched++;
+    else result.differing.push(snapshot.date);
+  }
+  return result;
 }

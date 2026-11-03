@@ -1,5 +1,16 @@
 # Raport weryfikacji
 
+## 2026-11-04 — kopia i odtworzenie (kryterium M1)
+
+- `npm run backup:takeout -- D:/Trivimo-bak/kopia-m1-20261104.sqlite` przy działającym serwerze: kopia 367 MB w ok. 2 s. `npm run verify:restore` tej kopii: odtworzenie do pustego katalogu tymczasowego, skróty zgodne, integralność, oryginały Takeout, łańcuchy stron Google i snapshoty poprawne, odczyty źródeł i części dnia z opaską działają, a projekcja przebudowana z oryginałów jest równa opublikowanym snapshotom dla wszystkich 308 dób (2026-01-01 – 2026-11-04, 0 różnych, 0 nieopublikowanych). Czas ok. 19 s.
+- `npm test`: 114 testów zaliczonych (nowy: osobny proces publikuje w pętli rewizje 30 dób i zostaje twardo zabity w losowej chwili; po ponownym otwarciu integralność poprawna, każda doba ma ostatnią zatwierdzoną rewizję w całości — wartość, uwagi i notatki z tego samego zapisu — a numery rewizji są ciągłe; test przeszedł trzy razy z rzędu). `npm run build`: poprawny.
+- Ograniczenia: nie uruchamiano serwera aplikacji na odtworzonej kopii (port 3000 zajmował serwer użytkownika); token Google nie jest częścią kopii; kopia nie jest szyfrowana przez aplikację.
+
+## 2026-11-04 — trendy w przeglądzie
+
+- `npm test`: 113 testów zaliczonych (nowe: punkty serii — brak i nieporównywalne jako luka, zero producenta jako zero, oznaczenie doby częściowej i starszego modelu; średnia tylko z dób potwierdzonych z liczbą dób i luk; ostatni pomiar z datą; odcinki linii bez łączenia luk). `npm run build`: poprawny.
+- Przeglądarka na prawdziwych danych: sekcja „Trendy” dla 90 i 365 dni, sześć wykresów, ostatnia masa i tłuszcz z datą, kreskowane słupki kalorii starszego modelu (97 dób), pusta przerwa w dobach samego BMR, linie masy tylko między kolejnymi dobami. Kolor jednej serii sprawdzony walidatorem palety: kontrast z tłem co najmniej 3:1 (pozostałe sprawdzenia dotyczą palet wieloseryjnych). Nie sprawdzano wąskiego ekranu.
+
 ## 2026-11-04 — automatyczne nadrabianie przerwy
 
 - `npm test`: 110 testów zaliczonych (nowy: przebieg automatyczny na pustym magazynie czyta 13 dni, wykrywa starszą lukę i sam uruchamia uzupełnianie aż do pełnego pokrycia; po ręcznym zatrzymaniu kolejny przebieg nie wznawia go). `npm run build`: poprawny.
