@@ -1,12 +1,21 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
-import type { BodyType } from '../adapters/google-health/body-read.ts';
+import { parseDailyRollup } from '../adapters/google-health/daily-rollup.ts';
 
-const pageSchema = z.object({ dataPoints: z.array(z.unknown()).max(100).optional(), nextPageToken: z.string().max(8192).optional() }).passthrough();
-export function createGoogleReadJob(db: DatabaseSync, accountDigest: string, kind: BodyType, start: string, end: string): string {
-  z.string().regex(/^[0-9a-f]{64}$/).parse(accountDigest); z.enum(['weight', 'body-fat']).parse(kind); z.iso.datetime().parse(start); z.iso.datetime().parse(end);
-  if (Date.parse(start) >= Date.parse(end)) throw new Error('invalid_range');
+export type GoogleJobKind = 'weight' | 'body-fat' | 'steps' | 'distance';
+const kinds = z.enum(['weight', 'body-fat', 'steps', 'distance']);
+const isDaily = (kind: string) => kind === 'steps' || kind === 'distance';
+/** Body jobs hold UTC instants; daily aggregate jobs hold half-open producer civil dates. */
+function validRange(kind: string, start: string, end: string): boolean {
+  if (isDaily(kind)) { if (!z.iso.date().safeParse(start).success || !z.iso.date().safeParse(end).success) return false; const days = (Date.parse(end) - Date.parse(start)) / 86400000; return days >= 1 && days <= 90; }
+  return z.iso.datetime().safeParse(start).success && z.iso.datetime().safeParse(end).success && Date.parse(start) < Date.parse(end);
+}
+
+const pageSchema = z.object({ dataPoints: z.array(z.unknown()).max(100).optional(), rollupDataPoints: z.array(z.unknown()).max(90).optional(), nextPageToken: z.string().max(8192).optional() }).passthrough();
+export function createGoogleReadJob(db: DatabaseSync, accountDigest: string, kind: GoogleJobKind, start: string, end: string): string {
+  z.string().regex(/^[0-9a-f]{64}$/).parse(accountDigest); kinds.parse(kind);
+  if (!validRange(kind, start, end)) throw new Error('invalid_range');
   const id = randomUUID();
   db.prepare("INSERT INTO google_read_jobs VALUES (?, ?, ?, ?, ?, NULL, 'running', ?)").run(id, accountDigest, kind, start, end, new Date().toISOString());
   return id;
@@ -18,8 +27,9 @@ export function commitGooglePage(db: DatabaseSync, jobId: string, expectedCursor
   const parsed = pageSchema.parse(JSON.parse(rawJson) as unknown); const nextCursor = parsed.nextPageToken || null;
   db.exec('BEGIN IMMEDIATE');
   try {
-    const job = db.prepare('SELECT cursor, state FROM google_read_jobs WHERE id = ?').get(jobId);
+    const job = db.prepare('SELECT kind, cursor, state FROM google_read_jobs WHERE id = ?').get(jobId);
     if (!job || job.state !== 'running' || job.cursor !== expectedCursor) throw new Error('job_conflict');
+    if (job.kind === 'steps' || job.kind === 'distance') parseDailyRollup(rawJson, job.kind);
     if (nextCursor && (nextCursor === expectedCursor || db.prepare('SELECT 1 FROM google_read_pages WHERE job_id = ? AND request_cursor = ?').get(jobId, nextCursor))) throw new Error('cursor_cycle');
     const pageNumber = Number(db.prepare('SELECT COALESCE(MAX(page_number), 0) + 1 AS n FROM google_read_pages WHERE job_id = ?').get(jobId)?.n);
     const digest = createHash('sha256').update(rawJson, 'utf8').digest('hex');
@@ -34,8 +44,8 @@ export function verifyGooglePages(db: DatabaseSync): void {
   const pages = db.prepare('SELECT page_number, request_cursor, next_cursor, raw_json, digest FROM google_read_pages WHERE job_id = ? ORDER BY page_number');
   for (const job of db.prepare('SELECT id, account_digest, kind, range_start, range_end, cursor, state, created_at FROM google_read_jobs').iterate()) {
     z.string().regex(/^[0-9a-f]{64}$/).parse(job.account_digest);
-    z.enum(['weight', 'body-fat']).parse(job.kind); z.iso.datetime().parse(job.range_start); z.iso.datetime().parse(job.range_end); z.iso.datetime().parse(job.created_at);
-    if (typeof job.id !== 'string' || typeof job.range_start !== 'string' || typeof job.range_end !== 'string' || Date.parse(job.range_start) >= Date.parse(job.range_end)) throw new Error('invalid_google_job');
+    kinds.parse(job.kind); z.iso.datetime().parse(job.created_at);
+    if (typeof job.id !== 'string' || typeof job.range_start !== 'string' || typeof job.range_end !== 'string' || !validRange(String(job.kind), job.range_start, job.range_end)) throw new Error('invalid_google_job');
     let cursor: string | null = null; let number = 0; const seen = new Set<string>();
     for (const page of pages.iterate(job.id)) {
       if (number > 0 && cursor === null) throw new Error('invalid_google_cursor');

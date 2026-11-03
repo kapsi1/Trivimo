@@ -8,6 +8,7 @@ import { readCanonicalDay } from '../../packages/storage/canonical-days.ts';
 import { readUserNote } from '../../packages/storage/user-notes.ts';
 import { readBodySourceDay } from '../../packages/storage/body-source-day.ts';
 import { readGoogleBodySourceDay } from '../../packages/storage/google-body-source-day.ts';
+import { readGoogleDailySourceDay } from '../../packages/storage/google-daily-source-day.ts';
 import { warsawDay } from '../../packages/domain/warsaw-day.ts';
 import { unassignedSessions } from '../../packages/storage/source-accounts.ts';
 import { userNoteInputSchema } from '../../packages/contracts/day-snapshot.ts';
@@ -86,8 +87,9 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
               const input = z.union([
                 z.object({ kind: z.enum(['weight', 'body-fat']), date: z.iso.date() }).strict(),
                 z.object({ kind: z.enum(['weight', 'body-fat']), start: z.iso.datetime(), end: z.iso.datetime() }).strict(),
+                z.object({ kind: z.enum(['steps', 'distance']), date: z.iso.date() }).strict(),
               ]).parse(body);
-              const range = 'date' in input ? warsawDay(input.date) : input;
+              const range = input.kind === 'steps' || input.kind === 'distance' ? { start: input.date, end: new Date(Date.parse(`${input.date}T00:00:00Z`) + 86400000).toISOString().slice(0, 10) } : 'date' in input ? warsawDay(input.date) : input;
               result = await googleRead.start(input.kind, range.start, range.end);
             }
           }
@@ -103,10 +105,21 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
       try {
         const source = typeof sourceDb === 'function' ? sourceDb() : sourceDb;
         const version = source?.prepare('PRAGMA user_version').get()?.user_version;
-        const accounts = (version === 4 || version === 5) ? source!.prepare('SELECT COUNT(*) AS count FROM source_accounts').get()?.count : 0;
-        const unassignedImports = (version === 4 || version === 5) ? unassignedSessions(source!).length : 0;
+        const accounts = (version === 4 || version === 5 || version === 6) ? source!.prepare('SELECT COUNT(*) AS count FROM source_accounts').get()?.count : 0;
+        const unassignedImports = (version === 4 || version === 5 || version === 6) ? unassignedSessions(source!).length : 0;
         response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
         response.end(JSON.stringify({ singleExistingAccount: accounts === 1, unassignedImports }));
+      } catch { response.writeHead(500, { 'Cache-Control': 'no-store' }).end(); }
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/api/google/daily-candidates') {
+      const date = z.iso.date().safeParse(url.searchParams.get('date'));
+      const kind = z.enum(['steps', 'distance']).safeParse(url.searchParams.get('kind'));
+      if (!date.success || !kind.success || Number(date.data.slice(0, 4)) < 2026 || Number(date.data.slice(0, 4)) > 9998) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
+      const source = typeof sourceDb === 'function' ? sourceDb() : sourceDb;
+      if (!source || source.prepare('PRAGMA user_version').get()?.user_version !== 6) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
+      try {
+        response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }).end(JSON.stringify(readGoogleDailySourceDay(source, kind.data, date.data)));
       } catch { response.writeHead(500, { 'Cache-Control': 'no-store' }).end(); }
       return;
     }
@@ -115,7 +128,7 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
       const kind = z.enum(['weight', 'body_fat']).safeParse(url.searchParams.get('kind'));
       if (!date.success || !kind.success || Number(date.data.slice(0, 4)) < 2026 || Number(date.data.slice(0, 4)) > 9998) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
       const source = typeof sourceDb === 'function' ? sourceDb() : sourceDb;
-      if (!source || source.prepare('PRAGMA user_version').get()?.user_version !== 5) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
+      if (!source || source.prepare('PRAGMA user_version').get()?.user_version !== 5 && source.prepare('PRAGMA user_version').get()?.user_version !== 6) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
       try {
         const review = readGoogleBodySourceDay(source, kind.data, date.data);
         response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }).end(JSON.stringify(review));
@@ -145,10 +158,10 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
       try {
         const source = typeof sourceDb === 'function' ? sourceDb() : sourceDb;
         const version = source?.prepare('PRAGMA user_version').get()?.user_version;
-        const result = !source || (version !== 2 && version !== 3 && version !== 4 && version !== 5) ? { state: 'not_ready' } : {
+        const result = !source || (version !== 2 && version !== 3 && version !== 4 && version !== 5 && version !== 6) ? { state: 'not_ready' } : {
           state: 'ready', days: Array.from({ length: (Date.parse(to.data) - Date.parse(from.data)) / 86400000 + 1 }, (_, index) => {
             const date = new Date(Date.parse(from.data) + index * 86400000).toISOString().slice(0, 10);
-            return { date, snapshot: readCanonicalDay(source, date), userNote: version === 3 || version === 4 || version === 5 ? readUserNote(source, date) : null };
+            return { date, snapshot: readCanonicalDay(source, date), userNote: version === 3 || version === 4 || version === 5 || version === 6 ? readUserNote(source, date) : null };
           }),
         };
         response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
@@ -162,8 +175,8 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
       try {
         const source = typeof sourceDb === 'function' ? sourceDb() : sourceDb;
         const version = source?.prepare('PRAGMA user_version').get()?.user_version;
-        const result = !source || (version !== 2 && version !== 3 && version !== 4 && version !== 5)
-          ? { state: 'not_ready' } : { state: 'ready', snapshot: readCanonicalDay(source, date.data), notesAvailable: version === 3 || version === 4 || version === 5, userNote: version === 3 || version === 4 || version === 5 ? readUserNote(source, date.data) : null };
+        const result = !source || (version !== 2 && version !== 3 && version !== 4 && version !== 5 && version !== 6)
+          ? { state: 'not_ready' } : { state: 'ready', snapshot: readCanonicalDay(source, date.data), notesAvailable: version === 3 || version === 4 || version === 5 || version === 6, userNote: version === 3 || version === 4 || version === 5 || version === 6 ? readUserNote(source, date.data) : null };
         response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
         response.end(JSON.stringify(result));
       } catch { response.writeHead(500, { 'Cache-Control': 'no-store' }).end(); }

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { readLimitedText } from './limited-json.ts';
 
 const responseSchema = z.object({ dataPoints: z.array(z.unknown()).max(100).optional(), nextPageToken: z.string().max(8192).optional() }).passthrough();
 export type BodyType = 'weight' | 'body-fat';
@@ -17,14 +18,7 @@ export async function listBodyPage(input: { type: BodyType; start: string; end: 
   if (input.pageToken) url.searchParams.set('pageToken', input.pageToken);
   const response = await send(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(15000) });
   if (!response.ok) throw new Error(`google_http_${response.status}`);
-  const length = Number(response.headers.get('content-length'));
-  if (Number.isFinite(length) && length > 1048576) throw new Error('response_too_large');
-  if (!response.body) throw new Error('invalid_response');
-  const reader = response.body.getReader(); const chunks: Uint8Array[] = []; let bytes = 0;
-  try {
-    while (true) { const part = await reader.read(); if (part.done) break; bytes += part.value.byteLength; if (bytes > 1048576) throw new Error('response_too_large'); chunks.push(part.value); }
-  } finally { await reader.cancel().catch(() => {}); }
-  const rawJson = new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks));
+  const rawJson = await readLimitedText(response);
   const raw = JSON.parse(rawJson) as unknown;
   const parsed = responseSchema.parse(raw);
   return { rawJson, records: parsed.dataPoints ?? [], nextPageToken: parsed.nextPageToken || null };

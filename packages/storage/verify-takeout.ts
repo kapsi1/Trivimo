@@ -20,7 +20,7 @@ export function verifyTakeout(path: string): void {
     }
     if (db.prepare("SELECT COUNT(*) AS count FROM import_sessions WHERE state != 'complete'").get()?.count !== 0) throw new Error('incomplete');
     const version = db.prepare('PRAGMA user_version').get()?.user_version;
-    if (typeof version !== 'number' || version < 1 || version > 5) throw new Error('unsupported_schema');
+    if (typeof version !== 'number' || version < 1 || version > 6) throw new Error('unsupported_schema');
     if (version >= 5) verifyGooglePages(db);
     if (version >= 2) {
       for (const row of db.prepare('SELECT day, revision, payload FROM daily_snapshots').iterate()) {

@@ -69,6 +69,29 @@ export async function migrateGooglePages(db: DatabaseSync, backupPath: string): 
     ) STRICT; PRAGMA user_version = 5;`);
 }
 
+/** Allow civil-day aggregate jobs (steps, distance); the tables are rebuilt because SQLite cannot alter a CHECK. */
+export async function migrateDailyRollups(db: DatabaseSync, backupPath: string): Promise<void> {
+  await migrateWithBackup(db, backupPath, 5, `CREATE TABLE google_read_jobs_v6 (
+      id TEXT PRIMARY KEY, account_digest TEXT NOT NULL CHECK(length(account_digest) = 64), kind TEXT NOT NULL CHECK(kind IN ('weight','body-fat','steps','distance')),
+      range_start TEXT NOT NULL, range_end TEXT NOT NULL, cursor TEXT, state TEXT NOT NULL CHECK(state IN ('running','complete')),
+      created_at TEXT NOT NULL
+    ) STRICT;
+    CREATE TABLE google_read_pages_v6 (
+      job_id TEXT NOT NULL REFERENCES google_read_jobs_v6(id), page_number INTEGER NOT NULL CHECK(page_number > 0),
+      request_cursor TEXT, next_cursor TEXT, raw_json TEXT NOT NULL, digest TEXT NOT NULL, received_at TEXT NOT NULL,
+      PRIMARY KEY(job_id, page_number)
+    ) STRICT;
+    INSERT INTO google_read_jobs_v6 SELECT id, account_digest, kind, range_start, range_end, cursor, state, created_at FROM google_read_jobs;
+    INSERT INTO google_read_pages_v6 SELECT job_id, page_number, request_cursor, next_cursor, raw_json, digest, received_at FROM google_read_pages;
+    DROP TABLE google_read_pages; DROP TABLE google_read_jobs;
+    ALTER TABLE google_read_jobs_v6 RENAME TO google_read_jobs;
+    ALTER TABLE google_read_pages_v6 RENAME TO google_read_pages;
+    PRAGMA user_version = 6;`, () => {
+    const before = db.prepare('SELECT (SELECT COUNT(*) FROM google_read_jobs) AS jobs, (SELECT COUNT(*) FROM google_read_pages) AS pages').get();
+    if (!before || db.prepare('PRAGMA foreign_key_check').all().length > 0) throw new Error('Niespójna migracja zadań Google');
+  });
+}
+
 export function publishCanonicalDay(db: DatabaseSync, input: DaySnapshotInput, expectedRevision: number | null) {
   const parsed = snapshotInputSchema.parse(input);
   const notes = projectIssueNotes(parsed.issues);

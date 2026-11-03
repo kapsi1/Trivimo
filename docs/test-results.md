@@ -1,5 +1,12 @@
 # Raport weryfikacji
 
+## 2026-11-03 — adapter dziennego agregatu Google (kroki, dystans)
+
+- `npx tsc --noEmit` bez błędów; `npx tsx --test tests/*.test.ts`: 73 testy zaliczone (3 nowe: jawne zero versus brak, odrzucenie okien innych niż doba, kształt żądania, limit 90 dni, HTTP 429). Wspólny czytnik odpowiedzi z limitem rozmiaru wydzielono z odczytu masy bez zmiany zachowania.
+- Migracja v6 (`migrate:canonical`, przebudowa tabel zadań Google z zachowaniem danych i klucza obcego): test syntetyczny v1→v6 oraz próba na właściwej bazie po kopii `D:\Trivimo-bak\przed-v6-20261103.sqlite`; po migracji wersja 6, zachowane 2 zadania i 2 strony, `foreign_key_check` bez naruszeń. Ręczny odczyt próbny na koncie użytkownika (2026-11-03): po jednym zadaniu kroków i dystansu dla doby 2026-11-02 zakończyło się po jednej stronie z jednym punktem `rollupDataPoints` i bez `nextPageToken`; wartości nie analizowano ani nie zapisano w docs. To potwierdza kształt odpowiedzi dla pojedynczej doby z danymi, nie zachowanie dla doby bez danych, dłuższych zakresów ani paginacji.
+- Ograniczenia: tylko odpowiedzi syntetyczne zgodne z dokumentacją z 2026-11-03; brak realnego wywołania konta, kwalifikacji i projekcji dnia.
+- Widok dnia „Agregaty dzienne Google" (`GET /api/google/daily-candidates`): pokazuje zapisane wartości kroków i dystansu z jednej doby producenta jako oryginał i przeliczenie (mm → km dokładnym przesunięciem przecinka), bez sumowania, uzgadniania i kwalifikacji. Testy syntetyczne (76 zaliczonych, `tsc` czysto) obejmują jawne zero, brak wartości, kilka odczytów i kilka kont. Widoku nie sprawdzano w przeglądarce na realnych danych. Test nie potwierdza, czy API zwraca doby bez danych ani jak działa paginacja.
+
 ## 2026-11-03 — diagnostyka listy zadań Google
 
 - `pnpm exec tsx --test tests/google-job-day.test.ts tests/google-pages.test.ts`: 3 testy syntetyczne zaliczone poza sandboxem, w tym rozróżnienie błędów bez ujawniania szczegółów. `pnpm run build` i `git diff --check`: poprawne na Node 26.13.0.
