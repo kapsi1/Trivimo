@@ -4,7 +4,7 @@ import { parseDailyRollup, type DailyRollupType } from '../adapters/google-healt
 import { parseSourceValue } from '../domain/source-units.ts';
 
 /** Millimetres to kilometres by shifting the decimal point six places, without floating point. */
-function millimetresToKm(value: string): string {
+export function millimetresToKm(value: string): string {
   const digits = value.replace(/^0+(?=\d)/, '').padStart(7, '0');
   return `${digits.slice(0, -6).replace(/^0+(?=\d)/, '')}.${digits.slice(-6)}`;
 }

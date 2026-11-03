@@ -1,5 +1,23 @@
 # Raport weryfikacji
 
+## 2026-11-04 — sprawdzenie w przeglądarce
+
+- Wbudowana przeglądarka aplikacji, `http://localhost:5173/` z serwerem użytkownika (`tsx watch`, magazyn w wersji 10), dane prawdziwe. Sprawdzono: tabelę dni dla 2026-10-06 – 2026-11-04 i 2026-04-01 – 2026-05-12 (sześć metryk, „Część dnia z opaską”, „Źródła”, uwagi, doba w toku), szczegóły komórek kalorii (pełny i starszy model, sam BMR), kroków, dystansu i masy (także ze scaloną kopią), panele „Odświeżanie bieżących dni” (13 rodzajów) i „Uzupełnianie historii” (3991 z 3991 dób). Konsola bez błędów.
+- Poprawiono znalezione teksty: podwójna kropka po „szt.”, „nie odczytano okien” przy braku wartości dobowej, odmiana „kopia/kopie/kopii”, podział kalorii aktywnych 0,00/0,00 w dobach bez kalorii aktywnych (teraz pominięty) oraz nieaktualne opisy sekcji Google („wyniki nie są jeszcze kwalifikowane”). Po poprawkach `npm test` (109) i `npm run build` poprawne, szczegóły sprawdzone ponownie w przeglądarce.
+- Uwagi bez zmian w kodzie: panel odświeżania podaje „pokryte do” także dla bieżącej doby czytanej w toku; doby 2026-04-30 – 05-05 mają małą „część dnia z opaską” z pomiarów tętna aparatem w Google Fit; doba 2026-10-11 ma w źródłach opaskę przy 0 % okien z tętnem. Widoku dnia, importu Takeout ani wąskiego ekranu telefonu nie sprawdzano.
+
+## 2026-11-04 — masa i tkanka tłuszczowa (`google-body-v1`)
+
+- `npm test`: 109 testów zaliczonych (nowe: średnia unikalnych pomiarów doby z dokładnym przeliczeniem g→kg, kopie z dwóch aplikacji liczone raz, konflikt przy tej samej chwili i różnej wartości, przypisanie do doby warszawskiej, doba w toku częściowa bez uwagi; odczyt masy i tłuszczu w odświeżaniu i backfillu; doba po północy z samą stawką bazową nie jest „samym BMR”, także bez kalorii aktywnych). `npm run build`: poprawny.
+- Prawdziwa baza: backfill masy i tłuszczu (22 zadania, 307 dób). Porównanie z Takeout: te same liczby rekordów w tych samych miesiącach od 2026-04, brak pomiarów w styczniu–marcu. Przebieg na sucho i publikacja: masa i tłuszcz potwierdzone w dobach z pomiarem, pozostałe doby „Brak danych”; 18 kopii masy scalonych; ponowna publikacja bez zmian, 308 snapshotów przechodzi walidację. Wykryto i poprawiono fałszywe „tylko energia bazowa” oraz „nieporównywalne źródło” dla bieżącej doby tuż po północy; jedyna uwaga w tabeli to „Kalorie: tylko energia bazowa” (29 dób).
+- Ograniczenia: wartości nie porównywano z aplikacją Health; tabeli w przeglądarce nie sprawdzano.
+
+## 2026-11-03 — kwalifikacja kroków i dystansu (`google-activity-v1`)
+
+- `npm test`: 108 testów zaliczonych (nowe: kroki i dystans z wartości producenta, przeliczenie mm→km, zgodność z oknami doby warszawskiej, niezgodność granicy doby jako nieporównywalna z uwagą, potwierdzone zero, doba w toku częściowa bez uwagi; doba bez odczytu kroków to brak danych). `npm run build`: poprawny.
+- Prawdziwa baza: porównanie API z Takeout (tylko proporcje) potwierdziło, że producent nie sumuje kopii źródeł (zob. kontrakty). Przebieg na sucho: kroki i dystans potwierdzone na wszystkich 306 zakończonych dobach, suma okien równa wartości dobowej na każdej, doba bieżąca częściowa. Publikacja: 307 nowych rewizji, ponowna publikacja bez zmian, wszystkie snapshoty przechodzą walidację odczytu; jedyna uwaga w tabeli to „Kalorie: tylko energia bazowa” (29 dób).
+- Ograniczenia: nie porównywano z wartościami w aplikacji Health; tabeli w przeglądarce nie sprawdzano.
+
 ## 2026-11-03 — ponawianie 503
 
 - `npm test`: 107 testów zaliczonych (nowe: 503 z `Retry-After` w adapterze, 500 bez opóźnienia; ponawianie 503 listy i tożsamości konta, 500 i 401 bez ponowień; przebieg serwisu z krótkimi 503 kończy się sukcesem bez zdublowanych zadań, a trwałe 503 kończy przebieg kodem `google_http_503` bez wstrzymania kolejnych przebiegów). `npm run build`: poprawny.

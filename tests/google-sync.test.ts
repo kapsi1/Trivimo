@@ -23,6 +23,8 @@ function done(db: ReturnType<typeof store>, kind: string, start: string, end: st
   db.prepare("INSERT INTO google_read_jobs VALUES (?, ?, ?, ?, ?, NULL, 'complete', ?)").run(`j${counter++}`, 'a'.repeat(64), kind, start, end, createdAt);
 }
 const hour = 3600000;
+// windows and measurements (weight, body fat) are read over the UTC bounds of Warsaw days
+const instant = (kind: string) => kind.endsWith('-10m') || kind === 'weight' || kind === 'body-fat';
 
 test('plan odświeżania: pusta baza daje trzy ostatnie zakończone doby i dziś dla każdego rodzaju', () => {
   const db = store();
@@ -40,7 +42,7 @@ test('plan odświeżania: odczytany zakres nie jest powtarzany, dziś wraca po u
   const db = store();
   try {
     for (const kind of syncKinds) {
-      const window = kind.endsWith('-10m');
+      const window = instant(kind);
       done(db, kind, window ? warsawDay('2026-03-07').start : '2026-03-07', window ? warsawDay('2026-03-09').end : '2026-03-10', '2026-03-10T10:00:00.000Z');
       done(db, kind, window ? warsawDay('2026-03-10').start : '2026-03-10', window ? warsawDay('2026-03-10').end : '2026-03-11', '2026-03-10T10:00:00.000Z');
     }
@@ -157,7 +159,7 @@ test('backfill: pokrycie liczy tylko doby odczytane po ich końcu, a plan dzieli
     const dst = plan.find((read) => read.kind === 'heart-rate-10m' && read.first <= '2026-03-29' && read.last >= '2026-03-29')!;
     assert.deepEqual([dst.begin, dst.end], [warsawDay(dst.first).start, warsawDay(dst.last).end]);
     assert.ok(Date.parse(dst.end) - Date.parse(dst.begin) <= 14 * 86400000);
-    for (const read of plan) assert.equal(read.kind.endsWith('-10m') ? read.begin : read.first, read.kind.endsWith('-10m') ? warsawDay(read.first).start : read.begin);
+    for (const read of plan) assert.equal(instant(read.kind) ? read.begin : read.first, instant(read.kind) ? warsawDay(read.first).start : read.begin);
   } finally { db.close(); }
 });
 
@@ -191,8 +193,8 @@ test('backfill: czyta wszystkie luki, wznawia bez powtórzeń, zatrzymuje się p
     const status = service.backfillStatus();
     assert.equal(status.state, 'done');
     assert.deepEqual(status.kinds.map((item) => [item.covered, item.total]), syncKinds.map(() => [19, 19]));
-    // 21 chunks in all (1 per steps, distance and active, 2 for total-calories, 2 per window kind, 3 per source list), one read before the stop; plus five refused requests
-    assert.deepEqual([status.readsThisRun, rollups], [20, 20 + 5]);
+    // 23 chunks in all (1 per steps, distance and active, 2 for total-calories, 2 per window kind, 3 per source list, 1 per measurement), one read before the stop; plus five refused requests
+    assert.deepEqual([status.readsThisRun, rollups], [22, 22 + 5]);
     assert.equal(env.db.prepare("SELECT COUNT(*) AS n FROM google_read_jobs WHERE state != 'complete'").get()?.n, 0);
 
     rollups = 0;

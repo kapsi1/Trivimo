@@ -25,6 +25,13 @@ export const snapshotInputSchema = z.object({
     heartRateWindows: z.number().int().nonnegative().nullable(), dayWindows: z.number().int().positive(),
     activeWithHeartRateKcal: z.string().regex(/^\d{1,9}\.\d{2}$/).nullable(), activeWithoutHeartRateKcal: z.string().regex(/^\d{1,9}\.\d{2}$/).nullable(),
   }).strict().optional(),
+  /** Steps and distance qualification evidence: rule version and whether the Warsaw-day windows sum to the daily value. */
+  activity: z.object({ rule: z.literal('google-activity-v1'), stepsMatchWindows: z.boolean().nullable(), distanceMatchWindows: z.boolean().nullable() }).strict().optional(),
+  /** Weight and body fat evidence: rule version, records read for the day and how many were copies of the same measurement. */
+  body: z.object({
+    rule: z.literal('google-body-v1'), weightRecords: z.number().int().nonnegative().nullable(), weightReplicas: z.number().int().nonnegative().nullable(),
+    bodyFatRecords: z.number().int().nonnegative().nullable(), bodyFatReplicas: z.number().int().nonnegative().nullable(),
+  }).strict().optional(),
 }).strict();
 export type DaySnapshotInput = z.infer<typeof snapshotInputSchema>;
 export type DayMetricValue = DaySnapshotInput['metrics']['weight'];

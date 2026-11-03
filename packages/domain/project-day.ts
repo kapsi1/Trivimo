@@ -39,22 +39,39 @@ function qualifiedMetric(metric: QualifiedMetric, assessment: Assessment, issues
   return { status: assessment.status, value: exact.value };
 }
 
+export interface BodyDayEvidence { candidates: BodyCandidate[] | null; day: 'complete' | 'ongoing' | 'read_before_end' }
+
 /**
- * Snapshot with qualified calories only; the other metrics are not assessed from these sources yet, so they are
- * "unsupported" rather than missing or zero.
+ * Daily mean of unique measurements; a day never read is missing. Like the other metrics, a day in progress is
+ * provisional without a note and a past day read before its end is provisional with an incomplete-coverage note.
  */
-export function projectEnergyDay(input: { date: string; totalEnergy: EnergyEvidence; activeEnergy: EnergyEvidence; energy: NonNullable<DaySnapshotInput['energy']> }): DaySnapshotInput {
-  if (input.totalEnergy.kind !== 'total' || input.activeEnergy.kind !== 'active') throw new Error('Nieprawidłowy typ metryki');
+function bodyMetric(metric: 'weight' | 'body_fat', evidence: BodyDayEvidence, issues: DataIssue[]): DayMetricValue {
+  if (evidence.candidates === null) return { status: 'missing', value: null };
+  const day = projectBodyDay(metric, evidence.candidates, true);
+  issues.push(...day.issues);
+  if (day.status !== 'valid' || evidence.day === 'complete') return { status: day.status, value: day.value };
+  if (evidence.day === 'read_before_end') issues.push({ metric, code: 'incomplete_coverage', state: 'active' });
+  return { status: 'provisional', value: day.value };
+}
+
+/** Snapshot of the six metrics qualified from Google data (weight, body fat, steps, distance and calories). */
+export function projectGoogleDay(input: {
+  date: string; weight: BodyDayEvidence; bodyFat: BodyDayEvidence; steps: ActivityEvidence; distance: ActivityEvidence; totalEnergy: EnergyEvidence; activeEnergy: EnergyEvidence;
+  energy: NonNullable<DaySnapshotInput['energy']>; activity: NonNullable<DaySnapshotInput['activity']>; body: NonNullable<DaySnapshotInput['body']>;
+}): DaySnapshotInput {
+  if (input.totalEnergy.kind !== 'total' || input.activeEnergy.kind !== 'active' || input.steps.kind !== 'steps' || input.distance.kind !== 'distance') throw new Error('Nieprawidłowy typ metryki');
   const issues: DataIssue[] = [];
-  const unsupported: DayMetricValue = { status: 'unsupported', value: null };
   return snapshotInputSchema.parse({
     date: input.date,
     metrics: {
-      weight: unsupported, body_fat: unsupported, steps: unsupported, distance: unsupported,
+      weight: bodyMetric('weight', input.weight, issues), body_fat: bodyMetric('body_fat', input.bodyFat, issues),
+      steps: qualifiedMetric('steps', assessActivity(input.steps), issues), distance: qualifiedMetric('distance', assessActivity(input.distance), issues),
       total_energy: qualifiedMetric('total_energy', assessEnergy(input.totalEnergy), issues), active_energy: qualifiedMetric('active_energy', assessEnergy(input.activeEnergy), issues),
     },
     issues,
     energy: input.energy,
+    activity: input.activity,
+    body: input.body,
   });
 }
 

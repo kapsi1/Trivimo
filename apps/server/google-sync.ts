@@ -7,31 +7,33 @@ import { defaultRetryPolicy, RateLimitedError, withRateLimitRetry, type RetryPol
 import { sourceDay } from '../../packages/domain/source-day.ts';
 import { warsawDay } from '../../packages/domain/warsaw-day.ts';
 import type { GoogleJobKind } from '../../packages/storage/google-pages.ts';
-import { publishGoogleEnergyDays } from '../../packages/storage/google-energy-days.ts';
+import { publishGoogleDays } from '../../packages/storage/google-day-snapshots.ts';
 import { applyReadPolicy, registerAutomaticJob } from '../../packages/storage/google-read-policy.ts';
 import type { GoogleAuth } from './google-auth.ts';
 import { readGoogleJobPage, startGoogleReadJob } from './google-read-service.ts';
 
 /** Kinds refreshed automatically: the six M1 metrics' raw material plus the ten-minute wear evidence. */
-export const syncKinds = ['steps', 'distance', 'total-calories', 'active-energy-burned', 'heart-rate-10m', 'active-energy-10m', 'total-calories-10m', 'steps-10m', 'distance-10m', 'steps-sources', 'active-energy-sources'] as const;
+export const syncKinds = ['steps', 'distance', 'total-calories', 'active-energy-burned', 'heart-rate-10m', 'active-energy-10m', 'total-calories-10m', 'steps-10m', 'distance-10m', 'steps-sources', 'active-energy-sources', 'weight', 'body-fat'] as const;
 export type SyncKind = (typeof syncKinds)[number];
 export interface SyncRead { kind: SyncKind; first: string; last: string; begin: string; end: string }
 export interface SyncOutcome { at: string; result: 'ok' | 'authorization_required' | 'scope_missing' | 'migration_required' | 'error'; code?: string; reads: number; retryAt?: string; energy?: { published: number; unchanged: number } | 'failed' }
 
 const maxCatchUpDays = 13; // keeps a ten-minute-window range within 14 days even across a 25-hour day
 const windowed = (kind: SyncKind) => kind.endsWith('-10m');
+/** Window and measurement (weight, body fat) jobs hold the UTC bounds of Warsaw days; the others hold civil dates. */
+const instantRange = (kind: SyncKind) => windowed(kind) || kind === 'weight' || kind === 'body-fat';
 const addDays = (date: string, days: number) => new Date(Date.parse(`${date}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
 
 /** Civil days are stored as producer dates; ten-minute windows as the UTC bounds of the Warsaw days. */
 function boundsFor(kind: SyncKind, first: string, last: string): { begin: string; end: string } {
-  return windowed(kind) ? { begin: warsawDay(first).start, end: warsawDay(last).end } : { begin: first, end: addDays(last, 1) };
+  return instantRange(kind) ? { begin: warsawDay(first).start, end: warsawDay(last).end } : { begin: first, end: addDays(last, 1) };
 }
 
 /** Last civil date of the newest complete saved read of this kind (that day may still have been partial when read). */
 function coveredThrough(db: DatabaseSync, kind: SyncKind): string | null {
   const row = db.prepare("SELECT range_end FROM google_read_jobs WHERE kind = ? AND state = 'complete' ORDER BY range_end DESC LIMIT 1").get(kind);
   if (!row || typeof row.range_end !== 'string') return null;
-  return windowed(kind) ? sourceDay(new Date(Date.parse(row.range_end) - 1).toISOString()) : addDays(row.range_end, -1);
+  return instantRange(kind) ? sourceDay(new Date(Date.parse(row.range_end) - 1).toISOString()) : addDays(row.range_end, -1);
 }
 
 /**
@@ -60,7 +62,8 @@ export function planSync(db: DatabaseSync, today: string, nowMs: number, refresh
 /** History is read from the start of 2026 (plan M1); earlier years wait for their own audit. */
 export const backfillFrom = '2026-01-01';
 // source lists hold every record (about 200 bytes each), so a week keeps a page well under the 1 MB response limit
-const chunkDays = (kind: SyncKind) => windowed(kind) ? maxCatchUpDays : kind.endsWith('-sources') ? 7 : maxRollupDays(kind as Exclude<SyncKind, `${string}-10m` | `${string}-sources`>);
+// measurements are a few records a day, so a month fits in one page; the read service allows ranges up to 31 days
+const chunkDays = (kind: SyncKind) => windowed(kind) ? maxCatchUpDays : kind.endsWith('-sources') ? 7 : kind === 'weight' || kind === 'body-fat' ? 30 : maxRollupDays(kind as Exclude<SyncKind, `${string}-10m` | `${string}-sources` | 'weight' | 'body-fat'>);
 const dayEnd = (day: string) => Date.parse(warsawDay(day).end);
 
 /**
@@ -71,12 +74,12 @@ export function coveredDays(db: DatabaseSync, kind: SyncKind, from: string, thro
   const covered = new Set<string>();
   for (const job of db.prepare("SELECT range_start, range_end, created_at FROM google_read_jobs WHERE kind = ? AND state = 'complete'").iterate(kind)) {
     const begin = String(job.range_start), end = String(job.range_end), created = Date.parse(String(job.created_at));
-    let day = windowed(kind) ? sourceDay(begin) : begin;
+    let day = instantRange(kind) ? sourceDay(begin) : begin;
     if (day < from) day = from;
     for (; day <= through; day = addDays(day, 1)) {
       const bounds = boundsFor(kind, day, day);
-      if (windowed(kind) ? Date.parse(bounds.end) > Date.parse(end) : bounds.end > end) break;
-      if ((windowed(kind) ? Date.parse(bounds.begin) >= Date.parse(begin) : bounds.begin >= begin) && created >= dayEnd(day)) covered.add(day);
+      if (instantRange(kind) ? Date.parse(bounds.end) > Date.parse(end) : bounds.end > end) break;
+      if ((instantRange(kind) ? Date.parse(bounds.begin) >= Date.parse(begin) : bounds.begin >= begin) && created >= dayEnd(day)) covered.add(day);
     }
   }
   return covered;
@@ -172,11 +175,11 @@ export class GoogleSyncService {
       return finish(failure.result, failure.code, failure.retryAt);
     } finally { db?.close(); this.running = false; }
   }
-  /** Local recompute of calorie snapshots from saved pages (no requests); a failure leaves earlier snapshots and reads intact. */
+  /** Local recompute of day snapshots (steps, distance, calories) from saved pages (no requests); a failure leaves earlier snapshots and reads intact. */
   private projectEnergy(db: DatabaseSync): { published: number; unchanged: number } | 'failed' {
     const today = sourceDay(new Date(this.now()).toISOString());
     const from = addDays(today, -365) > backfillFrom ? addDays(today, -365) : backfillFrom;
-    try { return publishGoogleEnergyDays(db, from, today, this.now()); } catch { return 'failed'; }
+    try { return publishGoogleDays(db, from, today, this.now()); } catch { return 'failed'; }
   }
   /** Finish pages of jobs left running (by an interrupted run, backfill or restart); returns how many were completed. */
   private async resumeRunning(db: DatabaseSync): Promise<number> {
