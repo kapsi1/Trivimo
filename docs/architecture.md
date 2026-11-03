@@ -4,6 +4,8 @@ Projekt, nie opis implementacji. Decyzje użytkownika: [rejestr](decisions.md); 
 
 Zaimplementowano lokalny magazyn oryginalnych plików Google Health i surowych wierszy sześciu typów oraz wersjonowany magazyn wyników dnia. Syntetyczny przepływ od jawnych dowodów do REST i widoku opisano w [raporcie](test-results.md). Inne pliki są zachowane bez interpretacji; rzeczywiste wiersze nie są jeszcze kwalifikowane ani automatycznie przeliczane na wyniki dnia.
 
+Przygotowano migrację wersji 5 i syntetyczny serwis zapisu stron Google Health z kursorem oraz kontrolą konta. Właściwą bazę zmigrowano do wersji 5 po wykonaniu kopii; wykonano ograniczony odczyt jednej strony wagi bez analizy wartości. Panel umożliwia przygotowanie zadania i ręczny odczyt kolejnej strony. Przegląd dnia osobno pokazuje kandydatów zapisanych z API, bez uzgadniania ich z Takeout i bez automatycznej kwalifikacji.
+
 ## Granice i przepływ
 
 ```text

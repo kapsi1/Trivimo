@@ -29,7 +29,17 @@ Poniższa lista jest mapą prac, nie deklaracją identycznych operacji dla każd
 
 Po dodaniu typu uzupełniaj raport pokrycia. M2 i kolejne iteracje obejmują cały rejestr, również dane bez dedykowanego kafelka. Dla typu bez danych konta sprawdź ścieżkę syntetycznie i oznacz brak potwierdzenia realnego rekordu.
 
+## Aktualne sprawdzenie dokumentacji
+
+2026-11-03: [konfiguracja Google](https://developers.google.com/health/setup) wymaga projektu Cloud z włączonym API, klienta OAuth i dodania użytkownika testowego; nie potwierdza dostępu tego konta. [Agregacje](https://developers.google.com/health/aggregate-data) rozróżniają przedziały UTC i dni cywilne; limit zapytania `total-calories` wynosi 14 dni, a pozostałych wspieranych typów co do zasady 90 dni. [Katalog energii](https://developers.google.com/health/data-types/calories) podaje dla `total-calories` tylko rollup/dailyRollup, a dla `active-energy-burned` także list i reconcile. To nie jest dowód pełności ani porównywalności konkretnych danych użytkownika. Syntetyczny plan porcjowania `dailyRollUp` zachowuje półotwarte zakresy i limity, ale nie wykonuje żądań ani nie kwalifikuje ich wyników.
+
 ## OAuth, odczyt i trwałe zadania
+
+Przegląd dnia pokazuje zapisane kandydaty wagi i tłuszczu z Google API oddzielnie od Takeout. Odczytuje strony nachodzące na wybrany dzień Warszawy, maksymalnie 50 stron i 200 wierszy wyniku; nie uzgadnia kopii ani nie tworzy projekcji. Znaczenie pól `weightGrams` i `percentage` sprawdzono 2026-11-03 w [schemacie Google v4](https://developers.google.com/health/reference/rest/v4/users.dataTypes.dataPoints).
+
+W kodzie przygotowano syntetycznie testowaną migrację magazynu do wersji 5 i serwis strony dla wagi/tłuszczu: zapisuje oryginalny JSON oraz kursor w transakcji i wiąże wznowienie z identyfikatorem konta Google przez jego skrót. Google [getIdentity](https://developers.google.com/health/reference/rest/v4/users/getIdentity) oraz [filtry list](https://developers.google.com/health/filters) sprawdzono 2026-11-03. To nie łączy automatycznie konta API z importem Takeout. Serwis ma punkty REST i panel próbny dla jednego dnia UTC; schemat właściwej bazy zmigrowano do wersji 5 po wykonaniu i weryfikacji kopii; wykonano ograniczoną próbę jednej strony `weight` dla jednej doby UTC, bez analizy wartości; dalsze metryki i paginacja rzeczywista są nieweryfikowane.
+
+Rozpoczęto lokalną autoryzację wyłącznie w pamięci procesu: PKCE, jednorazowy state, dwa zakresy read-only i syntetyczne testy. Rzeczywista autoryzacja konta potwierdziła dwa zakresy. Powstał syntetycznie testowany serwis odczytu i zapisu pojedynczej strony masy i tkanki tłuszczowej, z panelem próbnego odczytu. Nie ma trwałych tokenów, odświeżania, odłączenia ani szerszego odczytu API. Konfiguracja: [środowisko](../development.md).
 
 - [ ] Przed implementacją sprawdzić [konfigurację Cloud/OAuth](https://developers.google.com/health/setup): klient właściwy dla sposobu hostowania, redirect, konto testowe, minimalne read-only dla M1, bez żądania całego zdrowia i lokalizacji na zapas. Tokeny po stronie serwera w zabezpieczonym magazynie; rotacja, unieważnienie i ponowne zgody.
 - [ ] Adapter rozdziela `list/get`, `reconcile`, `rollUp/dailyRollUp`, katalog i pobieranie załączników. Nie każdy typ obsługuje każdą metodę. Przykład: total to pochodny agregat, nie zwykłe rekordy list.

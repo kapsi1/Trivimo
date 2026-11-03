@@ -22,6 +22,8 @@ W trakcie: powstał syntetycznie testowany przepływ od jawnych decyzji i dowod�
 
 ## M1: UI
 
+Wykonano początkowy widok tabeli zapisanych wyników: zakres do 366 dni, filtr dni z automatycznymi uwagami, wybór metryk, sortowanie według daty i osobna kolumna notatek. Sortowanie według wartości zachowuje dokładność i umieszcza braki na końcu. Podstawowe szczegóły pokazują stan i rewizję; wirtualizacja oraz pełne pochodzenie i decyzje pozostają otwarte. Rzeczywiste dane nadal nie są automatycznie przeliczane.
+
 - [ ] Lewa nawigacja/zakładki: Przegląd, Dane, Źródła/Importy, Ustawienia. Prosty ciemny motyw, czytelne jednostki, fokus i kontrast, brak docelowego redesignu na tym etapie.
 - [ ] Tabela: data, sześć metryk, Uwagi; sortowanie, zakres dat, wybór kolumn, filtrowanie problemów i wirtualizacja przy dużych zakresach. Liczby pozostają liczbami. Puste pole ma rozróżnialny status w szczegółach/tooltipie; bez zera i bez nieczytelnych kodów we wszystkich komórkach.
 - [ ] Kliknięcie komórki: definicja, źródło/urządzenie o ile znane, czas/zakres, jakość, oryginalna wartość, użyty wynik, wersja reguły i powód dyskwalifikacji. To miejsce także do porównania API/Takeout, bez przeładowywania podstawowej tabeli.

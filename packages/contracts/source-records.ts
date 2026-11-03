@@ -11,7 +11,7 @@ export const sourcePageSchema = z.object({
 });
 export const bodyReviewSchema = z.object({
   rows: z.array(z.object({ timestamp: z.string(), origin: z.string(), originalValue: z.string(), converted: convertedValueSchema, identity: z.enum(['identified', 'candidate', 'unresolved']) })),
-  matched: z.number().int().nonnegative(), truncated: z.boolean(), unassigned: z.number().int().nonnegative(), coverage: z.literal('unknown'),
+  matched: z.number().int().nonnegative(), truncated: z.boolean(), unassigned: z.number().int().nonnegative(), coverage: z.literal('unknown'), multipleAccounts: z.boolean().optional(),
 });
 export type SourceKind = z.infer<typeof sourceKindSchema>;
 export type SourcePage = z.infer<typeof sourcePageSchema>;

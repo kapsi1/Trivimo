@@ -44,3 +44,16 @@ Serwer oraz polecenia importu, weryfikacji i kopii używają tego samego katalog
 Polecenie kopii korzysta z SQLite backup API, wymaga nowej nazwy i nie nadpisuje istniejącego pliku; tworzy nieszyfrowaną kopię samej bazy. Wymaga docelowego systemu plików obsługującego dowiązania twarde. Wybierz odpowiednio chronioną lokalizację. Mechanizm kopii i odtwarzanie sprawdzono na syntetycznej bazie; wykonano i zweryfikowano także prywatną kopię w lokalizacji wskazanej przez użytkownika.
 
 Opcjonalna próba starych parserów: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/spike-takeout.ps1`. Wymaga sąsiedniego kodu `C:\dev\health-sync`, lokalnego cache Gradle z Kotlin 2.0.21 i wskazanej w skrypcie Javy Android Studio. Test używa wyłącznie syntetycznych ciągów; nie jest częścią CI ani importem. Lokalny launcher obchodzi niezgodność rozpoznania JDK 25 przez starszy kompilator, bez zmiany JDK ani starego projektu.
+
+## Autoryzacja Google Health — próba lokalna
+
+Dodaj w kliencie OAuth typu aplikacja internetowa dokładny autoryzowany adres przekierowania `http://127.0.0.1:3000/api/google/callback`. Plik JSON klienta Google zachowaj w prywatnym miejscu poza repozytorium. Uruchom serwer z lokalną zmienną wskazującą ten plik (w tym samym terminalu):
+
+```powershell
+$env:TRIVIMO_GOOGLE_CLIENT_FILE = 'C:\prywatny-katalog\client_secret.json'
+npm run dev
+```
+
+W drugim terminalu uruchom `npm run dev:web`. Na stronie wybierz „Dane Takeout” → „Google Health” → „Autoryzuj konto Google”. Po zgodzie wróć do aplikacji i odśwież widok. Serwer musi działać na porcie 3000. Nie umieszczaj pliku ani sekretów w repozytorium.
+
+Tokeny i stan autoryzacji istnieją tylko w pamięci serwera; restart je usuwa, a po wygaśnięciu tokenu dostępnego stan przestaje być aktywny. Automatyczne odnawianie, trwały bezpieczny magazyn tokenów, odłączanie/uprawnienia oraz pełny odczyt danych Google nie są jeszcze wdrożone. Częściowa zgoda nie jest pełnym dostępem; ekran podaje liczbę przyznanych zakresów. Autoryzację dwóch zakresów sprawdzono na koncie użytkownika; wykonano ograniczony odczyt jednej strony wagi, bez analizy jej wartości.

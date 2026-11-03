@@ -1,5 +1,55 @@
 # Raport weryfikacji
 
+## 2026-11-03 — przegląd kandydatów Google
+
+- `npm test`: 65 testów syntetycznych zaliczonych; po doprecyzowaniu wczesnego zatrzymania odczytu ponowiono 3 testy `google-body-source-day.test.ts` z powodzeniem. `npm run build` i `git diff --check`: poprawne. Testy obejmują dzień Warszawy, zakres stron, dokładną liczbę i ochronę identyfikatorów w odpowiedzi.
+- Po ponownym uruchomieniu serwera punkt odczytu dla jednej daty i typu odpowiedział HTTP 200; nie wyświetlano wartości, identyfikatorów ani liczby pomiarów. Interfejs nie został sprawdzony ręcznie. Restart zakończył sesję OAuth; przegląd zapisanych danych nie wymaga nowej zgody.
+
+## 2026-11-03 — pusta tabela dni
+
+- Lokalny odczyt stanu wybranej daty potwierdził dostępność bazy i brak zapisanej projekcji dnia, bez wyświetlania pomiarów. Dodano komunikat dla zakresu bez projekcji i przejście do danych źródłowych. `npm run build` i `git diff --check`: poprawne.
+- Próba uruchomienia przeglądarki do kontroli interfejsu nie powiodła się; ręczne sprawdzenie pozostaje otwarte. Sama zmiana komunikatu nie wdraża kwalifikacji ani przeliczania źródeł.
+
+## 2026-11-03 — ograniczony rzeczywisty odczyt Google
+
+- Po ponownej zgodzie uruchomiono jedno zadanie `weight` dla jednej zakończonej doby UTC (2026-11-02). Żądanie zwróciło pierwszą, ostatnią stronę, którą zapisano z kursorem w bazie. Nie wyświetlano ani nie analizowano wartości lub identyfikatorów rekordów; nie ustalano, czy strona zawiera pomiary.
+- `npm test`: 62 testy syntetyczne zaliczone po podłączeniu REST i panelu. `npm run build` i `git diff --check`: poprawne. Ręcznej próby panelu nie wykonano.
+- Wynik nie potwierdza historii, pozostałych metryk, paginacji rzeczywistej odpowiedzi, zgodności Takeout ani kwalifikacji. Kopia sprzed migracji nie zawiera tej późniejszej strony.
+
+## 2026-11-03 — magazyn stron Google
+
+- `npm test`: 62 testy syntetyczne zaliczone przed dodaniem punktów REST i panelu. Następnie `npx tsx --test tests/google-pages.test.ts` zaliczył syntetyczny przepływ REST, weryfikację dostępu, zachowanie oryginalnego JSON, wznowienie, błędy i ochronę przed zmianą konta. `npm run build` i `git diff --check`: poprawne. Ręcznej próby panelu nie wykonano.
+- `npm run migrate:canonical -- <ścieżka kopii>`: po testach utworzono i zweryfikowano kopię w katalogu wskazanym przez użytkownika oraz zmigrowano właściwą bazę do wersji 5. Serwer uruchomiono ponownie i potwierdzono dostępność punktu zadań. Realnego odczytu Google i kwalifikacji nie wykonano.
+
+## 2026-11-03 — autoryzacja konta i odczyt syntetyczny
+
+- Użytkownik zakończył autoryzację; lokalny status potwierdził oba wymagane zakresy. Nie odczytano pomiarów z konta. Autoryzacja pozostaje w pamięci bieżącego procesu.
+- `npx tsx --test tests/google-body-read.test.ts`: 2 testy zaliczone; `npm run typecheck` i `git diff --check`: poprawne. Adapter strony odczytu nie jest jeszcze podłączony do serwera ani trwałego magazynu. Rzeczywisty odczyt, paginacja na koncie i kwalifikacja pozostają nieweryfikowane.
+
+## 2026-11-03 — lokalna autoryzacja Google
+
+- `npm test`: 59 testów syntetycznych zaliczonych poza piaskownicą; `npm run build` i `git diff --check`: poprawne. Testy OAuth obejmują PKCE, jednorazowy state, ochronę żądania, brak tokenów w odpowiedzi oraz zachowanie po błędzie.
+- Nie wykonano autoryzacji konta ani odczytu Google Health, ani ręcznej próby interfejsu. Tokeny są wyłącznie w pamięci; brak odnawiania i trwałego magazynu.
+
+## 2026-11-03 — plan porcji Google Health
+
+- `npx tsx --test tests/rollup-plan.test.ts tests/sort-days.test.ts`: 3 testy zaliczone. `npm run build`: poprawny; `npm test`: 56 testów zaliczonych poza piaskownicą. Testy planowania obejmują granice porcji, zmianę czasu i niepoprawne zakresy cywilne; nie obejmują wywołania API.
+
+## 2026-11-03 — sortowanie wartości i szczegóły
+
+- `npx tsx --test tests/sort-days.test.ts`: zaliczony test dokładnego porównania dużych liczb i ułamków, z brakami na końcu w obu kierunkach. `npm run build` i `git diff --check`: poprawne.
+- Szczegóły są ograniczone do danych zapisanych w projekcji. Ręczna próba przeglądarki nie została wykonana.
+
+## 2026-11-03 — wybór metryk i kolejność dni
+
+- `npm run build` i `git diff --check`: poprawne. Zmiana dotyczy wyłącznie prezentacji już pobranego zakresu.
+- Nie wykonano ręcznej próby w przeglądarce; nie używano prywatnych pomiarów.
+
+## 2026-11-03 — tabela zakresu dni
+
+- `npm run build`: poprawny. Test syntetyczny REST zakresu potwierdził ostatnią rewizję, lukę i walidację granic. `npm test`: 53 testy zaliczone poza piaskownicą po błędach dostępu do localhost i dowiązań w piaskownicy. `git diff --check`: poprawny.
+- Widok nie został sprawdzony ręcznie w przeglądarce. Nie wykonywano odczytu ani przeliczenia prywatnych pomiarów.
+
 ## 2026-11-03 — lokalne konto i przegląd źródeł
 
 - Po potwierdzeniu użytkownika wykonano migrację schematu do wersji 4: utworzono lokalne konto i przypisano istniejące sesje. Przed zmianą `migrate:canonical` wykonał i zweryfikował kopię w wybranej lokalizacji. Po migracji `verify:takeout` potwierdził integralność oryginałów; osobna kontrola potwierdziła kompletność przypisań bez wypisywania identyfikatorów ani pomiarów.

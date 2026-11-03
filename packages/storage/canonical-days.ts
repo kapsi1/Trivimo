@@ -55,6 +55,20 @@ export async function migrateSourceAccounts(db: DatabaseSync, backupPath: string
   });
 }
 
+/** Store provider pages and their resume cursor atomically, without assigning an account implicitly. */
+export async function migrateGooglePages(db: DatabaseSync, backupPath: string): Promise<void> {
+  await migrateWithBackup(db, backupPath, 4, `CREATE TABLE google_read_jobs (
+      id TEXT PRIMARY KEY, account_digest TEXT NOT NULL CHECK(length(account_digest) = 64), kind TEXT NOT NULL CHECK(kind IN ('weight','body-fat')),
+      range_start TEXT NOT NULL, range_end TEXT NOT NULL, cursor TEXT, state TEXT NOT NULL CHECK(state IN ('running','complete')),
+      created_at TEXT NOT NULL
+    ) STRICT;
+    CREATE TABLE google_read_pages (
+      job_id TEXT NOT NULL REFERENCES google_read_jobs(id), page_number INTEGER NOT NULL CHECK(page_number > 0),
+      request_cursor TEXT, next_cursor TEXT, raw_json TEXT NOT NULL, digest TEXT NOT NULL, received_at TEXT NOT NULL,
+      PRIMARY KEY(job_id, page_number)
+    ) STRICT; PRAGMA user_version = 5;`);
+}
+
 export function publishCanonicalDay(db: DatabaseSync, input: DaySnapshotInput, expectedRevision: number | null) {
   const parsed = snapshotInputSchema.parse(input);
   const notes = projectIssueNotes(parsed.issues);

@@ -2,14 +2,15 @@ import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { daysSchema, type Day } from '../../../packages/contracts/day.ts';
 import { bodyReviewSchema, sourcePageSchema, type SourceKind, type SourcePage } from '../../../packages/contracts/source-records.ts';
-import { dayResponseSchema, userNoteSchema } from '../../../packages/contracts/day-snapshot.ts';
+import { dayResponseSchema, daySnapshotSchema, userNoteSchema } from '../../../packages/contracts/day-snapshot.ts';
 import { z } from 'zod';
+import { compareDailyRows } from './sort-days.ts';
 import './style.css';
 
 function App() {
   const [days, setDays] = useState<Day[] | null>(null);
   const [error, setError] = useState(false);
-  const [tab, setTab] = useState<'demo' | 'source' | 'import' | 'overview'>('source');
+  const [tab, setTab] = useState<'demo' | 'source' | 'import' | 'overview' | 'table'>('source');
   const [overviewDirty, setOverviewDirty] = useState(false);
   const [overviewBusy, setOverviewBusy] = useState(false);
   useEffect(() => {
@@ -36,8 +37,9 @@ function App() {
   }, []);
   return <main>
     <p className="eyebrow">TRIVIMO · P0</p><h1>Dane</h1>
-    <nav aria-label="Widok"><button type="button" disabled={overviewBusy} aria-current={tab === 'overview' ? 'page' : undefined} onClick={() => changeTab('overview')}>Przegląd</button><button type="button" disabled={overviewBusy} aria-current={tab === 'source' ? 'page' : undefined} onClick={() => changeTab('source')}>Dane Takeout</button><button type="button" disabled={overviewBusy} aria-current={tab === 'import' ? 'page' : undefined} onClick={() => changeTab('import')}>Import Takeout</button><button type="button" disabled={overviewBusy} aria-current={tab === 'demo' ? 'page' : undefined} onClick={() => changeTab('demo')}>Przykład</button></nav>
-    {tab === 'source' && days && <SourceRecords />}
+    <nav aria-label="Widok"><button type="button" disabled={overviewBusy} aria-current={tab === 'overview' ? 'page' : undefined} onClick={() => changeTab('overview')}>Przegląd</button><button type="button" disabled={overviewBusy} aria-current={tab === 'table' ? 'page' : undefined} onClick={() => changeTab('table')}>Tabela dni</button><button type="button" disabled={overviewBusy} aria-current={tab === 'source' ? 'page' : undefined} onClick={() => changeTab('source')}>Dane Takeout</button><button type="button" disabled={overviewBusy} aria-current={tab === 'import' ? 'page' : undefined} onClick={() => changeTab('import')}>Import Takeout</button><button type="button" disabled={overviewBusy} aria-current={tab === 'demo' ? 'page' : undefined} onClick={() => changeTab('demo')}>Przykład</button></nav>
+    {tab === 'table' && days && <DailyTable onViewSources={() => changeTab('source')} />}
+    {tab === 'source' && days && <><GoogleConnection /><SourceRecords /></>}
     {tab === 'import' && days && <TakeoutImport onComplete={() => setTab('source')} />}
     {tab === 'overview' && days && <DailyOverview dirty={overviewDirty} busy={overviewBusy} onDirty={setOverviewDirty} onBusy={setOverviewBusy} />}
     {tab === 'demo' && <p>Przykład: wyłącznie dane syntetyczne, bez połączenia ze źródłem zdrowia.</p>}
@@ -50,6 +52,72 @@ function App() {
       </>}
     </>}
   </main>;
+}
+
+const googleStatusSchema = z.discriminatedUnion('configured', [
+  z.object({ configured: z.literal(false) }),
+  z.object({ configured: z.literal(true), connected: z.boolean(), grantedScopes: z.array(z.string()), expiresAt: z.string().nullable() }),
+]);
+function GoogleConnection() {
+  const [status, setStatus] = useState<z.infer<typeof googleStatusSchema> | null>(null);
+  const [error, setError] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { const controller = new AbortController(); fetch('/api/google/status', { signal: controller.signal })
+    .then((response) => { if (!response.ok) throw new Error('Status'); return response.json(); })
+    .then((data: unknown) => setStatus(googleStatusSchema.parse(data)))
+    .catch(() => { if (!controller.signal.aborted) setError(true); }); return () => controller.abort(); }, []);
+  async function connect() {
+    setBusy(true); setError(false);
+    try {
+      const response = await fetch('/api/google/start', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Trivimo-Request': '1' }, body: '{}' });
+      if (!response.ok) throw new Error('OAuth');
+      const data = z.object({ url: z.url() }).parse(await response.json());
+      const url = new URL(data.url);
+      if (url.origin !== 'https://accounts.google.com' || url.pathname !== '/o/oauth2/v2/auth') throw new Error('OAuth');
+      window.location.assign(url.href);
+    } catch { setError(true); setBusy(false); }
+  }
+  return <section><h2>Google Health</h2>
+    {error && <p role="alert">Nie udało się rozpocząć autoryzacji lub odczytać jej stanu.</p>}
+    {!status ? <p>Sprawdzanie konfiguracji…</p> : !status.configured ? <p>Klient OAuth nie jest skonfigurowany. Instrukcja znajduje się w dokumentacji środowiska.</p> : <>
+      <p>{status.connected ? 'Autoryzacja działa w bieżącej sesji serwera.' : 'Konto nie jest autoryzowane w bieżącej sesji serwera.'} Tokeny są przechowywane tylko w pamięci. Dostępny jest próbny odczyt wagi i tkanki tłuszczowej; wyniki nie są jeszcze kwalifikowane.</p>
+      {status.connected && <p>Przyznane zakresy odczytu: {status.grantedScopes.length} z 2.</p>}
+      <p>Aplikacja poprosi o odczyt aktywności i pomiarów zdrowotnych, aby w przyszłości pobierać sześć metryk M1. Zakresy nie obejmują zapisu do Google.</p>
+      <button type="button" disabled={busy} onClick={() => void connect()}>{busy ? 'Przekierowanie…' : 'Autoryzuj konto Google'}</button>
+      {status.connected && <GoogleReadJobs />}
+    </>}
+  </section>;
+}
+
+const googleJobSchema = z.object({ id: z.uuid(), kind: z.enum(['weight', 'body-fat']), start: z.iso.datetime(), end: z.iso.datetime(), state: z.enum(['running', 'complete']), createdAt: z.iso.datetime(), pages: z.number().int().nonnegative() });
+function GoogleReadJobs() {
+  const [jobs, setJobs] = useState<z.infer<typeof googleJobSchema>[] | null>(null);
+  const [kind, setKind] = useState<'weight' | 'body-fat'>('weight');
+  const [date, setDate] = useState(() => { const d = new Date(`${warsawToday()}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); });
+  const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false);
+  async function refresh() {
+    const response = await fetch('/api/google/jobs');
+    if (!response.ok) throw new Error('migration_required');
+    setJobs(z.array(googleJobSchema).parse(await response.json()));
+  }
+  useEffect(() => { void refresh().catch(() => setMessage('Magazyn nie jest gotowy do odczytu Google. Wymagana jest migracja bazy z kopią.')); }, []);
+  async function run(path: string, body: object) {
+    setBusy(true); setMessage('');
+    try {
+      const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Trivimo-Request': '1' }, body: JSON.stringify(body) });
+      if (!response.ok) { const data = await response.json() as { error?: string }; throw new Error(data.error); }
+      await refresh();
+      setMessage(path.endsWith('/next') ? 'Strona została zapisana; nie przeliczono wyników dnia.' : 'Zadanie zapisano. Możesz pobrać pierwszą stronę.');
+    } catch (error) { const code = error instanceof Error ? error.message : ''; setMessage(code === 'account_changed' ? 'Zadanie należy do innego konta Google.' : code === 'authorization_required' || code === 'scope_missing' ? 'Ponów autoryzację z wymaganym zakresem.' : 'Nie udało się wykonać operacji. Zapisane strony i postęp pozostają bez zmian.'); }
+    finally { setBusy(false); }
+  }
+  return <section><h3>Odczyt próbny</h3><p>Jedno zadanie obejmuje dzień UTC i wybrany typ. Każdy przycisk pobiera najwyżej jedną stronę; oryginały nie są jeszcze kwalifikowane ani łączone z Takeout.</p>
+    <label>Rodzaj <select value={kind} disabled={busy} onChange={(event) => setKind(event.target.value as typeof kind)}><option value="weight">Masa ciała</option><option value="body-fat">Tkanka tłuszczowa</option></select></label>{' '}
+    <label>Data UTC <input type="date" value={date} disabled={busy} onChange={(event) => setDate(event.target.value)} /></label>{' '}
+    <button type="button" disabled={busy || !date || !jobs} onClick={() => { const next = new Date(`${date}T00:00:00Z`); next.setUTCDate(next.getUTCDate() + 1); void run('/api/google/jobs', { kind, start: `${date}T00:00:00Z`, end: next.toISOString().replace('.000Z', 'Z') }); }}>Przygotuj zadanie</button>
+    {message && <p role="status">{message}</p>}
+    {jobs && jobs.length > 0 && <div className="table-wrap"><table><thead><tr><th>Typ</th><th>Zakres UTC</th><th>Stan</th><th>Strony</th><th>Akcja</th></tr></thead><tbody>{jobs.map((job) => <tr key={job.id}><td>{job.kind === 'weight' ? 'Masa ciała' : 'Tkanka tłuszczowa'}</td><td>{job.start} – {job.end}</td><td>{job.state === 'complete' ? 'Odczyt zakończony' : 'Do kontynuacji'}</td><td>{job.pages}</td><td>{job.state === 'running' && <button type="button" disabled={busy} onClick={() => void run('/api/google/jobs/next', { id: job.id })}>Pobierz stronę</button>}</td></tr>)}</tbody></table></div>}
+  </section>;
 }
 
 type DayResponse = z.infer<typeof dayResponseSchema>;
@@ -71,6 +139,54 @@ function warsawToday(): string {
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Warsaw', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
   const value = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
   return `${value('year')}-${value('month')}-${value('day')}`;
+}
+
+const rangeSchema = z.discriminatedUnion('state', [
+  z.object({ state: z.literal('not_ready') }),
+  z.object({ state: z.literal('ready'), days: z.array(z.object({ date: z.iso.date(), snapshot: daySnapshotSchema.nullable(), userNote: userNoteSchema.nullable() })) }),
+]);
+
+function DailyTable({ onViewSources }: { onViewSources: () => void }) {
+  const [to, setTo] = useState(warsawToday);
+  const [from, setFrom] = useState(() => { const date = new Date(`${warsawToday()}T00:00:00Z`); date.setUTCDate(date.getUTCDate() - 29); return date.toISOString().slice(0, 10); });
+  const [problems, setProblems] = useState(false);
+  const [descending, setDescending] = useState(true);
+  const [sortBy, setSortBy] = useState<'date' | (typeof dailyMetrics)[number][0]>('date');
+  const [selected, setSelected] = useState<{ date: string; key: (typeof dailyMetrics)[number][0] } | null>(null);
+  const [visibleMetrics, setVisibleMetrics] = useState<Set<(typeof dailyMetrics)[number][0]>>(() => new Set(dailyMetrics.map(([key]) => key)));
+  const [result, setResult] = useState<z.infer<typeof rangeSchema> | null>(null);
+  const [error, setError] = useState(false);
+  const valid = !!from && !!to && from <= to && (Date.parse(to) - Date.parse(from)) / 86400000 <= 365;
+  useEffect(() => {
+    setResult(null); setError(false);
+    if (!valid) return;
+    const controller = new AbortController();
+    fetch(`/api/day-range?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, { signal: controller.signal })
+      .then((response) => { if (!response.ok) throw new Error('Zakres'); return response.json(); })
+      .then((data: unknown) => setResult(rangeSchema.parse(data)))
+      .catch(() => { if (!controller.signal.aborted) setError(true); });
+    return () => controller.abort();
+  }, [from, to, valid]);
+  function sortOn(key: typeof sortBy) {
+    if (key === sortBy) setDescending((value) => !value);
+    else { setSortBy(key); setDescending(key === 'date'); }
+  }
+  return <section><h2>Tabela dni</h2>
+    <label>Od <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label>{' '}
+    <label>Do <input type="date" value={to} onChange={(event) => setTo(event.target.value)} /></label>{' '}
+    <label><input type="checkbox" checked={problems} onChange={(event) => setProblems(event.target.checked)} /> Tylko dni z uwagami</label>
+    <details className="column-picker"><summary>Wybierz metryki ({visibleMetrics.size}/{dailyMetrics.length})</summary>
+      <fieldset><legend>Widoczne metryki</legend>{dailyMetrics.map(([key, label]) => <label key={key}><input type="checkbox" checked={visibleMetrics.has(key)} onChange={(event) => { const checked = event.target.checked; if (!checked && sortBy === key) { setSortBy('date'); setDescending(true); } setVisibleMetrics((current) => { const next = new Set(current); if (checked) next.add(key); else next.delete(key); return next; }); }} /> {label}</label>)}</fieldset>
+    </details>
+    <p>Dzień aplikacji: Europe/Warsaw. Maksymalnie 366 dni; brak wyliczonego wyniku pozostaje pusty.</p>
+    {!valid ? <p role="alert">Wybierz poprawny zakres do 366 dni.</p> : error ? <p role="alert">Nie udało się odczytać tabeli.</p> : !result ? <p>Ładowanie…</p> : result.state === 'not_ready' ? <p>Wyniki dzienne nie są jeszcze przygotowane.</p> : <>
+      {!result.days.some((day) => day.snapshot !== null) && <div role="status" className="empty-results"><p>W tym zakresie nie ma jeszcze obliczonych wyników dziennych. Pobrane i zaimportowane dane źródłowe nie są jeszcze automatycznie przeliczane na tę tabelę.</p><button type="button" onClick={onViewSources}>Zobacz dane źródłowe</button></div>}
+      <div className="table-wrap"><table><thead><tr><th scope="col" aria-sort={sortBy === 'date' ? descending ? 'descending' : 'ascending' : undefined}><button type="button" onClick={() => sortOn('date')}>Data {sortBy === 'date' ? descending ? '↓' : '↑' : ''}</button></th>{dailyMetrics.filter(([key]) => visibleMetrics.has(key)).map(([key, label, unit]) => <th key={key} scope="col" aria-sort={sortBy === key ? descending ? 'descending' : 'ascending' : undefined}><button type="button" onClick={() => sortOn(key)}>{label} ({unit}) {sortBy === key ? descending ? '↓' : '↑' : ''}</button></th>)}<th>Uwagi</th><th>Moja notatka</th></tr></thead><tbody>
+        {result.days.filter((day) => !problems || (day.snapshot?.notes.length ?? 0) > 0).sort((a, b) => compareDailyRows(a, b, sortBy, descending)).map((day) => <tr key={day.date}><td>{day.date}</td>{dailyMetrics.filter(([key]) => visibleMetrics.has(key)).map(([key, label, , decimals]) => { const metric = day.snapshot?.metrics[key]; return <td key={key}><button type="button" className="metric-cell" aria-label={`${label}, ${day.date}: ${metric ? quality[metric.status] : 'Brak obliczonego wyniku'}`} onClick={() => setSelected({ date: day.date, key })}>{metric?.value == null ? '—' : formatRational(metric.value, decimals)}</button></td>; })}<td>{day.snapshot?.notes.join('; ') || '—'}</td><td>{day.userNote?.content || '—'}</td></tr>)}
+      </tbody></table>{problems && !result.days.some((day) => (day.snapshot?.notes.length ?? 0) > 0) && <p>Brak dni z uwagami w wybranym zakresie.</p>}</div>
+      {selected && (() => { const day = result.days.find((item) => item.date === selected.date); const definition = dailyMetrics.find(([key]) => key === selected.key); const metric = day?.snapshot?.metrics[selected.key]; if (!day || !definition) return null; return <section aria-label="Szczegóły metryki"><h3>{definition[1]} — {day.date}</h3><p>Stan: {metric ? quality[metric.status] : 'Brak obliczonego wyniku'}.</p><p>Wartość: {metric?.value == null ? 'brak' : `${formatRational(metric.value, definition[3])} ${definition[2]}`}.</p><p>Rewizja wyniku: {day.snapshot?.revision ?? 'brak'}. Szczegóły źródła i decyzji kwalifikacyjnych nie są jeszcze zapisane w tej projekcji.</p><button type="button" onClick={() => setSelected(null)}>Zamknij szczegóły</button></section>; })()}
+    </>}
+  </section>;
 }
 
 function DailyOverview({ dirty, busy, onDirty, onBusy }: { dirty: boolean; busy: boolean; onDirty: (value: boolean) => void; onBusy: (value: boolean) => void }) {
@@ -96,13 +212,14 @@ function DailyOverview({ dirty, busy, onDirty, onBusy }: { dirty: boolean; busy:
       </tbody></table></div>
       <h3>Uwagi</h3>{response.snapshot.notes.length ? <ul>{response.snapshot.notes.map((note) => <li key={note}>{note}</li>)}</ul> : <p>Brak uwag.</p>}
       </>}
-      <BodyCandidates key={`body-${date}`} date={date} />
+      <BodyCandidates key={`body-${date}`} date={date} source="takeout" />
+      <BodyCandidates key={`google-body-${date}`} date={date} source="google" />
       {response.notesAvailable && <UserNoteEditor key={`note-${date}`} date={date} initial={response.userNote} onDirty={onDirty} onBusy={onBusy} />}
     </>}
   </section>;
 }
 
-function BodyCandidates({ date }: { date: string }) {
+function BodyCandidates({ date, source }: { date: string; source: 'takeout' | 'google' }) {
   const [kind, setKind] = useState<'weight' | 'body_fat'>('weight');
   const [visible, setVisible] = useState(false);
   const [result, setResult] = useState<z.infer<typeof bodyReviewSchema> | null>(null);
@@ -111,23 +228,24 @@ function BodyCandidates({ date }: { date: string }) {
     if (!visible) return;
     const controller = new AbortController();
     setResult(null); setError(false);
-    fetch(`/api/body-candidates?kind=${kind}&date=${encodeURIComponent(date)}`, { signal: controller.signal })
+    fetch(`/api/${source === 'google' ? 'google/body-candidates' : 'body-candidates'}?kind=${kind}&date=${encodeURIComponent(date)}`, { signal: controller.signal })
       .then((response) => { if (!response.ok) throw new Error('Dane'); return response.json(); })
       .then((data: unknown) => setResult(bodyReviewSchema.parse(data)))
       .catch(() => { if (!controller.signal.aborted) setError(true); });
     return () => controller.abort();
-  }, [date, kind, visible]);
-  return <div><h3>Pomiary źródłowe w tym dniu</h3>
-    <p>To kandydaci przypisani do dnia warszawskiego. Ich tożsamość i kompletność nie zostały jeszcze potwierdzone, więc nie tworzą automatycznie średniej.</p>
+  }, [date, kind, visible, source]);
+  return <div><h3>Pomiary źródłowe {source === 'google' ? 'Google Health API' : 'Takeout'} w tym dniu</h3>
+    <p>To kandydaci przypisani do dnia warszawskiego. Powtórzone odczyty i kopie między źródłami nie zostały jeszcze uzgodnione, a kompletność jest nieznana; nie tworzą automatycznie średniej.</p>
     {!visible ? <button type="button" onClick={() => setVisible(true)}>Pokaż pomiary</button> : <>
       <label>Rodzaj <select value={kind} onChange={(event) => setKind(event.target.value as 'weight' | 'body_fat')}><option value="weight">Masa ciała</option><option value="body_fat">Tkanka tłuszczowa</option></select></label>
       {error ? <p role="alert">Nie udało się odczytać pomiarów źródłowych.</p> : !result ? <p>Ładowanie…</p> : <>
-        {result.unassigned > 0 && <p>Niektórych czasów źródłowych nie udało się przypisać do dnia.</p>}
+        {result.unassigned > 0 && <p>Niektórych rekordów źródłowych nie udało się przypisać do dnia lub odczytać.</p>}
+        {result.multipleAccounts && <p>Pokazano dane więcej niż jednego konta Google. Nie zostały one połączone.</p>}
         {result.rows.length === 0 ? <p>Nie znaleziono pomiarów dla wybranej daty; kompletność źródła jest nieznana.</p> : <>
-          <div className="table-wrap"><table><thead><tr><th>Czas źródła</th><th>Oryginał</th><th>Po przeliczeniu</th><th>Źródło</th></tr></thead><tbody>
+          <div className="table-wrap"><table><thead><tr><th>Czas źródła</th><th>Oryginał ({kind === 'weight' ? 'g' : '%'})</th><th>Po przeliczeniu</th><th>Źródło</th></tr></thead><tbody>
             {result.rows.map((row, index) => <tr key={index}><td>{row.timestamp}</td><td>{row.originalValue || '—'}</td><td>{row.converted.status === 'parsed' ? `${row.converted.value.replace('.', ',')} ${row.converted.unit}` : 'Nie można przeliczyć'}</td><td>{row.origin || 'Nieznane'}</td></tr>)}
           </tbody></table></div>
-          {result.truncated && <p>Pokazano 200 z {result.matched} wierszy.</p>}
+          {result.truncated && <p>Wyniki są ograniczone; pokazano {result.rows.length} z co najmniej {result.matched} dopasowanych wierszy.</p>}
         </>}
       </>}
     </>}

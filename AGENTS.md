@@ -22,6 +22,7 @@ Dokumentacja po polsku, identyfikatory kodu po angielsku. Ten katalog zaczyna ja
 
 - Prywatne archiwa czytaj tylko we wskazanej lokalizacji. Nie szukaj danych zdrowotnych po dysku. Bez realnych pomiarów, tras, kont, rekordowych ID, tokenów, kluczy i zdjęć w docs, fixture'ach i logach.
 - Używaj syntetycznych przypadków testowych. Nie kopiuj prywatnego test-data Health Sync do nowego repo. Raport prywatny zapisuj poza repo i linkuj tylko, jeśli użytkownik tego potrzebuje.
+- Jeśli zadanie wymaga odczytu danych testowych, czytaj i analizuj tylko najmniejszy zakres niezbędny do jego wykonania. Nie analizuj wszystkich wierszy.
 - Przed implementacją integracji sprawdzaj bieżące dokumenty producenta. Zapisuj datę, wersję, link i dokładny zakres potwierdzenia. Roadmapa, szeroki scope i obecność pola nie potwierdzają uprawnień konta ani działającej operacji.
 - Nazwę produktu wybiera użytkownik. Wstępne wyszukiwanie nazw nie jest potwierdzeniem praw do marki/domeny.
 

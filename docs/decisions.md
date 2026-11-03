@@ -2,7 +2,7 @@
 
 ## Ustalone przez użytkownika
 
-2026-11-03: dotychczas zaimportowany eksport Google Health pochodzi z jednego konta Google. W aplikacji zapisano wyłącznie lokalny identyfikator i decyzję przypisania, bez adresu e-mail. Dla kolejnych importów nie zakładać automatycznie tego samego konta. OAuth pozostaje odłożony.
+2026-11-03: dotychczas zaimportowany eksport Google Health pochodzi z jednego konta Google. W aplikacji zapisano wyłącznie lokalny identyfikator i decyzję przypisania, bez adresu e-mail. Dla kolejnych importów nie zakładać automatycznie tego samego konta. Użytkownik potwierdził utworzenie projektu i klienta OAuth; rzeczywista autoryzacja potwierdziła oba zakresy odczytu, natomiast odczyt danych pozostaje do sprawdzenia.
 
 1. Rozwój Health Sync zostaje wstrzymany. Powstaje nowa aplikacja, teraz jej dokumentacja. Nie migrujemy ani nie usuwamy danych podczas planowania.
 2. Własna baza jest źródłem prawdy. API jest głównym bieżącym źródłem Google; Takeout importem historii; własny adapter Connect opcjonalny.

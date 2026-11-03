@@ -92,3 +92,32 @@ test('snapshot nie zamienia braku w zero i odrzuca sprzeczną wartość', async 
     assert.deepEqual(readCanonicalDay(db, input.date), stored);
   } finally { db.close(); rmSync(directory, { recursive: true, force: true }); }
 });
+
+test('zakres dni pokazuje ostatnią rewizję, luki i odrzuca błędne granice', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'trivimo-range-'));
+  const db = new DatabaseSync(':memory:');
+  const demo = createDemoDatabase();
+  initializeTakeoutStore(db);
+  await migrateCanonicalDays(db, join(directory, 'before.sqlite'));
+  const server = createApp(demo, db);
+  try {
+    const missing = { status: 'missing' as const, value: null };
+    const input: DaySnapshotInput = { date: '2026-01-01', metrics: { weight: missing, body_fat: missing, steps: missing, distance: missing, total_energy: missing, active_energy: missing }, issues: [{ metric: 'total_energy', code: 'basal_only', state: 'active' }] };
+    publishCanonicalDay(db, input, null);
+    const latest = publishCanonicalDay(db, { ...input, issues: [] }, 1);
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address(); assert.ok(address && typeof address !== 'string');
+    const base = `http://127.0.0.1:${address.port}`;
+    const cookie = (await fetch(`${base}/api/session`)).headers.get('set-cookie')?.split(';')[0]; assert.ok(cookie);
+    const get = (query: string) => fetch(`${base}/api/day-range?${query}`, { headers: { Cookie: cookie } });
+    const response = await get('from=2026-01-01&to=2026-01-02');
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { state: 'ready', days: [{ date: '2026-01-01', snapshot: latest, userNote: null }, { date: '2026-01-02', snapshot: null, userNote: null }] });
+    assert.equal((await get('from=2026-01-02&to=2026-01-01')).status, 400);
+    assert.equal((await get('from=2026-01-01&to=2027-01-02')).status, 400);
+    assert.equal((await get('from=2026-02-30&to=2026-03-01')).status, 400);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    demo.close(); db.close(); rmSync(directory, { recursive: true, force: true });
+  }
+});
