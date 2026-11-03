@@ -26,7 +26,7 @@ async function main() {
   await auth.restore();
   const db = new DatabaseSync(sourcePath);
   try {
-    if (db.prepare('PRAGMA user_version').get()?.user_version !== 9) throw new Error('migration_required');
+    if (db.prepare('PRAGMA user_version').get()?.user_version !== 10) throw new Error('migration_required');
     if (flag !== '--again' && db.prepare("SELECT 1 FROM google_read_jobs WHERE kind = ? AND range_start = ? AND range_end = ? AND state = 'complete'").get(parsedKind.data, begin, end)) { console.log(`skipped: ${parsedKind.data} ${first}..${last} already read (use --again to repeat)`); return; }
     const id = await startGoogleReadJob(db, auth, parsedKind.data, begin, end);
     let pages = 0;

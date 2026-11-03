@@ -3,22 +3,25 @@ import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { dailyRollupTypes, maxRollupDays, parseDailyRollup, type DailyRollupType } from '../adapters/google-health/daily-rollup.ts';
 import { maxWindowRangeDays, parseWindowRollup, windowSeconds } from '../adapters/google-health/window-rollup.ts';
+import { isSourceListKind, maxSourceListDays, parseSourceList, sourceListTypes, type SourceListKind } from '../adapters/google-health/source-list.ts';
 
 export const windowJobKinds = { 'heart-rate-10m': 'heart-rate', 'active-energy-10m': 'active-energy-burned', 'total-calories-10m': 'total-calories', 'steps-10m': 'steps', 'distance-10m': 'distance' } as const;
 export type WindowJobKind = keyof typeof windowJobKinds;
 export const isWindowKind = (kind: string): kind is WindowJobKind => kind in windowJobKinds;
-export type GoogleJobKind = 'weight' | 'body-fat' | DailyRollupType | WindowJobKind;
-const kinds = z.enum(['weight', 'body-fat', ...dailyRollupTypes, ...(Object.keys(windowJobKinds) as WindowJobKind[])]);
+export type GoogleJobKind = 'weight' | 'body-fat' | DailyRollupType | WindowJobKind | SourceListKind;
+export const googleJobKinds = ['weight', 'body-fat', ...dailyRollupTypes, ...(Object.keys(windowJobKinds) as WindowJobKind[]), ...(Object.keys(sourceListTypes) as SourceListKind[])] as const;
+const kinds = z.enum(googleJobKinds);
 const isDaily = (kind: string): kind is DailyRollupType => (dailyRollupTypes as readonly string[]).includes(kind);
-/** Body jobs hold UTC instants; daily aggregate jobs hold half-open producer civil dates. */
+/** Body and window jobs hold UTC instants; daily aggregate and source-list jobs hold half-open civil dates. */
 function validRange(kind: string, start: string, end: string): boolean {
+  if (isSourceListKind(kind)) { if (!z.iso.date().safeParse(start).success || !z.iso.date().safeParse(end).success) return false; const days = (Date.parse(end) - Date.parse(start)) / 86400000; return days >= 1 && days <= maxSourceListDays; }
   if (isDaily(kind)) { if (!z.iso.date().safeParse(start).success || !z.iso.date().safeParse(end).success) return false; const days = (Date.parse(end) - Date.parse(start)) / 86400000; return days >= 1 && days <= maxRollupDays(kind); }
   if (!z.iso.datetime().safeParse(start).success || !z.iso.datetime().safeParse(end).success || Date.parse(start) >= Date.parse(end)) return false;
   if (isWindowKind(kind)) return (Date.parse(end) - Date.parse(start)) <= maxWindowRangeDays * 86400000 && (Date.parse(start) / 1000) % windowSeconds === 0 && (Date.parse(end) / 1000) % windowSeconds === 0;
   return true;
 }
 
-const pageSchema = z.object({ dataPoints: z.array(z.unknown()).max(100).optional(), rollupDataPoints: z.array(z.unknown()).max(10000).optional(), nextPageToken: z.string().max(8192).optional() }).passthrough();
+const pageSchema = z.object({ dataPoints: z.array(z.unknown()).max(5000).optional(), rollupDataPoints: z.array(z.unknown()).max(10000).optional(), nextPageToken: z.string().max(8192).optional() }).passthrough();
 export function createGoogleReadJob(db: DatabaseSync, accountDigest: string, kind: GoogleJobKind, start: string, end: string): string {
   z.string().regex(/^[0-9a-f]{64}$/).parse(accountDigest); kinds.parse(kind);
   if (!validRange(kind, start, end)) throw new Error('invalid_range');
@@ -37,6 +40,7 @@ export function commitGooglePage(db: DatabaseSync, jobId: string, expectedCursor
     if (!job || job.state !== 'running' || job.cursor !== expectedCursor) throw new Error('job_conflict');
     if (typeof job.kind === 'string' && isDaily(job.kind)) parseDailyRollup(rawJson, job.kind);
     if (typeof job.kind === 'string' && isWindowKind(job.kind)) parseWindowRollup(rawJson, windowJobKinds[job.kind]);
+    if (typeof job.kind === 'string' && isSourceListKind(job.kind)) parseSourceList(rawJson, job.kind);
     if (nextCursor && (nextCursor === expectedCursor || db.prepare('SELECT 1 FROM google_read_pages WHERE job_id = ? AND request_cursor = ?').get(jobId, nextCursor))) throw new Error('cursor_cycle');
     const pageNumber = Number(db.prepare('SELECT COALESCE(MAX(page_number), 0) + 1 AS n FROM google_read_pages WHERE job_id = ?').get(jobId)?.n);
     const digest = createHash('sha256').update(rawJson, 'utf8').digest('hex');

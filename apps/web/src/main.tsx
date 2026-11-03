@@ -91,7 +91,7 @@ function GoogleConnection() {
   </section>;
 }
 
-const googleJobSchema = z.object({ id: z.uuid(), kind: z.enum(['weight', 'body-fat', 'steps', 'distance', 'total-calories', 'active-energy-burned', 'heart-rate-10m', 'active-energy-10m', 'total-calories-10m', 'steps-10m', 'distance-10m']), start: z.string().max(40), end: z.string().max(40), state: z.enum(['running', 'complete']), createdAt: z.iso.datetime(), pages: z.number().int().nonnegative() });
+const googleJobSchema = z.object({ id: z.uuid(), kind: z.enum(['weight', 'body-fat', 'steps', 'distance', 'total-calories', 'active-energy-burned', 'heart-rate-10m', 'active-energy-10m', 'total-calories-10m', 'steps-10m', 'distance-10m', 'steps-sources', 'active-energy-sources']), start: z.string().max(40), end: z.string().max(40), state: z.enum(['running', 'complete']), createdAt: z.iso.datetime(), pages: z.number().int().nonnegative() });
 function googleJobsError(error: unknown): string {
   const code = error instanceof Error ? error.message : '';
   if (code === 'migration_required') return 'Wersja magazynu wymaga migracji z kopią zapasową.';
@@ -105,7 +105,7 @@ const syncStatusSchema = z.object({
   last: z.object({ at: z.string(), result: z.enum(['ok', 'authorization_required', 'scope_missing', 'migration_required', 'error']), code: z.string().optional(), reads: z.number(), retryAt: z.string().optional() }).nullable(),
   kinds: z.array(z.object({ kind: z.string(), lastReadAt: z.string().nullable(), coveredThrough: z.string().nullable() })),
 });
-const syncLabels: Record<string, string> = { steps: 'Kroki', distance: 'Dystans', 'total-calories': 'Kalorie total', 'active-energy-burned': 'Kalorie aktywne', 'heart-rate-10m': 'Tętno (okna)', 'active-energy-10m': 'Kalorie aktywne (okna)', 'total-calories-10m': 'Kalorie total (okna)', 'steps-10m': 'Kroki (okna)', 'distance-10m': 'Dystans (okna)' };
+const syncLabels: Record<string, string> = { steps: 'Kroki', distance: 'Dystans', 'total-calories': 'Kalorie total', 'active-energy-burned': 'Kalorie aktywne', 'heart-rate-10m': 'Tętno (okna)', 'active-energy-10m': 'Kalorie aktywne (okna)', 'total-calories-10m': 'Kalorie total (okna)', 'steps-10m': 'Kroki (okna)', 'distance-10m': 'Dystans (okna)', 'steps-sources': 'Źródła kroków', 'active-energy-sources': 'Źródła kalorii aktywnych' };
 const backfillSchema = z.object({
   state: z.enum(['idle', 'running', 'stopping', 'stopped', 'done', 'error']), from: z.string(), through: z.string(),
   startedAt: z.string().nullable(), finishedAt: z.string().nullable(), readsThisRun: z.number(), code: z.string().optional(), retryAt: z.string().optional(),
@@ -140,7 +140,7 @@ function GoogleBackfill() {
   const covered = status?.kinds.reduce((sum, item) => sum + item.covered, 0) ?? 0;
   const total = status?.kinds.reduce((sum, item) => sum + item.total, 0) ?? 0;
   return <section><h3>Uzupełnianie historii</h3>
-    <p>Odczytuje z API zakończone doby od {status?.from ?? '2026-01-01'} do {status?.through ?? 'wczoraj'}, których nie pokrył jeszcze żaden pełny odczyt wykonany po końcu doby, w paczkach (okna 10 min po 13 dób, kalorie total po 14, pozostałe sumy po 90). Działa w serwerze, więc zamknięcie karty go nie przerywa; po restarcie serwera trzeba go wznowić, a pokryte doby nie są czytane ponownie.</p>
+    <p>Odczytuje z API zakończone doby od {status?.from ?? '2026-01-01'} do {status?.through ?? 'wczoraj'}, których nie pokrył jeszcze żaden pełny odczyt wykonany po końcu doby, w paczkach (okna 10 min po 13 dób, kalorie total po 14, listy źródeł po 7, pozostałe sumy po 90). Działa w serwerze, więc zamknięcie karty go nie przerywa; po restarcie serwera trzeba go wznowić, a pokryte doby nie są czytane ponownie.</p>
     {error && <p role="alert">Nie udało się odczytać stanu lub zmienić uzupełniania.</p>}
     {status && <>
       <p role="status">{backfillStateText[status.state]}{status.code ? ` Kod: ${status.code}.` : ''}{status.retryAt ? ` Wstrzymane przez limit Google do ${status.retryAt}.` : ''}{status.current ? ` Bieżąca paczka: ${syncLabels[status.current.kind] ?? status.current.kind}, ${status.current.first} – ${status.current.last}.` : ''}{status.startedAt ? ` Odczyty w tym przebiegu: ${status.readsThisRun}.` : ''}</p>
@@ -217,7 +217,7 @@ function GoogleReadJobs() {
     <button type="button" disabled={busy || !date || !jobs || rangeInvalid} onClick={() => void run('/api/google/jobs', daily && lastDate ? { kind, start: date, end: nextCivilDay(lastDate) } : { kind, date })}>Przygotuj zadanie</button>
     {message && <p role="status">{message}</p>}
     {!jobs && <button type="button" disabled={busy} onClick={retry}>Ponów odczyt listy zadań</button>}
-    {jobs && jobs.length > 0 && <div className="table-wrap"><table><thead><tr><th>Typ</th><th>Zakres UTC / doby</th><th>Stan</th><th>Strony</th><th>Akcja</th></tr></thead><tbody>{jobs.map((job) => <tr key={job.id}><td>{({ weight: 'Masa ciała', 'body-fat': 'Tkanka tłuszczowa', steps: 'Kroki — suma doby', distance: 'Dystans — suma doby', 'total-calories': 'Kalorie total — suma doby', 'active-energy-burned': 'Kalorie aktywne — suma doby', 'heart-rate-10m': 'Tętno — okna 10 min', 'active-energy-10m': 'Kalorie aktywne — okna 10 min', 'total-calories-10m': 'Kalorie total — okna 10 min', 'steps-10m': 'Kroki — okna 10 min', 'distance-10m': 'Dystans — okna 10 min' })[job.kind]}</td><td>{job.start} – {job.end}{job.kind === 'steps' || job.kind === 'distance' || job.kind === 'total-calories' || job.kind === 'active-energy-burned' ? ' (doba producenta)' : ''}</td><td>{job.state === 'complete' ? 'Odczyt zakończony' : 'Do kontynuacji'}</td><td>{job.pages}</td><td>{job.state === 'running' && <button type="button" disabled={busy} onClick={() => void run('/api/google/jobs/next', { id: job.id })}>Pobierz stronę</button>}</td></tr>)}</tbody></table></div>}
+    {jobs && jobs.length > 0 && <div className="table-wrap"><table><thead><tr><th>Typ</th><th>Zakres UTC / doby</th><th>Stan</th><th>Strony</th><th>Akcja</th></tr></thead><tbody>{jobs.map((job) => <tr key={job.id}><td>{({ weight: 'Masa ciała', 'body-fat': 'Tkanka tłuszczowa', steps: 'Kroki — suma doby', distance: 'Dystans — suma doby', 'total-calories': 'Kalorie total — suma doby', 'active-energy-burned': 'Kalorie aktywne — suma doby', 'heart-rate-10m': 'Tętno — okna 10 min', 'active-energy-10m': 'Kalorie aktywne — okna 10 min', 'total-calories-10m': 'Kalorie total — okna 10 min', 'steps-10m': 'Kroki — okna 10 min', 'distance-10m': 'Dystans — okna 10 min', 'steps-sources': 'Źródła kroków', 'active-energy-sources': 'Źródła kalorii aktywnych' })[job.kind]}</td><td>{job.start} – {job.end}{job.kind === 'steps' || job.kind === 'distance' || job.kind === 'total-calories' || job.kind === 'active-energy-burned' ? ' (doba producenta)' : job.kind.endsWith('-sources') ? ' (doby cywilne)' : ''}</td><td>{job.state === 'complete' ? 'Odczyt zakończony' : 'Do kontynuacji'}</td><td>{job.pages}</td><td>{job.state === 'running' && <button type="button" disabled={busy} onClick={() => void run('/api/google/jobs/next', { id: job.id })}>Pobierz stronę</button>}</td></tr>)}</tbody></table></div>}
   </section>;
 }
 
@@ -229,6 +229,15 @@ const dailyMetrics = [
 ] as const;
 const quality: Record<string, string> = { valid: 'Potwierdzony', provisional: 'Częściowy', missing: 'Brak danych', incomplete: 'Niepełne dane', incomparable: 'Nieporównywalne', conflict: 'Konflikt danych', stale: 'Nieaktualny', unsupported: 'Nieobsługiwane', permission_denied: 'Brak uprawnień', source_error: 'Błąd źródła' };
 
+type EnergyEvidence = NonNullable<z.infer<typeof daySnapshotSchema>['energy']>;
+const energyModels: Record<EnergyEvidence['model'], string> = { current: 'pełny model (okna 10 min, kalorie aktywne)', legacy: 'starszy model (kilka długich przedziałów, bez kalorii aktywnych i rozkładu godzinowego)', basal_only: 'sama energia bazowa (BMR)', unknown: 'nieustalony model' };
+/** Whose estimate the calories are (decision of 2026-11-03); the table shows it in the "Część dnia z opaską" column. */
+function energySource(energy: EnergyEvidence | undefined): string | null {
+  if (!energy || energy.heartRateWindows === null) return null;
+  if (energy.heartRateWindows === 0) return 'telefon';
+  if (energy.heartRateWindows === energy.dayWindows) return 'opaska';
+  return `opaska ${Math.round((energy.heartRateWindows / energy.dayWindows) * 100)}%`;
+}
 function formatRational(value: { numerator: string; denominator: string }, decimals: number): string {
   const divisor = BigInt(value.denominator), scale = 10n ** BigInt(decimals);
   const rounded = (BigInt(value.numerator) * scale + divisor / 2n) / divisor;
@@ -248,6 +257,27 @@ const rangeSchema = z.discriminatedUnion('state', [
 ]);
 
 const bandRangeSchema = z.array(z.object({ date: z.iso.date(), totalWindows: z.number().int().positive(), heartRate: z.object({ windows: z.number().int().nonnegative() }).nullable() }));
+const dataSourceSchema = z.object({ platform: z.string().nullable(), application: z.string().nullable(), device: z.string().nullable(), recordingMethod: z.string().nullable() });
+const sourceRecordsSchema = z.array(z.object({ source: dataSourceSchema, records: z.number().int().nonnegative() })).nullable();
+const daySourcesSchema = z.array(z.object({ date: z.iso.date(), steps: sourceRecordsSchema, activeEnergy: sourceRecordsSchema }));
+type DaySources = z.infer<typeof daySourcesSchema>[number];
+/** Readable name of who supplied the records: the app that counted them and, when known, the device. */
+function sourceName(source: z.infer<typeof dataSourceSchema>): string {
+  if (source.platform === 'FITBIT') return source.device === 'MobileTrack' ? 'Telefon (aplikacja Health)' : `Opaska ${source.device ?? 'Fitbit'}`;
+  if (source.platform === 'HEALTH_CONNECT') {
+    if (source.application === 'com.google.android.apps.fitness') return 'Google Fit (Health Connect)';
+    if (source.application === 'android' || source.application === 'com.android.healthconnect.phone') return 'Telefon: Android (Health Connect)';
+    return `Health Connect: ${source.application ?? source.device ?? 'nieznana aplikacja'}`;
+  }
+  return [source.platform, source.application ?? source.device].filter(Boolean).join(': ') || 'Nieznane źródło';
+}
+function sourcesCell(day: DaySources | undefined) {
+  if (!day || (day.steps === null && day.activeEnergy === null)) return '—';
+  const names = new Map<string, number>();
+  for (const item of [...(day.steps ?? []), ...(day.activeEnergy ?? [])]) names.set(sourceName(item.source), (names.get(sourceName(item.source)) ?? 0) + item.records);
+  const detail = ([['Kroki', day.steps], ['Kalorie aktywne', day.activeEnergy]] as const).map(([label, items]) => `${label}: ${items === null ? 'nie odczytano' : items.length === 0 ? 'brak wpisów' : items.map((item) => `${sourceName(item.source)} (${item.records} wpisów${item.source.recordingMethod ? `, ${item.source.recordingMethod}` : ''})`).join(', ')}`).join('\n');
+  return <span title={detail}>{names.size === 0 ? 'brak wpisów' : [...names].sort((a, b) => b[1] - a[1]).map(([name]) => name).join('; ')}</span>;
+}
 function DailyTable({ onViewSources }: { onViewSources: () => void }) {
   const [to, setTo] = useState(warsawToday);
   const [from, setFrom] = useState(() => { const date = new Date(`${warsawToday()}T00:00:00Z`); date.setUTCDate(date.getUTCDate() - 29); return date.toISOString().slice(0, 10); });
@@ -259,6 +289,7 @@ function DailyTable({ onViewSources }: { onViewSources: () => void }) {
   const [result, setResult] = useState<z.infer<typeof rangeSchema> | null>(null);
   const [error, setError] = useState(false);
   const [band, setBand] = useState<Map<string, { windows: number; total: number }> | null>(null);
+  const [sources, setSources] = useState<Map<string, DaySources> | null>(null);
   const valid = !!from && !!to && from <= to && (Date.parse(to) - Date.parse(from)) / 86400000 <= 365;
   useEffect(() => {
     setResult(null); setError(false);
@@ -280,6 +311,16 @@ function DailyTable({ onViewSources }: { onViewSources: () => void }) {
       .catch(() => { /* the column then shows "—": the band share is an optional addition to the table */ });
     return () => controller.abort();
   }, [from, to, valid]);
+  useEffect(() => {
+    setSources(null);
+    if (!valid) return;
+    const controller = new AbortController();
+    fetch(`/api/google/day-sources?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, { signal: controller.signal })
+      .then((response) => { if (!response.ok) throw new Error('Źródła'); return response.json(); })
+      .then((data: unknown) => setSources(new Map(daySourcesSchema.parse(data).map((item) => [item.date, item] as const))))
+      .catch(() => { /* the column then shows "—": sources are an optional addition to the table */ });
+    return () => controller.abort();
+  }, [from, to, valid]);
   const today = warsawToday();
   function sortOn(key: typeof sortBy) {
     if (key === sortBy) setDescending((value) => !value);
@@ -295,10 +336,15 @@ function DailyTable({ onViewSources }: { onViewSources: () => void }) {
     <p>Dzień aplikacji: Europe/Warsaw. Maksymalnie 366 dni; brak wyliczonego wyniku pozostaje pusty.</p>
     {!valid ? <p role="alert">Wybierz poprawny zakres do 366 dni.</p> : error ? <p role="alert">Nie udało się odczytać tabeli.</p> : !result ? <p>Ładowanie…</p> : result.state === 'not_ready' ? <p>Wyniki dzienne nie są jeszcze przygotowane.</p> : <>
       {!result.days.some((day) => day.snapshot !== null) && <div role="status" className="empty-results"><p>W tym zakresie nie ma jeszcze obliczonych wyników dziennych. Pobrane i zaimportowane dane źródłowe nie są jeszcze automatycznie przeliczane na tę tabelę.</p><button type="button" onClick={onViewSources}>Zobacz dane źródłowe</button></div>}
-      <div className="table-wrap"><table><thead><tr><th scope="col" aria-sort={sortBy === 'date' ? descending ? 'descending' : 'ascending' : undefined}><button type="button" onClick={() => sortOn('date')}>Data {sortBy === 'date' ? descending ? '↓' : '↑' : ''}</button></th>{dailyMetrics.filter(([key]) => visibleMetrics.has(key)).map(([key, label, unit]) => <th key={key} scope="col" aria-sort={sortBy === key ? descending ? 'descending' : 'ascending' : undefined}><button type="button" onClick={() => sortOn(key)}>{label} ({unit}) {sortBy === key ? descending ? '↓' : '↑' : ''}</button></th>)}<th scope="col" title="Udział doby warszawskiej, w której urządzenie mierzyło tętno (okna 10-minutowe). Dowód pomiaru, nie noszenia przez całe okno; — oznacza brak zapisanego odczytu tętna dla całej doby.">Udział opaski</th><th>Uwagi</th><th>Moja notatka</th></tr></thead><tbody>
-        {result.days.filter((day) => !problems || (day.snapshot?.notes.length ?? 0) > 0).sort((a, b) => compareDailyRows(a, b, sortBy, descending)).map((day) => <tr key={day.date}><td>{day.date}{day.date === today && <span title="Doba jeszcze trwa: wartości mogą się zmienić po kolejnym odczycie lub synchronizacji urządzenia."> (w toku)</span>}</td>{dailyMetrics.filter(([key]) => visibleMetrics.has(key)).map(([key, label, , decimals]) => { const metric = day.snapshot?.metrics[key]; return <td key={key}><button type="button" className="metric-cell" aria-label={`${label}, ${day.date}: ${metric ? quality[metric.status] : 'Brak obliczonego wyniku'}`} onClick={() => setSelected({ date: day.date, key })}>{metric?.value == null ? '—' : formatRational(metric.value, decimals)}</button></td>; })}<td>{(() => { const share = band?.get(day.date); return share ? <span title={`${share.windows} z ${share.total} okien 10-minutowych z tętnem`}>{(share.windows / share.total * 100).toLocaleString('pl-PL', { maximumFractionDigits: 0 })}%</span> : '—'; })()}</td><td>{day.snapshot?.notes.join('; ') || '—'}</td><td>{day.userNote?.content || '—'}</td></tr>)}
+      <div className="table-wrap"><table><thead><tr><th scope="col" aria-sort={sortBy === 'date' ? descending ? 'descending' : 'ascending' : undefined}><button type="button" onClick={() => sortOn('date')}>Data {sortBy === 'date' ? descending ? '↓' : '↑' : ''}</button></th>{dailyMetrics.filter(([key]) => visibleMetrics.has(key)).map(([key, label, unit]) => <th key={key} scope="col" aria-sort={sortBy === key ? descending ? 'descending' : 'ascending' : undefined}><button type="button" onClick={() => sortOn(key)}>{label} ({unit}) {sortBy === key ? descending ? '↓' : '↑' : ''}</button></th>)}<th scope="col" title="Część doby warszawskiej, w której urządzenie mierzyło tętno (okna 10-minutowe). Dowód pomiaru, nie noszenia przez całe okno; — oznacza brak zapisanego odczytu tętna dla całej doby.">Część dnia z opaską</th><th scope="col" title="Aplikacje i urządzenia, które zapisały kroki lub kalorie aktywne tego dnia (Google Health API, lista wpisów). Najedź, aby zobaczyć liczbę wpisów według rodzaju; — oznacza brak odczytu.">Źródła</th><th>Uwagi</th><th>Moja notatka</th></tr></thead><tbody>
+        {result.days.filter((day) => !problems || (day.snapshot?.notes.length ?? 0) > 0).sort((a, b) => compareDailyRows(a, b, sortBy, descending)).map((day) => <tr key={day.date}><td>{day.date}{day.date === today && <span title="Doba jeszcze trwa: wartości mogą się zmienić po kolejnym odczycie lub synchronizacji urządzenia."> (w toku)</span>}</td>{dailyMetrics.filter(([key]) => visibleMetrics.has(key)).map(([key, label, , decimals]) => { const metric = day.snapshot?.metrics[key]; return <td key={key}><button type="button" className="metric-cell" aria-label={`${label}, ${day.date}: ${metric ? quality[metric.status] : 'Brak obliczonego wyniku'}`} onClick={() => setSelected({ date: day.date, key })}>{metric?.value == null ? '—' : formatRational(metric.value, decimals)}</button></td>; })}<td>{(() => { const share = band?.get(day.date); return share ? <span title={`${share.windows} z ${share.total} okien 10-minutowych z tętnem`}>{(share.windows / share.total * 100).toLocaleString('pl-PL', { maximumFractionDigits: 0 })}%</span> : '—'; })()}</td><td>{sourcesCell(sources?.get(day.date))}</td><td>{day.snapshot?.notes.join('; ') || '—'}</td><td>{day.userNote?.content || '—'}</td></tr>)}
       </tbody></table>{problems && !result.days.some((day) => (day.snapshot?.notes.length ?? 0) > 0) && <p>Brak dni z uwagami w wybranym zakresie.</p>}</div>
-      {selected && (() => { const day = result.days.find((item) => item.date === selected.date); const definition = dailyMetrics.find(([key]) => key === selected.key); const metric = day?.snapshot?.metrics[selected.key]; if (!day || !definition) return null; return <section aria-label="Szczegóły metryki"><h3>{definition[1]} — {day.date}</h3><p>Stan: {metric ? quality[metric.status] : 'Brak obliczonego wyniku'}.</p><p>Wartość: {metric?.value == null ? 'brak' : `${formatRational(metric.value, definition[3])} ${definition[2]}`}.</p><p>Rewizja wyniku: {day.snapshot?.revision ?? 'brak'}. Szczegóły źródła i decyzji kwalifikacyjnych nie są jeszcze zapisane w tej projekcji.</p><button type="button" onClick={() => setSelected(null)}>Zamknij szczegóły</button></section>; })()}
+      {selected && (() => { const day = result.days.find((item) => item.date === selected.date); const definition = dailyMetrics.find(([key]) => key === selected.key); const metric = day?.snapshot?.metrics[selected.key]; if (!day || !definition) return null; return <section aria-label="Szczegóły metryki"><h3>{definition[1]} — {day.date}</h3><p>Stan: {metric ? quality[metric.status] : 'Brak obliczonego wyniku'}.</p><p>Wartość: {metric?.value == null ? 'brak' : `${formatRational(metric.value, definition[3])} ${definition[2]}`}.</p>{(selected.key === 'total_energy' || selected.key === 'active_energy') && day.snapshot?.energy ? <>
+        <p>Model producenta: {energyModels[day.snapshot.energy.model]}. Reguła kwalifikacji: {day.snapshot.energy.rule}. Wartość to suma dobowa producenta (Google Health API, wszystkie źródła).</p>
+        <p>Źródło szacunku: {energySource(day.snapshot.energy) ?? 'nieustalone (brak odczytu tętna)'}{day.snapshot.energy.heartRateWindows !== null ? ` — tętno w ${day.snapshot.energy.heartRateWindows} z ${day.snapshot.energy.dayWindows} okien 10-minutowych` : ''}.{day.snapshot.energy.activeWithHeartRateKcal !== null && day.snapshot.energy.activeWithoutHeartRateKcal !== null ? ` Kalorie aktywne w oknach z tętnem: ${day.snapshot.energy.activeWithHeartRateKcal.replace('.', ',')} kcal, bez tętna: ${day.snapshot.energy.activeWithoutHeartRateKcal.replace('.', ',')} kcal.` : ''}</p>
+      </> : null}
+      {day.snapshot && day.snapshot.notes.length > 0 && <p>Uwagi dnia: {day.snapshot.notes.join('; ')}.</p>}
+      <p>Rewizja wyniku: {day.snapshot?.revision ?? 'brak'}.</p><button type="button" onClick={() => setSelected(null)}>Zamknij szczegóły</button></section>; })()}
     </>}
   </section>;
 }
@@ -408,13 +454,13 @@ function BandShare({ date }: { date: string }) {
     return () => controller.abort();
   }, [date]);
   const percent = (part: number, whole: number) => `${(part / whole * 100).toLocaleString('pl-PL', { maximumFractionDigits: 0 })}%`;
-  return <div><h4>Udział opaski w dobie (dzień warszawski, okna 10-minutowe)</h4>
+  return <div><h4>Część dnia z opaską (dzień warszawski, okna 10-minutowe)</h4>
     {date === warsawToday() && <p role="status">Doba jeszcze trwa: wartości są częściowe i rosną z kolejnymi odczytami oraz synchronizacją urządzenia; nie traktuj ich jako pełnej doby.</p>}
-    {error ? <p role="alert">Nie udało się odczytać udziału opaski.</p> : !result ? <p>Ładowanie…</p> : !result.heartRate ? <p>Brak zapisanego odczytu tętna dla całej doby (rodzaj „Tętno — okna 10 min"). Bez niego nie wiadomo, kiedy opaska mierzyła.</p> : <>
+    {error ? <p role="alert">Nie udało się odczytać części dnia z opaską.</p> : !result ? <p>Ładowanie…</p> : !result.heartRate ? <p>Brak zapisanego odczytu tętna dla całej doby (rodzaj „Tętno — okna 10 min"). Bez niego nie wiadomo, kiedy opaska mierzyła.</p> : <>
       <p>Tętno z urządzenia w {result.heartRate.windows} z {result.totalWindows} okien ({percent(result.heartRate.windows, result.totalWindows)} doby). To dowód pomiaru, nie dowód noszenia przez całe okno.</p>
       {result.activeEnergy ? <p>Aktywne kalorie: {result.activeEnergy.bandKcal.replace('.', ',')} kcal w oknach z tętnem opaski ({result.activeEnergy.bandWindows} okien) i {result.activeEnergy.otherKcal.replace('.', ',')} kcal w oknach bez niego ({result.activeEnergy.otherWindows} okien, szacunek telefonu lub brak pomiaru tętna). Opaska liczy wysiłek z tętna, telefon z kroków, więc kcal z obu źródeł nie są wprost porównywalne.</p>
         : <p>{result.activeEnergyRead ? '' : 'Brak zapisanego odczytu aktywnych kalorii w oknach 10-minutowych dla całej doby (rodzaj „Kalorie aktywne — okna 10 min").'}</p>}
-      <p>Wartość całkowita kalorii pozostaje jedną wartością producenta; udział opaski dotyczy tylko podziału części aktywnej.</p>
+      <p>Wartość całkowita kalorii pozostaje jedną wartością producenta; część dnia z opaską dotyczy tylko podziału części aktywnej.</p>
     </>}
   </div>;
 }

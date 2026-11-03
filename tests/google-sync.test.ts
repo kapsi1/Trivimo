@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { initializeTakeoutStore } from '../packages/adapters/takeout/import.ts';
-import { migrateCalorieJobs, migrateCanonicalDays, migrateDailyRollups, migrateGooglePages, migrateReadPolicy, migrateSourceAccounts, migrateUserNotes, migrateWindowJobs } from '../packages/storage/canonical-days.ts';
+import { migrateCalorieJobs, migrateCanonicalDays, migrateDailyRollups, migrateGooglePages, migrateReadPolicy, migrateSourceLists, migrateSourceAccounts, migrateUserNotes, migrateWindowJobs } from '../packages/storage/canonical-days.ts';
 import { createDemoDatabase } from '../packages/storage/days.ts';
 import { createGoogleReadJob, commitGooglePage } from '../packages/storage/google-pages.ts';
 import { warsawDay } from '../packages/domain/warsaw-day.ts';
@@ -65,7 +65,7 @@ function migrated() {
     initializeTakeoutStore(db);
     await migrateCanonicalDays(db, join(dir, 'v1.sqlite')); await migrateUserNotes(db, join(dir, 'v2.sqlite'));
     await migrateSourceAccounts(db, join(dir, 'v3.sqlite'), true); await migrateGooglePages(db, join(dir, 'v4.sqlite'));
-    await migrateDailyRollups(db, join(dir, 'v5.sqlite')); await migrateCalorieJobs(db, join(dir, 'v6.sqlite')); await migrateWindowJobs(db, join(dir, 'v7.sqlite')); await migrateReadPolicy(db, join(dir, 'v8.sqlite'));
+    await migrateDailyRollups(db, join(dir, 'v5.sqlite')); await migrateCalorieJobs(db, join(dir, 'v6.sqlite')); await migrateWindowJobs(db, join(dir, 'v7.sqlite')); await migrateReadPolicy(db, join(dir, 'v8.sqlite')); await migrateSourceLists(db, join(dir, 'v9.sqlite'));
   } };
 }
 const scopes = 'https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly';
@@ -191,8 +191,8 @@ test('backfill: czyta wszystkie luki, wznawia bez powtórzeń, zatrzymuje się p
     const status = service.backfillStatus();
     assert.equal(status.state, 'done');
     assert.deepEqual(status.kinds.map((item) => [item.covered, item.total]), syncKinds.map(() => [19, 19]));
-    // 15 chunks in all (1 per steps, distance and active, 2 for total-calories, 2 per window kind), one read before the stop; plus five refused requests
-    assert.deepEqual([status.readsThisRun, rollups], [14, 14 + 5]);
+    // 21 chunks in all (1 per steps, distance and active, 2 for total-calories, 2 per window kind, 3 per source list), one read before the stop; plus five refused requests
+    assert.deepEqual([status.readsThisRun, rollups], [20, 20 + 5]);
     assert.equal(env.db.prepare("SELECT COUNT(*) AS n FROM google_read_jobs WHERE state != 'complete'").get()?.n, 0);
 
     rollups = 0;

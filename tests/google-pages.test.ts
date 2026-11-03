@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { initializeTakeoutStore } from '../packages/adapters/takeout/import.ts';
-import { migrateCanonicalDays, migrateUserNotes, migrateSourceAccounts, migrateGooglePages, migrateDailyRollups, migrateCalorieJobs, migrateWindowJobs, migrateReadPolicy } from '../packages/storage/canonical-days.ts';
+import { migrateCanonicalDays, migrateUserNotes, migrateSourceAccounts, migrateGooglePages, migrateDailyRollups, migrateCalorieJobs, migrateWindowJobs, migrateReadPolicy, migrateSourceLists } from '../packages/storage/canonical-days.ts';
 import { createGoogleReadJob, commitGooglePage } from '../packages/storage/google-pages.ts';
 import { verifyTakeout } from '../packages/storage/verify-takeout.ts';
 import { GoogleAuth } from '../apps/server/google-auth.ts';
@@ -16,7 +16,7 @@ test('strona i kursor są atomowe, a wznowienie zachowuje oryginalny JSON', asyn
   try {
     initializeTakeoutStore(db);
     await migrateCanonicalDays(db, join(dir, 'v1.sqlite')); await migrateUserNotes(db, join(dir, 'v2.sqlite'));
-    await migrateSourceAccounts(db, join(dir, 'v3.sqlite'), true); await migrateGooglePages(db, join(dir, 'v4.sqlite')); await migrateDailyRollups(db, join(dir, 'v5.sqlite')); await migrateCalorieJobs(db, join(dir, 'v6.sqlite')); await migrateWindowJobs(db, join(dir, 'v7.sqlite')); await migrateReadPolicy(db, join(dir, 'v8.sqlite'));
+    await migrateSourceAccounts(db, join(dir, 'v3.sqlite'), true); await migrateGooglePages(db, join(dir, 'v4.sqlite')); await migrateDailyRollups(db, join(dir, 'v5.sqlite')); await migrateCalorieJobs(db, join(dir, 'v6.sqlite')); await migrateWindowJobs(db, join(dir, 'v7.sqlite')); await migrateReadPolicy(db, join(dir, 'v8.sqlite')); await migrateSourceLists(db, join(dir, 'v9.sqlite'));
     initializeTakeoutStore(db);
     const job = createGoogleReadJob(db, 'a'.repeat(64), 'weight', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z');
     const raw = '{"dataPoints":[{"value":9007199254740993}],"nextPageToken":"next"}';

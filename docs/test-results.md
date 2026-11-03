@@ -1,5 +1,19 @@
 # Raport weryfikacji
 
+## 2026-11-03 — kolumna źródeł (wersja 10)
+
+- `npm test`: 106 testów zaliczonych (nowe: parsowanie listy źródeł i parametry żądania `fields`/`prettyPrint`, odrzucenie zakresu ponad 14 dni, 429; migracja 10 zachowuje zadania, strony i metadane odczytów, przyjmuje nowe rodzaje i odrzuca je przed migracją; źródła dnia — najnowszy odczyt wygrywa, odczyt bez wpisów to pusta lista, dzień bez odczytu nieznany; backfill obejmuje listy źródeł). `npm run build`: poprawny.
+- Prawdziwa baza: migracja 9 → 10 po kopii `D:\Trivimo-bak\przed-v10-20261103.sqlite` (kopia: wersja 9; po migracji 207 zadań, 207 stron, 148 metadanych, `foreign_key_check` bez naruszeń). Backfill list źródeł tym samym serwisem co serwer: 88 zadań, 203 strony, ok. 42 MB surowych odpowiedzi za 306 dób, `verifyGooglePages` bez błędów. Dwa przebiegi zakończyły się przejściowym 503 (raz lista, raz tożsamość konta); ponowne uruchomienie kontynuowało od brakujących dób. Endpoint bez sesji zwraca 401, jak pozostałe.
+- Przy ponownej publikacji kalorii (usunięcie uwagi starszego modelu) zapis zderzył się z działającym serwerem (`database is locked`, transakcja doby wycofana); serwis synchronizacji otwiera teraz bazę z oczekiwaniem na blokadę 5 s. Po ponowieniu jedyną uwagą kalorii jest „tylko energia bazowa” (29 dób).
+- Ograniczenia: kolumny w przeglądarce nie sprawdzano.
+
+## 2026-11-03 — kwalifikacja kalorii (`google-energy-v1`)
+
+- `npm test`: 103 testy zaliczone (nowe: model doby — sam BMR z szumem i zerami, cicha doba telefonu z aktywnymi kcal, starszy model, doba zmiany czasu; ocena telefonu i źródła mieszanego; snapshoty z zapisanych stron: starszy model z uwagą, sam BMR pusty, pełny model z udziałem opaski i jawnym zerem aktywnych, odczyt przed końcem doby częściowy, doba bez odczytu okien nieporównywalna, nowa rewizja tylko po zmianie). `npm run build`: poprawny.
+- Prawdziwa baza (2026-11-03): przebieg na sucho, potem publikacja dla 2026-01-01 – 2026-11-03: 307 dób ze snapshotem, ponowna publikacja bez zmian (0 nowych rewizji), wszystkie snapshoty przechodzą walidację odczytu. Wynik: 97 dób starszego modelu (wartość z uwagą), 29 dób samego BMR (puste), od 2026-05-07 pełny model; doba bieżąca częściowa. Pierwszą rewizję wszystkich dób opublikował wcześniej działający serwer z pośrednią wersją reguły (34 doby błędnie jako sam BMR, 29 jako nieustalone); rewizja 2 tych 63 dób to wersja poprawna, historia została zachowana.
+- Ograniczenia: tabeli w przeglądarce nie sprawdzano; nie porównywano wartości z aplikacją Health poza wcześniejszymi próbami; BMR nie jest dostępny (zob. decyzje).
+- Poprawki (2026-11-03): bieżąca doba bez uwagi „niepełny zakres”, progi modelu dla doby w toku względem minionych okien, kolumna „Część dnia z opaską” zamiast dopisku przy kaloriach. 103 testy zaliczone, build poprawny; na prawdziwej bazie bieżąca doba ma rewizję bez uwag, pozostałe doby bez zmian.
+
 ## 2026-11-03 — uzupełnianie historii (backfill)
 
 - `npm test`: 99 testów zaliczonych (2 nowe: pokrycie dób tylko po ich końcu, podział luk na paczki w limitach, granice dób warszawskich w paczce obejmującej zmianę czasu; przebieg serwisu z zatrzymaniem po paczce, wznowieniem bez powtórzeń, ponowieniem i oczekiwaniem po trwałym 429 oraz pustym kolejnym przebiegiem). `npm run build`: poprawny.

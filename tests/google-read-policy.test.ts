@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { initializeTakeoutStore } from '../packages/adapters/takeout/import.ts';
-import { migrateCalorieJobs, migrateCanonicalDays, migrateDailyRollups, migrateGooglePages, migrateReadPolicy, migrateSourceAccounts, migrateUserNotes, migrateWindowJobs } from '../packages/storage/canonical-days.ts';
+import { migrateCalorieJobs, migrateCanonicalDays, migrateDailyRollups, migrateGooglePages, migrateReadPolicy, migrateSourceLists, migrateSourceAccounts, migrateUserNotes, migrateWindowJobs } from '../packages/storage/canonical-days.ts';
 import { commitGooglePage, createGoogleReadJob } from '../packages/storage/google-pages.ts';
 import { applyReadPolicy, registerAutomaticJob } from '../packages/storage/google-read-policy.ts';
 import { verifyTakeout } from '../packages/storage/verify-takeout.ts';
@@ -16,7 +16,7 @@ async function migrated() {
   await migrateCanonicalDays(db, join(dir, 'v1.sqlite')); await migrateUserNotes(db, join(dir, 'v2.sqlite'));
   await migrateSourceAccounts(db, join(dir, 'v3.sqlite'), true); await migrateGooglePages(db, join(dir, 'v4.sqlite'));
   await migrateDailyRollups(db, join(dir, 'v5.sqlite')); await migrateCalorieJobs(db, join(dir, 'v6.sqlite')); await migrateWindowJobs(db, join(dir, 'v7.sqlite'));
-  await migrateReadPolicy(db, join(dir, 'v8.sqlite'));
+  await migrateReadPolicy(db, join(dir, 'v8.sqlite')); await migrateSourceLists(db, join(dir, 'v9.sqlite'));
   return { dir, path, db };
 }
 const page = (day: number, steps: string) => JSON.stringify({ rollupDataPoints: [{ civilStartTime: { date: { year: 2026, month: 3, day } }, civilEndTime: { date: { year: 2026, month: 3, day: day + 1 } }, steps: { countSum: steps } }] });

@@ -8,7 +8,7 @@ import { verifyTakeout } from './verify-takeout.ts';
 const applicationId = 1414682185;
 
 /** A backup and a single-writer process are required before upgrading an existing store. */
-async function migrateWithBackup(db: DatabaseSync, backupPath: string, version: number, sql: string, afterSql?: () => void): Promise<void> {
+async function migrateWithBackup(db: DatabaseSync, backupPath: string, version: number, sql: string, afterSql?: () => void, beforeSql?: () => void): Promise<void> {
   if (db.prepare('PRAGMA application_id').get()?.application_id !== applicationId || db.prepare('PRAGMA user_version').get()?.user_version !== version) throw new Error('Nieobsługiwana wersja bazy');
   const dataVersion = db.prepare('PRAGMA data_version').get()?.data_version;
   const changes = db.prepare('SELECT total_changes() AS count').get()?.count;
@@ -17,6 +17,7 @@ async function migrateWithBackup(db: DatabaseSync, backupPath: string, version: 
   db.exec('BEGIN IMMEDIATE');
   try {
     if (db.prepare('PRAGMA user_version').get()?.user_version !== version || db.prepare('PRAGMA data_version').get()?.data_version !== dataVersion || db.prepare('SELECT total_changes() AS count').get()?.count !== changes) throw new Error('Baza zmieniła się podczas tworzenia kopii');
+    beforeSql?.();
     db.exec(sql);
     afterSql?.();
     db.exec('COMMIT');
@@ -124,6 +125,41 @@ export async function migrateReadPolicy(db: DatabaseSync, backupPath: string): P
       replaced_digest TEXT, replaced_created_at TEXT NOT NULL, replaced_by_job TEXT NOT NULL, pages_removed INTEGER NOT NULL,
       reason TEXT NOT NULL CHECK(reason IN ('unchanged_duplicate','intermediate_current_day','superseded_after_correction_window')), removed_at TEXT NOT NULL
     ) STRICT;`);
+}
+
+/**
+ * Version 10: per-record source lists of steps and active energy (only data source and civil date of each record),
+ * read to show which devices and apps supplied a day. Job metadata references the jobs, so it is rebuilt with them.
+ */
+export async function migrateSourceLists(db: DatabaseSync, backupPath: string): Promise<void> {
+  const kinds = ['weight', 'body-fat', 'steps', 'distance', 'total-calories', 'active-energy-burned', 'heart-rate-10m', 'active-energy-10m', 'total-calories-10m', 'steps-10m', 'distance-10m', 'steps-sources', 'active-energy-sources'];
+  const count = () => db.prepare('SELECT (SELECT COUNT(*) FROM google_read_jobs) AS jobs, (SELECT COUNT(*) FROM google_read_pages) AS pages, (SELECT COUNT(*) FROM google_read_job_meta) AS meta').get();
+  let before: ReturnType<typeof count>;
+  await migrateWithBackup(db, backupPath, 9, `CREATE TABLE google_read_jobs_v10 (
+      id TEXT PRIMARY KEY, account_digest TEXT NOT NULL CHECK(length(account_digest) = 64), kind TEXT NOT NULL CHECK(kind IN (${kinds.map((kind) => `'${kind}'`).join(',')})),
+      range_start TEXT NOT NULL, range_end TEXT NOT NULL, cursor TEXT, state TEXT NOT NULL CHECK(state IN ('running','complete')),
+      created_at TEXT NOT NULL
+    ) STRICT;
+    CREATE TABLE google_read_pages_v10 (
+      job_id TEXT NOT NULL REFERENCES google_read_jobs_v10(id), page_number INTEGER NOT NULL CHECK(page_number > 0),
+      request_cursor TEXT, next_cursor TEXT, raw_json TEXT NOT NULL, digest TEXT NOT NULL, received_at TEXT NOT NULL,
+      PRIMARY KEY(job_id, page_number)
+    ) STRICT;
+    CREATE TABLE google_read_job_meta_v10 (
+      job_id TEXT PRIMARY KEY REFERENCES google_read_jobs_v10(id), origin TEXT NOT NULL CHECK(origin IN ('manual','automatic')),
+      content_digest TEXT, confirmed_at TEXT, confirmations INTEGER NOT NULL DEFAULT 0 CHECK(confirmations >= 0)
+    ) STRICT;
+    INSERT INTO google_read_jobs_v10 SELECT id, account_digest, kind, range_start, range_end, cursor, state, created_at FROM google_read_jobs;
+    INSERT INTO google_read_pages_v10 SELECT job_id, page_number, request_cursor, next_cursor, raw_json, digest, received_at FROM google_read_pages;
+    INSERT INTO google_read_job_meta_v10 SELECT job_id, origin, content_digest, confirmed_at, confirmations FROM google_read_job_meta;
+    DROP TABLE google_read_job_meta; DROP TABLE google_read_pages; DROP TABLE google_read_jobs;
+    ALTER TABLE google_read_jobs_v10 RENAME TO google_read_jobs;
+    ALTER TABLE google_read_pages_v10 RENAME TO google_read_pages;
+    ALTER TABLE google_read_job_meta_v10 RENAME TO google_read_job_meta;
+    PRAGMA user_version = 10;`, () => {
+    const after = count();
+    if (!after || JSON.stringify(after) !== JSON.stringify(before) || db.prepare('PRAGMA foreign_key_check').all().length > 0) throw new Error('Niespójna migracja zadań Google');
+  }, () => { before = count(); });
 }
 
 export function publishCanonicalDay(db: DatabaseSync, input: DaySnapshotInput, expectedRevision: number | null) {

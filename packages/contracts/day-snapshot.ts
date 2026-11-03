@@ -10,7 +10,7 @@ const value = z.object({ status: z.enum(['valid', 'provisional', 'missing', 'inc
   .refine((item) => item.status !== 'missing' || item.value === null);
 export const issueSchema = z.object({
   metric: z.enum(['weight', 'body_fat', 'steps', 'distance', 'total_energy', 'active_energy']),
-  code: z.enum(['basal_only', 'incomparable_source', 'incomplete_coverage', 'unknown_origin', 'identity_conflict', 'invalid_value', 'unknown_unit', 'incomparable_day', 'unresolved_overlap']),
+  code: z.enum(['basal_only', 'incomparable_source', 'incomplete_coverage', 'unknown_origin', 'identity_conflict', 'invalid_value', 'unknown_unit', 'incomparable_day', 'unresolved_overlap', 'legacy_model']),
   state: z.enum(['active', 'resolved']),
 }).strict();
 export const snapshotInputSchema = z.object({
@@ -19,6 +19,12 @@ export const snapshotInputSchema = z.object({
     .refine((metrics) => { const parts = metrics.steps.value && integers(metrics.steps.value); return !metrics.steps.value || !!parts && parts[0] % parts[1] === 0n; }, { path: ['steps'], message: 'Kroki muszą być liczbą całkowitą' })
     .refine((metrics) => { const parts = metrics.body_fat.value && integers(metrics.body_fat.value); return !metrics.body_fat.value || !!parts && parts[0] <= 100n * parts[1]; }, { path: ['body_fat'], message: 'Procent poza zakresem' }),
   issues: z.array(issueSchema).max(1000),
+  /** Calorie qualification evidence: rule version, producer model and the band share that marks whose estimate it is. */
+  energy: z.object({
+    rule: z.literal('google-energy-v1'), model: z.enum(['current', 'legacy', 'basal_only', 'unknown']),
+    heartRateWindows: z.number().int().nonnegative().nullable(), dayWindows: z.number().int().positive(),
+    activeWithHeartRateKcal: z.string().regex(/^\d{1,9}\.\d{2}$/).nullable(), activeWithoutHeartRateKcal: z.string().regex(/^\d{1,9}\.\d{2}$/).nullable(),
+  }).strict().optional(),
 }).strict();
 export type DaySnapshotInput = z.infer<typeof snapshotInputSchema>;
 export type DayMetricValue = DaySnapshotInput['metrics']['weight'];

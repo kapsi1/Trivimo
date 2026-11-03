@@ -7,15 +7,16 @@ import { defaultRetryPolicy, RateLimitedError, withRateLimitRetry, type RetryPol
 import { sourceDay } from '../../packages/domain/source-day.ts';
 import { warsawDay } from '../../packages/domain/warsaw-day.ts';
 import type { GoogleJobKind } from '../../packages/storage/google-pages.ts';
+import { publishGoogleEnergyDays } from '../../packages/storage/google-energy-days.ts';
 import { applyReadPolicy, registerAutomaticJob } from '../../packages/storage/google-read-policy.ts';
 import type { GoogleAuth } from './google-auth.ts';
 import { readGoogleJobPage, startGoogleReadJob } from './google-read-service.ts';
 
 /** Kinds refreshed automatically: the six M1 metrics' raw material plus the ten-minute wear evidence. */
-export const syncKinds = ['steps', 'distance', 'total-calories', 'active-energy-burned', 'heart-rate-10m', 'active-energy-10m', 'total-calories-10m', 'steps-10m', 'distance-10m'] as const;
+export const syncKinds = ['steps', 'distance', 'total-calories', 'active-energy-burned', 'heart-rate-10m', 'active-energy-10m', 'total-calories-10m', 'steps-10m', 'distance-10m', 'steps-sources', 'active-energy-sources'] as const;
 export type SyncKind = (typeof syncKinds)[number];
 export interface SyncRead { kind: SyncKind; first: string; last: string; begin: string; end: string }
-export interface SyncOutcome { at: string; result: 'ok' | 'authorization_required' | 'scope_missing' | 'migration_required' | 'error'; code?: string; reads: number; retryAt?: string }
+export interface SyncOutcome { at: string; result: 'ok' | 'authorization_required' | 'scope_missing' | 'migration_required' | 'error'; code?: string; reads: number; retryAt?: string; energy?: { published: number; unchanged: number } | 'failed' }
 
 const maxCatchUpDays = 13; // keeps a ten-minute-window range within 14 days even across a 25-hour day
 const windowed = (kind: SyncKind) => kind.endsWith('-10m');
@@ -58,7 +59,8 @@ export function planSync(db: DatabaseSync, today: string, nowMs: number, refresh
 
 /** History is read from the start of 2026 (plan M1); earlier years wait for their own audit. */
 export const backfillFrom = '2026-01-01';
-const chunkDays = (kind: SyncKind) => windowed(kind) ? maxCatchUpDays : maxRollupDays(kind as Exclude<SyncKind, `${string}-10m`>);
+// source lists hold every record (about 200 bytes each), so a week keeps a page well under the 1 MB response limit
+const chunkDays = (kind: SyncKind) => windowed(kind) ? maxCatchUpDays : kind.endsWith('-sources') ? 7 : maxRollupDays(kind as Exclude<SyncKind, `${string}-10m` | `${string}-sources`>);
 const dayEnd = (day: string) => Date.parse(warsawDay(day).end);
 
 /**
@@ -127,8 +129,8 @@ export class GoogleSyncService {
   }
   private open(): DatabaseSync {
     let db: DatabaseSync;
-    try { const stat = lstatSync(this.path); if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('invalid_store'); db = new DatabaseSync(this.path); } catch { throw new Error('store_unavailable'); }
-    if (db.prepare('PRAGMA application_id').get()?.application_id !== 1414682185 || db.prepare('PRAGMA user_version').get()?.user_version !== 9) { db.close(); throw new Error('migration_required'); }
+    try { const stat = lstatSync(this.path); if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('invalid_store'); db = new DatabaseSync(this.path, { timeout: 5000 }); } catch { throw new Error('store_unavailable'); }
+    if (db.prepare('PRAGMA application_id').get()?.application_id !== 1414682185 || db.prepare('PRAGMA user_version').get()?.user_version !== 10) { db.close(); throw new Error('migration_required'); }
     return db;
   }
   private execute: Execute = async (db, read) => {
@@ -162,11 +164,19 @@ export class GoogleSyncService {
       reads += await this.resumeRunning(db);
       const interval = (this.options.intervalMinutes ?? 60) * 60000;
       for (const read of planSync(db, sourceDay(new Date(this.now()).toISOString()), this.now(), interval / 2)) { await this.execute(db, read); reads++; }
-      return finish('ok');
+      const energy = this.projectEnergy(db);
+      const outcome = finish('ok'); outcome.energy = energy;
+      return outcome;
     } catch (error) {
       const failure = this.failure(error);
       return finish(failure.result, failure.code, failure.retryAt);
     } finally { db?.close(); this.running = false; }
+  }
+  /** Local recompute of calorie snapshots from saved pages (no requests); a failure leaves earlier snapshots and reads intact. */
+  private projectEnergy(db: DatabaseSync): { published: number; unchanged: number } | 'failed' {
+    const today = sourceDay(new Date(this.now()).toISOString());
+    const from = addDays(today, -365) > backfillFrom ? addDays(today, -365) : backfillFrom;
+    try { return publishGoogleEnergyDays(db, from, today, this.now()); } catch { return 'failed'; }
   }
   /** Finish pages of jobs left running (by an interrupted run, backfill or restart); returns how many were completed. */
   private async resumeRunning(db: DatabaseSync): Promise<number> {
@@ -222,7 +232,7 @@ export class GoogleSyncService {
         db = this.open();
         run.readsThisRun += await this.resumeRunning(db);
         const next = planBackfill(db, run.from, run.through)[0];
-        if (!next) return end('done');
+        if (!next) { this.projectEnergy(db); return end('done'); }
         const key = `${next.kind}:${next.first}:${next.last}`;
         // a chunk planned again right after its complete read would repeat forever; stop and report instead
         if (key === previous) return end('error', 'no_progress');

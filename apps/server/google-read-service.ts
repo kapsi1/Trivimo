@@ -6,14 +6,15 @@ import { listBodyPage } from '../../packages/adapters/google-health/body-read.ts
 import { googleHttpError } from '../../packages/adapters/google-health/rate-limit.ts';
 import { windowRollupPage } from '../../packages/adapters/google-health/window-rollup.ts';
 import { dailyRollupPage, dailyRollupTypes, maxRollupDays, type DailyRollupType } from '../../packages/adapters/google-health/daily-rollup.ts';
-import { commitGooglePage, createGoogleReadJob, isWindowKind, windowJobKinds, type GoogleJobKind, type WindowJobKind } from '../../packages/storage/google-pages.ts';
+import { isSourceListKind, maxSourceListDays, sourceListPage } from '../../packages/adapters/google-health/source-list.ts';
+import { commitGooglePage, createGoogleReadJob, googleJobKinds, isWindowKind, windowJobKinds, type GoogleJobKind } from '../../packages/storage/google-pages.ts';
 import type { GoogleAuth } from './google-auth.ts';
 
 const bodyScope = 'https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly';
 const activityScope = 'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly';
 const isDaily = (kind: GoogleJobKind): kind is DailyRollupType => (dailyRollupTypes as readonly string[]).includes(kind);
 const scopeFor = (kind: GoogleJobKind) => kind === 'weight' || kind === 'body-fat' || kind === 'heart-rate-10m' ? bodyScope : activityScope;
-const jobSchema = z.object({ account_digest: z.string().regex(/^[0-9a-f]{64}$/), kind: z.enum(['weight', 'body-fat', ...dailyRollupTypes, ...(Object.keys(windowJobKinds) as WindowJobKind[])]), range_start: z.string().max(40), range_end: z.string().max(40), cursor: z.string().nullable(), state: z.literal('running') });
+const jobSchema = z.object({ account_digest: z.string().regex(/^[0-9a-f]{64}$/), kind: z.enum(googleJobKinds), range_start: z.string().max(40), range_end: z.string().max(40), cursor: z.string().nullable(), state: z.literal('running') });
 
 async function accountDigest(token: string, send: typeof fetch): Promise<string> {
   const response = await send('https://health.googleapis.com/v4/users/me/identity', { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(15000) });
@@ -36,6 +37,7 @@ export async function readGoogleJobPage(db: DatabaseSync, auth: GoogleAuth, jobI
   const job = jobSchema.parse(row);
   const page = await auth.withAccessToken(scopeFor(job.kind), async (token) => {
     if (await accountDigest(token, send) !== job.account_digest) throw new Error('account_changed');
+    if (isSourceListKind(job.kind)) return sourceListPage({ kind: job.kind, start: job.range_start, end: job.range_end, ...(job.cursor ? { pageToken: job.cursor } : {}) }, token, send);
     if (isWindowKind(job.kind)) return windowRollupPage({ type: windowJobKinds[job.kind], start: job.range_start, end: job.range_end, ...(job.cursor ? { pageToken: job.cursor } : {}) }, token, send);
     if (isDaily(job.kind)) return dailyRollupPage({ type: job.kind, start: job.range_start, end: job.range_end, ...(job.cursor ? { pageToken: job.cursor } : {}) }, token, send);
     return listBodyPage({ type: job.kind, start: job.range_start, end: job.range_end, ...(job.cursor ? { pageToken: job.cursor } : {}) }, token, send);
@@ -52,7 +54,7 @@ export class GoogleReadService {
       if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('invalid_store');
       db = new DatabaseSync(this.path);
     } catch { throw new Error('store_unavailable'); }
-    if (db.prepare('PRAGMA application_id').get()?.application_id !== 1414682185 || db.prepare('PRAGMA user_version').get()?.user_version !== 9) { db.close(); throw new Error('migration_required'); }
+    if (db.prepare('PRAGMA application_id').get()?.application_id !== 1414682185 || db.prepare('PRAGMA user_version').get()?.user_version !== 10) { db.close(); throw new Error('migration_required'); }
     return db;
   }
   list() {
@@ -61,7 +63,7 @@ export class GoogleReadService {
     finally { db.close(); }
   }
   async start(kind: GoogleJobKind, start: string, end: string) {
-    if (Date.parse(end) - Date.parse(start) > (isDaily(kind) ? maxRollupDays(kind) : isWindowKind(kind) ? 14 : 31) * 86400000) throw new Error('range_too_large');
+    if (Date.parse(end) - Date.parse(start) > (isDaily(kind) ? maxRollupDays(kind) : isSourceListKind(kind) ? maxSourceListDays : isWindowKind(kind) ? 14 : 31) * 86400000) throw new Error('range_too_large');
     const db = this.open();
     try { return { id: await startGoogleReadJob(db, this.auth, kind, start, end, this.send) }; } finally { db.close(); }
   }

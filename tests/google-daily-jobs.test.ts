@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { initializeTakeoutStore } from '../packages/adapters/takeout/import.ts';
-import { migrateCanonicalDays, migrateUserNotes, migrateSourceAccounts, migrateGooglePages, migrateDailyRollups, migrateCalorieJobs, migrateWindowJobs, migrateReadPolicy } from '../packages/storage/canonical-days.ts';
+import { migrateCanonicalDays, migrateUserNotes, migrateSourceAccounts, migrateGooglePages, migrateDailyRollups, migrateCalorieJobs, migrateWindowJobs, migrateReadPolicy, migrateSourceLists } from '../packages/storage/canonical-days.ts';
 import { commitGooglePage, createGoogleReadJob } from '../packages/storage/google-pages.ts';
 import { verifyTakeout } from '../packages/storage/verify-takeout.ts';
 
@@ -25,11 +25,11 @@ test('migracja v6 zachowuje zadania i strony, naprawia klucz obcy i dopuszcza za
     assert.throws(() => createGoogleReadJob(db, 'a'.repeat(64), 'heart-rate-10m', '2026-03-01T00:00:00Z', '2026-03-02T00:00:00Z'));
     await migrateWindowJobs(db, join(dir, 'v7.sqlite'));
     assert.throws(() => createGoogleReadJob(db, 'a'.repeat(64), 'steps-10m', '2026-03-01T00:00:00Z', '2026-03-02T00:00:00Z'));
-    await migrateReadPolicy(db, join(dir, 'v8.sqlite'));
+    await migrateReadPolicy(db, join(dir, 'v8.sqlite')); await migrateSourceLists(db, join(dir, 'v9.sqlite'));
   } finally { db.close(); }
   const reopened = new DatabaseSync(path);
   try {
-    assert.equal(reopened.prepare('PRAGMA user_version').get()?.user_version, 9);
+    assert.equal(reopened.prepare('PRAGMA user_version').get()?.user_version, 10);
     assert.equal(reopened.prepare('SELECT COUNT(*) AS n FROM google_read_jobs').get()?.n, 1);
     assert.equal(reopened.prepare('SELECT raw_json FROM google_read_pages').get()?.raw_json, '{"dataPoints":[{"v":1}],"nextPageToken":"n"}');
     assert.equal(reopened.prepare("SELECT \"table\" AS t FROM pragma_foreign_key_list('google_read_pages')").get()?.t, 'google_read_jobs');
