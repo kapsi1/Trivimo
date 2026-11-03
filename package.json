@@ -13,6 +13,8 @@
     "preview:takeout": "tsx apps/server/preview-takeout.ts",
     "verify:takeout": "tsx apps/server/verify-takeout.ts",
     "backup:takeout": "tsx apps/server/backup-takeout.ts",
+    "verify:restore": "tsx scripts/verify-restore.ts",
+    "migrate:canonical": "tsx apps/server/migrate-canonical.ts",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts"

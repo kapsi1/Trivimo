@@ -19,7 +19,8 @@ Etapy nie są sztywnym harmonogramem. Nie buduj całego katalogu API jako warunk
 
 ## Bramy jakości
 
-- [ ] P0: działający szkielet i syntetyczny pionowy przepływ baza→REST→tabela, narzędzia weryfikacji oraz zapisane decyzje. Próby z kontem tylko w zleconym zakresie.
+Syntetyczna brama P0 została wykonana i opisana w [ukończonych próbach](../completed/01-p0-probes.md); zadania zależne od konta i walidacji danych nadal pozostają otwarte.
+
 - [ ] M1: przepływ sześciu metryk dla importu i API, jedna semantyka historii/przyszłości, brak BMR-only/nieporównywalnego active w kanonicznych wynikach, widoczne luki, odtwarzalna kopia. Brak OAuth pozostaje jawną luką, nie „ukończonym API”.
 - [ ] Każdy kolejny typ: karta definicji, jednostki, czas, pochodzenie, operacje, brak/zero, syntetyczne testy i ograniczony rzeczywisty odczyt. „Wszystkie dane API” wymaga raportu pokrycia całego aktualnego katalogu, nie tylko listy obiecanych ekranów.
 - [ ] M5: realny wpis z telefonu w wybranym wariancie, odczyt potwierdzenia, korekta, ponowienie bez duplikatu i zachowanie po niedostępności hosta. Nie wymaga własnej aplikacji Android.

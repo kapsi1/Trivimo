@@ -115,7 +115,7 @@ export function initializeTakeoutStore(db: DatabaseSync): void {
   db.exec('PRAGMA foreign_keys = ON');
   const version = db.prepare('PRAGMA user_version').get()?.user_version;
   const appId = db.prepare('PRAGMA application_id').get()?.application_id;
-  if (version === 1 && appId === 1414682185) return;
+  if ((version === 1 || version === 2 || version === 3 || version === 4) && appId === 1414682185) return;
   if (version !== 0 || appId !== 0 || Number(db.prepare("SELECT COUNT(*) AS count FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").get()?.count) !== 0) {
     throw new Error('Nieobsługiwana baza importu');
   }
@@ -131,7 +131,7 @@ export function initializeTakeoutStore(db: DatabaseSync): void {
   } catch (error) { db.exec('ROLLBACK'); throw error; }
 }
 
-export function importTakeout(db: DatabaseSync, directory: string, onPreview?: (files: number, rows: number) => void, approvedPlan?: TakeoutPlan): { files: number; rows: number } {
+export function importTakeout(db: DatabaseSync, directory: string, onPreview?: (files: number, rows: number) => void, approvedPlan?: TakeoutPlan, approvedAccountId?: string | null): { files: number; rows: number } {
   const root = realpathSync(directory);
   const pending = db.prepare("SELECT id, root FROM import_sessions WHERE state = 'running' ORDER BY rowid LIMIT 1").get();
   let sessionId: string;
@@ -147,6 +147,10 @@ export function importTakeout(db: DatabaseSync, directory: string, onPreview?: (
     db.exec('BEGIN IMMEDIATE');
     try {
       db.prepare("INSERT INTO import_sessions VALUES (?, ?, 'running')").run(sessionId, root);
+      if (approvedAccountId) {
+        if (db.prepare('PRAGMA user_version').get()?.user_version !== 4) throw new Error('Nieobsługiwana wersja konta');
+        db.prepare("INSERT INTO import_account_decisions VALUES (?, 1, ?, 'user_confirmed', ?)").run(sessionId, approvedAccountId, new Date().toISOString());
+      }
       const insert = db.prepare('INSERT INTO import_files (session_id, path, kind, digest, row_count) VALUES (?, ?, ?, ?, ?)');
       for (const file of plan.files) insert.run(sessionId, file.path, file.kind, file.digest, file.rows);
       db.exec('COMMIT');

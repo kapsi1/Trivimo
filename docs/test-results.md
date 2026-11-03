@@ -1,5 +1,36 @@
 # Raport weryfikacji
 
+## 2026-11-03 — lokalne konto i przegląd źródeł
+
+- Po potwierdzeniu użytkownika wykonano migrację schematu do wersji 4: utworzono lokalne konto i przypisano istniejące sesje. Przed zmianą `migrate:canonical` wykonał i zweryfikował kopię w wybranej lokalizacji. Po migracji `verify:takeout` potwierdził integralność oryginałów; osobna kontrola potwierdziła kompletność przypisań bez wypisywania identyfikatorów ani pomiarów.
+- `npm test`: 52 testy syntetyczne zaliczone na Node 24.22.1; obejmują m.in. jawne przypisywanie konta, nieprzypisane i wznawiane importy, kwalifikację kroków/dystansu oraz odczyt kandydatów z uwzględnieniem dnia Warszawy. `npm run build` i `git diff --check`: poprawne.
+- W osobnej syntetycznej bazie i przeglądarce sprawdzono wybór konta w imporcie oraz podgląd pomiarów źródłowych dnia. Klucz z czasu i pochodzenia pozostaje tylko kandydatem; nie dokonano automatycznej deduplikacji ani kwalifikacji rzeczywistych rekordów.
+- Nowy import bez potwierdzenia konta pozostaje nieprzypisany; interfejs umożliwia późniejsze jawne przypisanie zakończonych importów po podglądzie i potwierdzeniu. Test syntetyczny sprawdza zamrożenie zestawu, jednorazowy token i konflikt decyzji. OAuth, automatyczna ocena replik i wyliczenie wyników dnia pozostają otwarte.
+
+## 2026-11-03 — historia notatek
+
+- `npm test`: 45 testów syntetycznych zaliczonych na Node 24.22.1; obejmują niezależność notatki od automatycznych uwag, historię wersji, konflikt rewizji i ochronę żądań zapisu. `npm run build` i `git diff --check`: poprawne.
+- Syntetyczne API i przeglądarka na osobnych portach: zapis notatki, ponowny odczyt po odświeżeniu oraz pozostawienie niezapisanej treści po anulowaniu przejścia. Bez użycia prywatnych pomiarów.
+- `npm run migrate:canonical -- <nowa kopia>`: po syntetycznej próbie utworzono i zweryfikowano kopię właściwej bazy na wskazanym dysku D:, po czym dodano schemat historii notatek jako wersję 3. `npm run verify:takeout` po migracji potwierdził integralność oryginałów. Nie dodano ani nie zmieniono prywatnych notatek użytkownika.
+- Ograniczenia: rzeczywiste pomiary nadal nie są powiązane z decyzjami tożsamości ani automatycznie przeliczane. Odczyt API Google pozostaje wyłączony na życzenie użytkownika; M1 nie jest ukończone.
+
+## 2026-11-03 — syntetyczna projekcja dnia i migracja
+
+- `npm test`: 41 testów syntetycznych zaliczonych na Node 24.22.1; obejmują jawną kwalifikację, brak/zero, migrację z kopią, rewizje i przepływ od syntetycznych dowodów do REST. `npm run build`: poprawny. Połączenie danych źródłowych z jawnymi decyzjami nadal nie jest wdrożone.
+- 2026-11-02, osobne syntetyczne API i przeglądarka: widok dnia pokazał sześć metryk, potwierdzone zero, brak i uwagę w jednej rewizji. Próba nie wykorzystywała prywatnych pomiarów.
+- 2026-11-02 wskazano nowy katalog na dysku D:. `backup:takeout`, `verify:takeout` i `verify:restore` zakończyły się powodzeniem; kopię odtworzono w pustym katalogu tymczasowym, porównano skróty, sprawdzono integralność i usunięto tymczasowy plik.
+- 2026-11-02 po pozytywnych testach `migrate:canonical` utworzył i zweryfikował dodatkową kopię przed migracją, zmienił schemat prywatnej bazy do wersji 2 i ponownie sprawdził oryginały. Migracja nie wyliczyła ani nie opublikowała wyników z prywatnych danych.
+- Odczyt API Google pozostaje wyłączony na życzenie użytkownika. Błąd pełnego odczytu starej kopii na F: został odtworzony również przez użytkownika w Eksploratorze; plik na F: nie był nadpisywany.
+
+## 2026-11-02 — reguły M1 i próba odtworzenia
+
+- Po wskazaniu innego dysku utworzono nową kopię, sprawdzono ją `npm run verify:takeout`, a następnie `npm run verify:restore` odtworzył ją do pustego katalogu tymczasowego, porównał skróty i zweryfikował zawartość bez wypisywania pomiarów. Tymczasowy plik usunięto. Dotyczy to obecnego magazynu oryginałów, nie przyszłych załączników ani zadań, których jeszcze nie ma.
+- `npm test`: 36 testów syntetycznych zaliczonych na Node 24.22.1; obejmują kwalifikację kalorii na podstawie jawnych dowodów, średnie zaakceptowanych pomiarów masy/tłuszczu, czas źródła i DST oraz deterministyczne uwagi. `npm run build` i `git diff --check`: poprawne. Te reguły nie są jeszcze podłączone do wyników dnia.
+- `npm run verify:takeout`: oryginalna baza przeszła kontrolę integralności, skrótów plików i odczytu typów bez wypisywania pomiarów.
+- `npm run verify:restore -- <syntetyczna kopia>`: odtworzenie i weryfikacja zakończone powodzeniem poza sandboxem.
+- Prywatna kopia: próba SQLite backup API utknęła i została przerwana; pliki tymczasowe usunięto. Kolejna próba pełnego odczytu zamkniętej kopii zwróciła błąd urządzenia dysku docelowego. Oryginalna baza i kopia nie były zmieniane. Prywatne odtworzenie pozostaje niewykonane mimo wcześniejszej udanej weryfikacji kopii.
+- OAuth i porównanie z API pozostają wstrzymane zgodnie z decyzją użytkownika; nie są dowodem ukończenia M1.
+
 ## 2026-11-02 — import z interfejsu i ponowne uruchomienie
 
 - `npm test` i `npm run build`: testy syntetyczne oraz build poprawne na Node 24.22.1. Test HTTP obejmuje sesję, Origin, wymagany nagłówek, podgląd bez zapisu, zatwierdzenie, zmianę pliku, wznowienie zapisanego planu i ponowne użycie tokenu.

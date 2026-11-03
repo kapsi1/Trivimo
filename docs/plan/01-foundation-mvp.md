@@ -6,12 +6,13 @@ Cel: użyteczna tabela/wykresy dla 2026 i nowych dni, oparta na własnej bazie. 
 
 Wykonane próby syntetycznego przepływu i parserów opisuje [P0 — wykonane](../completed/01-p0-probes.md). Pozostają m.in. trwała baza aplikacji i kopia przed przyszłymi migracjami; szczegóły i ograniczenia są w [raporcie](../test-results.md).
 
-- [ ] Potwierdzić stos, sposób uruchomienia na Windows, manager pakietów, wspólne schematy walidacji, migracje DB i runner testów. Dodać README z rzeczywistymi poleceniami, lockfile i minimalne CI dopiero po utworzeniu kodu. Brak frameworka pełnej synchronizacji na zapas.
 - [ ] W autoryzowanym etapie integracji skonfigurować osobnego klienta OAuth i próbę read-only kilku dni: rekordy waga/tłuszcz, kroki/dystans, total/active, pochodzenie. Sprawdzić `Operation`/metody tylko w dokumentacji; nie testować zapisu w tym etapie.
 - [ ] Ustalić politykę kalorii na małej próbce: dzień z noszeniem, bez noszenia, niepełny, BMR-only i potwierdzone zero, jeśli występują. Oddzielić brak metadanych od braku pomiarów. Jeśli brak dowodu porównywalności, zachować lukę i opisać kryterium; nie wymyślać kwalifikatora dla pełności tabeli.
 - [ ] Porównać API/Takeout dla tego samego konta, zakończonych dat, strefy, jednostek i wersji. Wynik próby zapisać prywatnie poza repo, a w docs tylko reguły i ograniczenia.
 
 ## M1: magazyn i przepływ
+
+W trakcie: powstał syntetycznie testowany przepływ od jawnych decyzji i dowodów przez projekcję sześciu metryk, zapis rewizji, REST i widok dnia. Uwzględnia czas warszawski, kwalifikację kalorii, średnie zaakceptowanych pomiarów i deterministyczne uwagi. Osobne notatki użytkownika i ich historia zostały [wykonane](../completed/01-p0-probes.md). Schemat magazynu został zaktualizowany po wykonaniu kopii na wskazanym dysku, lecz rzeczywiste dane nie są jeszcze automatycznie kwalifikowane ani przeliczane; polityka źródeł i ocena danych wymagają walidacji.
 
 - [ ] Wdrożyć źródłowe wersje, obserwacje, tożsamość/repliki, definicje, projekcje dnia i ustrukturyzowane uwagi. Import ma preview, podsumowanie zakresu i checkpoint porcji. Zapis transakcyjny oraz idempotencja powtórzenia.
 - [ ] Wdrożyć sześć typów MVP z [planu API](02-health-api.md) i [Takeout](03-import-migration.md); brak archiwalnego total/active zachować jako brak, nie odzyskiwać z obecnych ustawień BMR.
@@ -35,6 +36,6 @@ Wykonane próby syntetycznego przepływu i parserów opisuje [P0 — wykonane](.
 - [ ] Wynik jest niezależny od porcji pojedynczy dzień/tydzień/miesiąc; sprawdzony także początek zakresu i ostatni interwał doby. Nie portować obejścia błędu agregacji Connect bez potwierdzenia potrzeby.
 - [ ] Wartość i Uwagi mają jedną rewizję; powtórzenie nie dokleja tekstu, rozwiązanie problemu usuwa tylko jego aktywną uwagę. Prywatne notatki nie giną.
 - [ ] Rzeczywisty ograniczony odczyt i import z tego samego zakresu porównany z UI Health, z uwzględnieniem opóźnienia synchronizacji i daty eksportu. Nierozstrzygnięte różnice widoczne; żadnej deklaracji „zgodne” na podstawie samego testu parsera.
-- [ ] Kopia bazy i plików odtworzona w pustym środowisku. Zamknięcie/przerwanie procesu nie niszczy ostatniego potwierdzonego wyniku.
+- [ ] Kopia kompletnej bazy, przyszłych załączników i zadań odtworzona w pustym środowisku. Zamknięcie/przerwanie procesu nie niszczy ostatniego potwierdzonego wyniku. Odtworzenie istniejącego magazynu surowego [wykonano](../completed/01-p0-probes.md).
 
 **TODO po M1:** audyt poprzednich lat, z osobną oceną modeli i zakresu eksportów, przed rozszerzeniem migracji. Nie wymuszać dzisiejszej definicji na nieznanej starszej historii.

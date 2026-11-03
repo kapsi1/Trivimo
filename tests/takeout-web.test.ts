@@ -37,6 +37,8 @@ test('interfejs wymaga sesji i Origin, pokazuje podgląd i wznawia zatwierdzony 
     assert.equal((await fetch(`${base}/api/takeout/preview`, { method: 'POST', headers: jsonHeaders, body })).status, 403);
     assert.equal((await fetch(`${base}/api/takeout/preview`, { method: 'POST', headers: { ...jsonHeaders, Origin: 'https://example.test' }, body })).status, 403);
     assert.equal((await fetch(`${base}/api/takeout/preview`, { method: 'POST', headers: { Cookie: cookie, Origin: 'http://localhost:5173', 'Content-Type': 'application/json' }, body })).status, 403);
+    assert.equal((await fetch(`${base}/api/source-account/preview`, { method: 'POST', headers: jsonHeaders, body: '{}' })).status, 403);
+    assert.equal((await fetch(`${base}/api/source-account/assign`, { method: 'POST', headers: { ...jsonHeaders, Origin: 'https://example.test' }, body: JSON.stringify({ token: 'a'.repeat(64) }) })).status, 403);
     const headers = { ...jsonHeaders, Origin: 'http://localhost:5173' };
     const first = await fetch(`${base}/api/takeout/preview`, { method: 'POST', headers, body });
     assert.equal(first.status, 200);

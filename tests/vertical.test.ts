@@ -106,4 +106,9 @@ test('chroniony odczyt surowych danych pokazuje tekstowe pola bez kwalifikowania
   assert.equal(dated.rows.length, 1);
   assert.equal(dated.rows[0]?.timestamp, '2026-01-02T23:00:00-05:00');
   assert.equal((await fetch(`${base}/api/source-records?kind=weight&date=2026-02-30`, { headers: { Cookie: cookie } })).status, 400);
+  const candidates = await (await fetch(`${base}/api/body-candidates?kind=weight&date=2026-01-01`, { headers: { Cookie: cookie } })).json() as { rows: Record<string, unknown>[]; matched: number; coverage: string };
+  assert.equal(candidates.matched, 101);
+  assert.equal(candidates.coverage, 'unknown');
+  assert.equal(candidates.rows[0]?.identity, 'unresolved');
+  assert.equal('locator' in candidates.rows[0]!, false);
 });

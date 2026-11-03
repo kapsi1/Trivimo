@@ -15,3 +15,4 @@ backups/
 *.gpx
 node_modules/
 dist/
+.playwright-mcp

@@ -1,5 +1,22 @@
 # P0 — ukończone próby
 
+## Fundament i brama syntetyczna
+
+- [x] Wybrano TypeScript, React/Vite, Node 24, SQLite, npm i test runner Node; dodano wspólne schematy Zod, początkowe wersjonowanie bazy, lockfile, komendy dla Windows i konfigurację CI. Próba migracji następnej wersji i kopii przed zmianą jest syntetyczna; nie oznacza wdrożenia projekcji do prywatnej bazy.
+- [x] Szkielet i syntetyczny przepływ baza → REST → tabela działają; istnieją narzędzia weryfikacji i zapisane decyzje. Pozostałe próby P0 zależne od konta oraz walidacja polityki kalorii pozostają w planie.
+
+## Wskazanie katalogu importu
+
+- [x] Użytkownik wskazuje katalog eksportu; importer nie wyszukuje prywatnych archiwów po dysku. Import testowano także na syntetycznych plikach; prywatnych danych Health Sync nie kopiowano do repozytorium. Obsługa wskazanego, rozpakowanego katalogu nie oznacza ukończenia obsługi ZIP.
+
+## Odtworzenie istniejącego magazynu surowego
+
+- [x] Kopię aktualnego magazynu oryginalnych plików odtworzono do pustego katalogu tymczasowego, porównano pełne skróty i sprawdzono integralność oraz odczyt; tymczasowy plik usunięto. Nie potwierdza to odtwarzania przyszłych załączników, korekt i zadań, które nie są jeszcze zaimplementowane.
+
+## Niezależne notatki dnia
+
+- [x] Notatka użytkownika ma oddzielną wersjonowaną historię i nie jest nadpisywana przeliczeniem automatycznych uwag. Syntetyczne testy obejmują konflikt zmian, odczyt, zapis i zachowanie przy ponownym przeliczeniu; w przeglądarce sprawdzono zapis, ponowny odczyt i ochronę niezapisanej treści. Szerszy odbiór kompletnej projekcji M1 pozostaje otwarty.
+
 ## Pionowy przykład syntetyczny
 
 SQLite w pamięci → repozytorium → REST → ciemna tabela i niewielki wykres. Widać wartość, brak, jawne zero oraz uwagę. Test HTTP i kontrola w przeglądarce są opisane w [raporcie](../test-results.md). Nie jest to połączenie z kontem ani trwały magazyn zdrowia.

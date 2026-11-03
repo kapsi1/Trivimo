@@ -41,6 +41,8 @@ Różne modele czasu i agregacji opisują [Google rollUp/dailyRollUp](https://de
 
 ## Kontrakt kalorii — historia i bieżące dni
 
+W kodzie istnieje wstępna funkcja oceny syntetycznych kandydatów: wymaga jawnej definicji, jednostki, pochodzenia, pokrycia oraz dowodu zera. Nie ustala tych faktów na podstawie samego CSV i nie jest jeszcze podłączona do projekcji ani zweryfikowana na próbce rzeczywistych źródeł.
+
 Użytkownik wybrał puste pola, jeśli nie ma porównywalnych danych, zwłaszcza w dni bez opaski. Nie zastępuj ich modelem telefonu ani wyliczeniem z kroków. Nie wymagaj instalacji Fit. Ten sam kontrakt kwalifikuje 2026 i kolejne lata; ocenę wcześniejszych lat zaplanowano osobno.
 
 API rozróżnia aktywną energię bez bazowej oraz całkowitą energię pochodną z aktywnej i BMR. Historyczne „kalorie podczas aktywności” mogą zawierać bazowy wydatek w aktywnych minutach i mają inną definicję. [Dokumentacja energii](https://developers.google.com/health/data-types/calories).
