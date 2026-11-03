@@ -1,3 +1,4 @@
+import './local-env.ts';
 import { resolve } from 'node:path';
 import { takeoutDatabasePath } from '../../packages/storage/location.ts';
 import { verifyTakeout } from '../../packages/storage/verify-takeout.ts';

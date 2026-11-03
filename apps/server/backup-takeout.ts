@@ -1,3 +1,4 @@
+import './local-env.ts';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { backupToNewFile } from '../../packages/storage/backup.ts';

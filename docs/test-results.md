@@ -1,5 +1,10 @@
 # Raport weryfikacji
 
+## 2026-11-03 — uzupełnianie historii (backfill)
+
+- `npm test`: 99 testów zaliczonych (2 nowe: pokrycie dób tylko po ich końcu, podział luk na paczki w limitach, granice dób warszawskich w paczce obejmującej zmianę czasu; przebieg serwisu z zatrzymaniem po paczce, wznowieniem bez powtórzeń, ponowieniem i oczekiwaniem po trwałym 429 oraz pustym kolejnym przebiegiem). `npm run build`: poprawny.
+- Ograniczenia: tylko odpowiedzi syntetyczne. Przebiegu na koncie użytkownika i panelu w przeglądarce nie sprawdzono (serwer nie był uruchomiony, a środowisko nie miało ścieżki klienta OAuth). Masa i tkanka tłuszczowa nie są objęte.
+
 ## 2026-11-03 — 429 i rodzina źródeł
 
 - `npm test`: 97 testów zaliczonych (5 nowych: odczyt `Retry-After` w sekundach i jako data HTTP, nieznana wartość to brak, a nie zero; kod błędu i opóźnienie z adaptera; ponawianie tylko 429; wyczerpanie prób i zbyt długie opóźnienie; przebieg serwisu z dwoma 429, który kończy się bez zdublowanych stron, oraz trwałe 429, po którym zadanie zostaje przy zapisanym kursorze, a następny przebieg do podanego czasu nie wysyła żądań). `npm run build`: poprawny.

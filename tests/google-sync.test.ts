@@ -11,7 +11,7 @@ import { createDemoDatabase } from '../packages/storage/days.ts';
 import { createGoogleReadJob, commitGooglePage } from '../packages/storage/google-pages.ts';
 import { warsawDay } from '../packages/domain/warsaw-day.ts';
 import { GoogleAuth } from '../apps/server/google-auth.ts';
-import { GoogleSyncService, planSync, syncKinds } from '../apps/server/google-sync.ts';
+import { coveredDays, GoogleSyncService, planBackfill, planSync, syncKinds } from '../apps/server/google-sync.ts';
 
 function store() {
   const db = createDemoDatabase();
@@ -136,5 +136,67 @@ test('serwis odświeżania: 429 ponawia tę samą stronę z odstępem, a trwałe
     assert.equal(resumed.result, 'ok');
     assert.equal(service.status().pausedUntil, null);
     assert.equal(env.db.prepare("SELECT COUNT(*) AS n FROM google_read_jobs WHERE state != 'complete'").get()?.n, 0);
+  } finally { env.db.close(); rmSync(env.dir, { recursive: true, force: true }); }
+});
+
+test('backfill: pokrycie liczy tylko doby odczytane po ich końcu, a plan dzieli luki na paczki w limitach producenta', () => {
+  const db = store();
+  try {
+    // steps: 2026-01-01..03 read after they ended; 2026-01-05 read while in progress (not covered)
+    done(db, 'steps', '2026-01-01', '2026-01-04', '2026-01-04T08:00:00.000Z');
+    done(db, 'steps', '2026-01-05', '2026-01-06', '2026-01-05T20:00:00.000Z');
+    done(db, 'heart-rate-10m', warsawDay('2026-01-02').start, warsawDay('2026-01-02').end, '2026-01-03T00:00:00.000Z');
+    assert.deepEqual([...coveredDays(db, 'steps', '2026-01-01', '2026-04-30')], ['2026-01-01', '2026-01-02', '2026-01-03']);
+    assert.deepEqual([...coveredDays(db, 'heart-rate-10m', '2026-01-01', '2026-04-30')], ['2026-01-02']);
+    const plan = planBackfill(db, '2026-01-01', '2026-04-30');
+    const ranges = (kind: string) => plan.filter((read) => read.kind === kind).map((read) => `${read.first}..${read.last}`);
+    assert.deepEqual(ranges('steps'), ['2026-01-04..2026-04-03', '2026-04-04..2026-04-30']);
+    assert.equal(ranges('total-calories').length, 9);
+    assert.deepEqual(ranges('heart-rate-10m').slice(0, 3), ['2026-01-01..2026-01-01', '2026-01-03..2026-01-15', '2026-01-16..2026-01-28']);
+    // the window chunk across the spring DST change keeps Warsaw-day bounds and stays within 14 days
+    const dst = plan.find((read) => read.kind === 'heart-rate-10m' && read.first <= '2026-03-29' && read.last >= '2026-03-29')!;
+    assert.deepEqual([dst.begin, dst.end], [warsawDay(dst.first).start, warsawDay(dst.last).end]);
+    assert.ok(Date.parse(dst.end) - Date.parse(dst.begin) <= 14 * 86400000);
+    for (const read of plan) assert.equal(read.kind.endsWith('-10m') ? read.begin : read.first, read.kind.endsWith('-10m') ? warsawDay(read.first).start : read.begin);
+  } finally { db.close(); }
+});
+
+test('backfill: czyta wszystkie luki, wznawia bez powtórzeń, zatrzymuje się po paczce i czeka po trwałym 429', async () => {
+  const env = migrated();
+  try {
+    await env.ready();
+    let limited = 0; let rollups = 0;
+    const send: typeof fetch = async (address) => {
+      if (String(address).endsWith('/identity')) return Response.json({ healthUserId: 'synthetic-account' });
+      rollups++;
+      return limited-- > 0 ? new Response('', { status: 429 }) : Response.json({});
+    };
+    let clock = Date.parse('2026-01-20T10:00:00Z');
+    const options = { intervalMinutes: null, now: () => clock, send, sleep: async (ms: number) => { clock += ms; }, random: () => 0 };
+    const service = new GoogleSyncService(env.path, await authorized(), options);
+    assert.equal(service.backfillStatus().state, 'idle');
+    assert.deepEqual(service.backfillStatus().kinds.map((item) => item.covered), syncKinds.map(() => 0));
+
+    // stop after the first chunk: what was read stays, the rest waits for a later start
+    const stopping = new GoogleSyncService(env.path, await authorized(), { ...options, execute: async (db, read) => {
+      const id = createGoogleReadJob(db, createHash('sha256').update('synthetic-account').digest('hex'), read.kind, read.begin, read.end);
+      commitGooglePage(db, id, null, '{}'); stopping.stopBackfill();
+    } });
+    stopping.startBackfill(); await stopping.backfillDone;
+    assert.deepEqual([stopping.backfillStatus().state, stopping.backfillStatus().readsThisRun, stopping.backfillStatus().kinds[0]?.covered], ['stopped', 1, 19]);
+
+    // the first five rollup requests get 429 without Retry-After: the request is repeated, then the run waits and continues
+    limited = 5;
+    service.startBackfill(); await service.backfillDone;
+    const status = service.backfillStatus();
+    assert.equal(status.state, 'done');
+    assert.deepEqual(status.kinds.map((item) => [item.covered, item.total]), syncKinds.map(() => [19, 19]));
+    // 15 chunks in all (1 per steps, distance and active, 2 for total-calories, 2 per window kind), one read before the stop; plus five refused requests
+    assert.deepEqual([status.readsThisRun, rollups], [14, 14 + 5]);
+    assert.equal(env.db.prepare("SELECT COUNT(*) AS n FROM google_read_jobs WHERE state != 'complete'").get()?.n, 0);
+
+    rollups = 0;
+    service.startBackfill(); await service.backfillDone;
+    assert.deepEqual([service.backfillStatus().state, service.backfillStatus().readsThisRun, rollups], ['done', 0, 0]);
   } finally { env.db.close(); rmSync(env.dir, { recursive: true, force: true }); }
 });

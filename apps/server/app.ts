@@ -132,6 +132,17 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
       void googleSync.runOnce().then((outcome) => response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify(outcome)));
       return;
     }
+    if (request.method === 'POST' && url.pathname === '/api/google/backfill') {
+      if (!origin || !allowedOrigins.includes(origin) || request.headers['x-trivimo-request'] !== '1' || request.headers['content-type'] !== 'application/json') { response.writeHead(403, { 'Cache-Control': 'no-store' }).end(); return; }
+      if (!googleSync) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
+      void readJson(request).then((body) => {
+        const parsed = z.object({ action: z.enum(['start', 'stop']) }).strict().safeParse(body);
+        if (!parsed.success) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
+        const status = parsed.data.action === 'start' ? googleSync.startBackfill() : googleSync.stopBackfill();
+        response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify(status));
+      }, () => response.writeHead(400, { 'Cache-Control': 'no-store' }).end());
+      return;
+    }
     if (request.method === 'GET' && url.pathname === '/api/google/day-series') {
       const date = z.iso.date().safeParse(url.searchParams.get('date'));
       const metric = z.enum(Object.keys(seriesMetrics) as [keyof typeof seriesMetrics, ...(keyof typeof seriesMetrics)[]]).safeParse(url.searchParams.get('metric'));

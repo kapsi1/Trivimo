@@ -1,3 +1,4 @@
+import './local-env.ts';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';

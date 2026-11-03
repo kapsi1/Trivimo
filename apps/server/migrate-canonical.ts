@@ -1,3 +1,4 @@
+import './local-env.ts';
 import { realpathSync } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';

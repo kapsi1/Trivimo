@@ -1,3 +1,4 @@
+import '../apps/server/local-env.ts';
 import { createHash } from 'node:crypto';
 import { constants, copyFileSync, createReadStream, mkdtempSync, realpathSync, rmdirSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';

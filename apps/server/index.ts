@@ -1,3 +1,4 @@
+import './local-env.ts';
 import { createApp } from './app.ts';
 import { createDemoDatabase } from '../../packages/storage/days.ts';
 import { DatabaseSync } from 'node:sqlite';

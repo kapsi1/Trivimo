@@ -85,6 +85,7 @@ function GoogleConnection() {
       <p>Aplikacja poprosi o odczyt aktywności i pomiarów zdrowotnych, aby w przyszłości pobierać sześć metryk M1. Zakresy nie obejmują zapisu do Google.</p>
       <button type="button" disabled={busy} onClick={() => void connect()}>{busy ? 'Przekierowanie…' : 'Autoryzuj konto Google'}</button>
       {status.connected && <GoogleSync />}
+      {status.connected && <GoogleBackfill />}
       {status.connected && <GoogleReadJobs />}
     </>}
   </section>;
@@ -105,6 +106,51 @@ const syncStatusSchema = z.object({
   kinds: z.array(z.object({ kind: z.string(), lastReadAt: z.string().nullable(), coveredThrough: z.string().nullable() })),
 });
 const syncLabels: Record<string, string> = { steps: 'Kroki', distance: 'Dystans', 'total-calories': 'Kalorie total', 'active-energy-burned': 'Kalorie aktywne', 'heart-rate-10m': 'Tętno (okna)', 'active-energy-10m': 'Kalorie aktywne (okna)', 'total-calories-10m': 'Kalorie total (okna)', 'steps-10m': 'Kroki (okna)', 'distance-10m': 'Dystans (okna)' };
+const backfillSchema = z.object({
+  state: z.enum(['idle', 'running', 'stopping', 'stopped', 'done', 'error']), from: z.string(), through: z.string(),
+  startedAt: z.string().nullable(), finishedAt: z.string().nullable(), readsThisRun: z.number(), code: z.string().optional(), retryAt: z.string().optional(),
+  current: z.object({ kind: z.string(), first: z.string(), last: z.string() }).nullable(),
+  kinds: z.array(z.object({ kind: z.string(), covered: z.number(), total: z.number() })),
+});
+const backfillStateText: Record<z.infer<typeof backfillSchema>['state'], string> = { idle: 'Nie uruchomiono w tej sesji serwera.', running: 'Trwa uzupełnianie.', stopping: 'Zatrzymywanie po bieżącej paczce…', stopped: 'Zatrzymano; zapisane paczki zostają.', done: 'Zakończono: wszystkie doby zakresu są pokryte.', error: 'Przerwano z powodu błędu; zapisane paczki zostają.' };
+/** Progress lives on the server and in the store, so it survives a page reload, a closed tab and a server restart. */
+function GoogleBackfill() {
+  const [status, setStatus] = useState<z.infer<typeof backfillSchema> | null>(null);
+  const [busy, setBusy] = useState(false); const [error, setError] = useState(false);
+  async function load() {
+    const response = await fetch('/api/google/sync-status');
+    if (!response.ok) throw new Error('Status');
+    setStatus(z.object({ backfill: backfillSchema }).parse(await response.json()).backfill);
+  }
+  useEffect(() => { void load().catch(() => setError(true)); }, []);
+  const active = status?.state === 'running' || status?.state === 'stopping';
+  useEffect(() => {
+    if (!active) return;
+    const timer = setInterval(() => void load().then(() => setError(false), () => setError(true)), 2000);
+    return () => clearInterval(timer);
+  }, [active]);
+  async function send(action: 'start' | 'stop') {
+    setBusy(true); setError(false);
+    try {
+      const response = await fetch('/api/google/backfill', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Trivimo-Request': '1' }, body: JSON.stringify({ action }) });
+      if (!response.ok) throw new Error('Uzupełnianie');
+      setStatus(backfillSchema.parse(await response.json()));
+    } catch { setError(true); } finally { setBusy(false); }
+  }
+  const covered = status?.kinds.reduce((sum, item) => sum + item.covered, 0) ?? 0;
+  const total = status?.kinds.reduce((sum, item) => sum + item.total, 0) ?? 0;
+  return <section><h3>Uzupełnianie historii</h3>
+    <p>Odczytuje z API zakończone doby od {status?.from ?? '2026-01-01'} do {status?.through ?? 'wczoraj'}, których nie pokrył jeszcze żaden pełny odczyt wykonany po końcu doby, w paczkach (okna 10 min po 13 dób, kalorie total po 14, pozostałe sumy po 90). Działa w serwerze, więc zamknięcie karty go nie przerywa; po restarcie serwera trzeba go wznowić, a pokryte doby nie są czytane ponownie.</p>
+    {error && <p role="alert">Nie udało się odczytać stanu lub zmienić uzupełniania.</p>}
+    {status && <>
+      <p role="status">{backfillStateText[status.state]}{status.code ? ` Kod: ${status.code}.` : ''}{status.retryAt ? ` Wstrzymane przez limit Google do ${status.retryAt}.` : ''}{status.current ? ` Bieżąca paczka: ${syncLabels[status.current.kind] ?? status.current.kind}, ${status.current.first} – ${status.current.last}.` : ''}{status.startedAt ? ` Odczyty w tym przebiegu: ${status.readsThisRun}.` : ''}</p>
+      <p>Pokryte doby razem: {covered} z {total}{total > 0 ? ` (${Math.floor((covered / total) * 100)} %)` : ''}.</p>
+      <ul>{status.kinds.map((item) => <li key={item.kind}>{syncLabels[item.kind] ?? item.kind}: <progress max={item.total} value={item.covered} aria-label={`${syncLabels[item.kind] ?? item.kind}: pokryte doby`} /> {item.covered} z {item.total}</li>)}</ul>
+      {active ? <button type="button" disabled={busy || status.state === 'stopping'} onClick={() => void send('stop')}>Zatrzymaj po bieżącej paczce</button>
+        : <button type="button" disabled={busy || covered === total} onClick={() => void send('start')}>{status.startedAt || covered > 0 ? 'Wznów uzupełnianie' : 'Uzupełnij historię'}</button>}
+    </>}
+  </section>;
+}
 function GoogleSync() {
   const [status, setStatus] = useState<z.infer<typeof syncStatusSchema> | null>(null);
   const [busy, setBusy] = useState(false); const [error, setError] = useState(false);

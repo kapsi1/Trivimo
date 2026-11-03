@@ -1,3 +1,4 @@
+import './local-env.ts';
 import { lstatSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
