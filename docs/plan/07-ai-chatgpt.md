@@ -44,7 +44,7 @@ Proponowane przypadki użycia, nie gotowe endpointy:
 
 ## Analizy i dostawcy
 
-- [ ] M6 treningi: kontekst sesji, HR/strefy, pauzy, pokrycie i porównywalne poprzednie treningi. Generuj opis oparty na dostępnych liczbach z odniesieniem do okresu, bez dopowiadania brakującego GPS, spalania lub przyczyn zdrowotnych. Producentowe Gemini i własna analiza to osobne typy.
+- [ ] M6 treningi: każda sesja i okno niesie jawne źródło szacunku kalorii i dowód pomiaru (pokrycie tętna z opaski, kroki/GPS z telefonu); LLM dostaje te pola jako dane i nie porównuje kcal między opaską a telefonem bez nich (opaska wlicza intensywność z tętna, telefon liczy z kroków; zob. [kontrakty](../data-contracts.md)). Kontekst sesji, HR/strefy, pauzy, pokrycie i porównywalne poprzednie treningi. Generuj opis oparty na dostępnych liczbach z odniesieniem do okresu, bez dopowiadania brakującego GPS, spalania lub przyczyn zdrowotnych. Producentowe Gemini i własna analiza to osobne typy.
 - [ ] Żywienie: bilans z jakością/pokryciem, regularność i zgodność z podanymi celami, sugestie posiłków/planów. Oddziel tekst porady, propozycję planu i komendę zapisu. Analiza nie dodaje automatycznie jedzenia do dziennika.
 - [ ] Port provider-neutral: tekst, vision, transkrypcja i narzędzia jako capabilities, nie obowiązek identycznych funkcji u każdego LLM. Pierwszy dostawca po wyborze użytkownika, ustawienia modelu po stronie serwera; możliwość kolejnych dostawców bez migracji posiłków.
 - [ ] Zapis analizy: provider/model, promptVersion, dataRevision, zakres wejść, czas, status, koszt/usage jeśli dostępne i tekst. Cache po zgodnej wersji wejść/prompcie; stare analizy oznaczać po korekcie danych. Nie wysyłać tych samych serii ponownie tylko przez odświeżenie UI.

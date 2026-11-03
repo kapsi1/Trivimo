@@ -103,6 +103,11 @@ export async function migrateCalorieJobs(db: DatabaseSync, backupPath: string): 
   await rebuildGoogleJobs(db, backupPath, 6, ['weight', 'body-fat', 'steps', 'distance', 'total-calories', 'active-energy-burned']);
 }
 
+/** Version 8: ten-minute window jobs (heart rate as wear evidence, active energy for its split by wear). */
+export async function migrateWindowJobs(db: DatabaseSync, backupPath: string): Promise<void> {
+  await rebuildGoogleJobs(db, backupPath, 7, ['weight', 'body-fat', 'steps', 'distance', 'total-calories', 'active-energy-burned', 'heart-rate-10m', 'active-energy-10m']);
+}
+
 export function publishCanonicalDay(db: DatabaseSync, input: DaySnapshotInput, expectedRevision: number | null) {
   const parsed = snapshotInputSchema.parse(input);
   const notes = projectIssueNotes(parsed.issues);

@@ -115,7 +115,7 @@ export function initializeTakeoutStore(db: DatabaseSync): void {
   db.exec('PRAGMA foreign_keys = ON');
   const version = db.prepare('PRAGMA user_version').get()?.user_version;
   const appId = db.prepare('PRAGMA application_id').get()?.application_id;
-  if ((version === 1 || version === 2 || version === 3 || (version === 4 || version === 5 || version === 6 || version === 7)) && appId === 1414682185) return;
+  if ((version === 1 || version === 2 || version === 3 || (version === 4 || version === 5 || version === 6 || version === 7 || version === 8)) && appId === 1414682185) return;
   if (version !== 0 || appId !== 0 || Number(db.prepare("SELECT COUNT(*) AS count FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").get()?.count) !== 0) {
     throw new Error('Nieobsługiwana baza importu');
   }
@@ -148,7 +148,7 @@ export function importTakeout(db: DatabaseSync, directory: string, onPreview?: (
     try {
       db.prepare("INSERT INTO import_sessions VALUES (?, ?, 'running')").run(sessionId, root);
       if (approvedAccountId) {
-        if (![4, 5, 6, 7].includes(Number(db.prepare('PRAGMA user_version').get()?.user_version))) throw new Error('Nieobsługiwana wersja konta');
+        if (![4, 5, 6, 7, 8].includes(Number(db.prepare('PRAGMA user_version').get()?.user_version))) throw new Error('Nieobsługiwana wersja konta');
         db.prepare("INSERT INTO import_account_decisions VALUES (?, 1, ?, 'user_confirmed', ?)").run(sessionId, approvedAccountId, new Date().toISOString());
       }
       const insert = db.prepare('INSERT INTO import_files (session_id, path, kind, digest, row_count) VALUES (?, ?, ?, ?, ?)');

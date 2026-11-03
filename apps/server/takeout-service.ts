@@ -21,7 +21,7 @@ export class TakeoutService {
       }
       const plan = previewTakeout(directory, db);
       let accountId: string | null = null;
-      if (db && [4, 5, 6, 7].includes(Number(db.prepare('PRAGMA user_version').get()?.user_version))) {
+      if (db && [4, 5, 6, 7, 8].includes(Number(db.prepare('PRAGMA user_version').get()?.user_version))) {
         if (plan.pendingId) {
           const previous = db.prepare('SELECT account_id FROM import_account_decisions WHERE session_id = ? ORDER BY revision DESC LIMIT 1').get(plan.pendingId);
           accountId = typeof previous?.account_id === 'string' ? previous.account_id : null;
@@ -59,7 +59,7 @@ export class TakeoutService {
     const db = new DatabaseSync(this.dbPath);
     try {
       const version = db.prepare('PRAGMA user_version').get()?.user_version;
-      if (db.prepare('PRAGMA application_id').get()?.application_id !== 1414682185 || (version !== 3 && (version !== 4 && version !== 5 && version !== 6 && version !== 7))) throw new Error('invalid_store');
+      if (db.prepare('PRAGMA application_id').get()?.application_id !== 1414682185 || (version !== 3 && (version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8))) throw new Error('invalid_store');
       return saveUserNote(db, input);
     } finally { db.close(); }
   }
@@ -68,7 +68,7 @@ export class TakeoutService {
     if (!existsSync(this.dbPath) || lstatSync(this.dbPath).isSymbolicLink()) throw new Error('invalid_store');
     const db = new DatabaseSync(this.dbPath, { readOnly: true });
     try {
-      if (![4, 5, 6, 7].includes(Number(db.prepare('PRAGMA user_version').get()?.user_version))) throw new Error('account_unavailable');
+      if (![4, 5, 6, 7, 8].includes(Number(db.prepare('PRAGMA user_version').get()?.user_version))) throw new Error('account_unavailable');
       const accounts = db.prepare('SELECT id FROM source_accounts LIMIT 2').all();
       if (accounts.length !== 1 || typeof accounts[0]?.id !== 'string') throw new Error('account_unavailable');
       const sessions = unassignedSessions(db);
@@ -86,7 +86,7 @@ export class TakeoutService {
     if (!existsSync(this.dbPath) || lstatSync(this.dbPath).isSymbolicLink()) throw new Error('invalid_store');
     const db = new DatabaseSync(this.dbPath);
     try {
-      if (db.prepare('PRAGMA application_id').get()?.application_id !== 1414682185 || ![4, 5, 6, 7].includes(Number(db.prepare('PRAGMA user_version').get()?.user_version))) throw new Error('invalid_store');
+      if (db.prepare('PRAGMA application_id').get()?.application_id !== 1414682185 || ![4, 5, 6, 7, 8].includes(Number(db.prepare('PRAGMA user_version').get()?.user_version))) throw new Error('invalid_store');
       db.exec('PRAGMA foreign_keys = ON');
       assignSessions(db, state.accountId, state.sessions);
       return { assigned: state.sessions.length };

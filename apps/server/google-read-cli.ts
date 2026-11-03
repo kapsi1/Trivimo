@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { dailyRollupTypes } from '../../packages/adapters/google-health/daily-rollup.ts';
+import { warsawDay } from '../../packages/domain/warsaw-day.ts';
 import { takeoutDatabasePath } from '../../packages/storage/location.ts';
 import { GoogleAuth } from './google-auth.ts';
 import { readGoogleJobPage, startGoogleReadJob } from './google-read-service.ts';
@@ -11,18 +12,21 @@ import { DpapiTokenStore } from './token-store.ts';
 /** Reads one civil-day aggregate range through the same code path as the panel; prints only counts and error codes. */
 async function main() {
   const [kind, first, last, flag] = process.argv.slice(2);
-  const parsedKind = z.enum(dailyRollupTypes).safeParse(kind);
+  const parsedKind = z.enum([...dailyRollupTypes, 'heart-rate-10m', 'active-energy-10m']).safeParse(kind);
   if (!parsedKind.success || !z.iso.date().safeParse(first).success || !z.iso.date().safeParse(last).success) throw new Error('usage');
   const clientFile = process.env.TRIVIMO_GOOGLE_CLIENT_FILE; const sourcePath = takeoutDatabasePath();
   if (!clientFile || !sourcePath) throw new Error('missing_configuration');
-  const end = new Date(Date.parse(`${last}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
+  // Civil-day kinds keep producer dates; window kinds keep the UTC bounds of the Warsaw days.
+  const windowed = parsedKind.data === 'heart-rate-10m' || parsedKind.data === 'active-energy-10m';
+  const end = windowed ? warsawDay(last!).end : new Date(Date.parse(`${last}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
+  const begin = windowed ? warsawDay(first!).start : first!;
   const auth = GoogleAuth.fromJson(JSON.parse(readFileSync(clientFile, 'utf8')) as unknown, new DpapiTokenStore(join(dirname(sourcePath), 'google-token.dpapi')));
   await auth.restore();
   const db = new DatabaseSync(sourcePath);
   try {
-    if (db.prepare('PRAGMA user_version').get()?.user_version !== 7) throw new Error('migration_required');
-    if (flag !== '--again' && db.prepare("SELECT 1 FROM google_read_jobs WHERE kind = ? AND range_start = ? AND range_end = ? AND state = 'complete'").get(parsedKind.data, first, end)) { console.log(`skipped: ${parsedKind.data} ${first}..${last} already read (use --again to repeat)`); return; }
-    const id = await startGoogleReadJob(db, auth, parsedKind.data, first!, end);
+    if (db.prepare('PRAGMA user_version').get()?.user_version !== 8) throw new Error('migration_required');
+    if (flag !== '--again' && db.prepare("SELECT 1 FROM google_read_jobs WHERE kind = ? AND range_start = ? AND range_end = ? AND state = 'complete'").get(parsedKind.data, begin, end)) { console.log(`skipped: ${parsedKind.data} ${first}..${last} already read (use --again to repeat)`); return; }
+    const id = await startGoogleReadJob(db, auth, parsedKind.data, begin, end);
     let pages = 0;
     for (;;) { const result = await readGoogleJobPage(db, auth, id); pages++; if (result.complete || pages >= 50) break; }
     console.log(`done: ${parsedKind.data} ${first}..${last} pages=${pages}`);

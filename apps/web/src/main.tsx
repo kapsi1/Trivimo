@@ -89,7 +89,7 @@ function GoogleConnection() {
   </section>;
 }
 
-const googleJobSchema = z.object({ id: z.uuid(), kind: z.enum(['weight', 'body-fat', 'steps', 'distance', 'total-calories', 'active-energy-burned']), start: z.string().max(40), end: z.string().max(40), state: z.enum(['running', 'complete']), createdAt: z.iso.datetime(), pages: z.number().int().nonnegative() });
+const googleJobSchema = z.object({ id: z.uuid(), kind: z.enum(['weight', 'body-fat', 'steps', 'distance', 'total-calories', 'active-energy-burned', 'heart-rate-10m', 'active-energy-10m']), start: z.string().max(40), end: z.string().max(40), state: z.enum(['running', 'complete']), createdAt: z.iso.datetime(), pages: z.number().int().nonnegative() });
 function googleJobsError(error: unknown): string {
   const code = error instanceof Error ? error.message : '';
   if (code === 'migration_required') return 'Wersja magazynu wymaga migracji z kopią zapasową.';
@@ -100,11 +100,11 @@ function googleJobsError(error: unknown): string {
 }
 function GoogleReadJobs() {
   const [jobs, setJobs] = useState<z.infer<typeof googleJobSchema>[] | null>(null);
-  const [kind, setKind] = useState<'weight' | 'body-fat' | 'steps' | 'distance' | 'total-calories' | 'active-energy-burned'>('weight');
+  const [kind, setKind] = useState<'weight' | 'body-fat' | 'steps' | 'distance' | 'total-calories' | 'active-energy-burned' | 'heart-rate-10m' | 'active-energy-10m'>('weight');
   const [date, setDate] = useState(() => { const d = new Date(`${warsawToday()}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); });
   const [lastDate, setLastDate] = useState('');
   const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false);
-  const daily = kind !== 'weight' && kind !== 'body-fat';
+  const daily = kind === 'steps' || kind === 'distance' || kind === 'total-calories' || kind === 'active-energy-burned';
   const nextCivilDay = (value: string) => new Date(Date.parse(`${value}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
   const rangeInvalid = daily && !!lastDate && (lastDate < date || (Date.parse(lastDate) - Date.parse(date)) / 86400000 + 1 > (kind === 'total-calories' ? 14 : 90));
   async function refresh() {
@@ -130,13 +130,13 @@ function GoogleReadJobs() {
     finally { setBusy(false); }
   }
   return <section><h3>Odczyt próbny</h3><p>Jedno zadanie obejmuje wybrany dzień i rodzaj pomiaru; masa i tłuszcz używają dnia warszawskiego, kroki, dystans i kalorie doby cywilnej producenta. Przygotowanie zapisuje zadanie; pobranie strony odczytuje jedną porcję danych Google. Oryginały nie są jeszcze kwalifikowane ani łączone z Takeout.</p>
-    <label>Rodzaj <select value={kind} disabled={busy} onChange={(event) => setKind(event.target.value as typeof kind)}><option value="weight">Masa ciała</option><option value="body-fat">Tkanka tłuszczowa</option><option value="steps">Kroki (suma doby)</option><option value="distance">Dystans (suma doby)</option><option value="total-calories">Kalorie total (zawiera BMR)</option><option value="active-energy-burned">Kalorie aktywne</option></select></label>{' '}
+    <label>Rodzaj <select value={kind} disabled={busy} onChange={(event) => setKind(event.target.value as typeof kind)}><optgroup label="Pomiary (doba warszawska)"><option value="weight">Masa ciała</option><option value="body-fat">Tkanka tłuszczowa</option></optgroup><optgroup label="Sumy dobowe (doba producenta)"><option value="steps">Kroki — suma doby</option><option value="distance">Dystans — suma doby</option><option value="total-calories">Kalorie total — suma doby (zawiera BMR)</option><option value="active-energy-burned">Kalorie aktywne — suma doby</option></optgroup><optgroup label="Okna 10 min (doba warszawska)"><option value="heart-rate-10m">Tętno — okna 10 min</option><option value="active-energy-10m">Kalorie aktywne — okna 10 min</option></optgroup></select></label>{' '}
     <label>Data w Warszawie <input type="date" min="2026-01-01" max="9998-12-31" value={date} disabled={busy} onChange={(event) => setDate(event.target.value)} /></label>{' '}
     {daily && <><label>Do dnia (włącznie, opcjonalnie; do {kind === 'total-calories' ? 14 : 90} dób) <input type="date" min={date} max="9998-12-31" value={lastDate} disabled={busy} onChange={(event) => setLastDate(event.target.value)} /></label>{' '}</>}
     <button type="button" disabled={busy || !date || !jobs || rangeInvalid} onClick={() => void run('/api/google/jobs', daily && lastDate ? { kind, start: date, end: nextCivilDay(lastDate) } : { kind, date })}>Przygotuj zadanie</button>
     {message && <p role="status">{message}</p>}
     {!jobs && <button type="button" disabled={busy} onClick={retry}>Ponów odczyt listy zadań</button>}
-    {jobs && jobs.length > 0 && <div className="table-wrap"><table><thead><tr><th>Typ</th><th>Zakres UTC / doby</th><th>Stan</th><th>Strony</th><th>Akcja</th></tr></thead><tbody>{jobs.map((job) => <tr key={job.id}><td>{({ weight: 'Masa ciała', 'body-fat': 'Tkanka tłuszczowa', steps: 'Kroki', distance: 'Dystans', 'total-calories': 'Kalorie total', 'active-energy-burned': 'Kalorie aktywne' })[job.kind]}</td><td>{job.start} – {job.end}{job.kind === 'weight' || job.kind === 'body-fat' ? '' : ' (doba producenta)'}</td><td>{job.state === 'complete' ? 'Odczyt zakończony' : 'Do kontynuacji'}</td><td>{job.pages}</td><td>{job.state === 'running' && <button type="button" disabled={busy} onClick={() => void run('/api/google/jobs/next', { id: job.id })}>Pobierz stronę</button>}</td></tr>)}</tbody></table></div>}
+    {jobs && jobs.length > 0 && <div className="table-wrap"><table><thead><tr><th>Typ</th><th>Zakres UTC / doby</th><th>Stan</th><th>Strony</th><th>Akcja</th></tr></thead><tbody>{jobs.map((job) => <tr key={job.id}><td>{({ weight: 'Masa ciała', 'body-fat': 'Tkanka tłuszczowa', steps: 'Kroki — suma doby', distance: 'Dystans — suma doby', 'total-calories': 'Kalorie total — suma doby', 'active-energy-burned': 'Kalorie aktywne — suma doby', 'heart-rate-10m': 'Tętno — okna 10 min', 'active-energy-10m': 'Kalorie aktywne — okna 10 min' })[job.kind]}</td><td>{job.start} – {job.end}{job.kind === 'steps' || job.kind === 'distance' || job.kind === 'total-calories' || job.kind === 'active-energy-burned' ? ' (doba producenta)' : ''}</td><td>{job.state === 'complete' ? 'Odczyt zakończony' : 'Do kontynuacji'}</td><td>{job.pages}</td><td>{job.state === 'running' && <button type="button" disabled={busy} onClick={() => void run('/api/google/jobs/next', { id: job.id })}>Pobierz stronę</button>}</td></tr>)}</tbody></table></div>}
   </section>;
 }
 
@@ -253,6 +253,7 @@ function BodyComparison({ date }: { date: string }) {
     <GoogleDailyCandidates key="daily-distance" date={date} kind="distance" />
     <GoogleDailyCandidates key="daily-total" date={date} kind="total-calories" />
     <GoogleDailyCandidates key="daily-active" date={date} kind="active-energy-burned" />
+    <BandShare key="band-share" date={date} />
   </div>;
 }
 
@@ -261,6 +262,35 @@ const dailyReviewSchema = z.object({
   truncated: z.boolean(), coverage: z.literal('unknown'), multipleAccounts: z.boolean(),
   jobs: z.array(z.object({ start: z.string(), end: z.string(), state: z.enum(['running', 'complete']) })),
 });
+const bandShareSchema = z.object({
+  totalWindows: z.number().int().positive(),
+  heartRate: z.object({ windows: z.number().int().nonnegative() }).nullable(),
+  activeEnergy: z.object({ bandKcal: z.string(), bandWindows: z.number().int(), otherKcal: z.string(), otherWindows: z.number().int() }).nullable(),
+  activeEnergyRead: z.boolean(),
+});
+function BandShare({ date }: { date: string }) {
+  const [result, setResult] = useState<z.infer<typeof bandShareSchema> | null>(null);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    setResult(null); setError(false);
+    fetch(`/api/google/band-share?date=${encodeURIComponent(date)}`, { signal: controller.signal })
+      .then((response) => { if (!response.ok) throw new Error('Dane'); return response.json(); })
+      .then((data: unknown) => setResult(bandShareSchema.parse(data)))
+      .catch(() => { if (!controller.signal.aborted) setError(true); });
+    return () => controller.abort();
+  }, [date]);
+  const percent = (part: number, whole: number) => `${(part / whole * 100).toLocaleString('pl-PL', { maximumFractionDigits: 0 })}%`;
+  return <div><h4>Udział opaski w dobie (dzień warszawski, okna 10-minutowe)</h4>
+    {error ? <p role="alert">Nie udało się odczytać udziału opaski.</p> : !result ? <p>Ładowanie…</p> : !result.heartRate ? <p>Brak zapisanego odczytu tętna dla całej doby (rodzaj „Tętno — okna 10 min"). Bez niego nie wiadomo, kiedy opaska mierzyła.</p> : <>
+      <p>Tętno z urządzenia w {result.heartRate.windows} z {result.totalWindows} okien ({percent(result.heartRate.windows, result.totalWindows)} doby). To dowód pomiaru, nie dowód noszenia przez całe okno.</p>
+      {result.activeEnergy ? <p>Aktywne kalorie: {result.activeEnergy.bandKcal.replace('.', ',')} kcal w oknach z tętnem opaski ({result.activeEnergy.bandWindows} okien) i {result.activeEnergy.otherKcal.replace('.', ',')} kcal w oknach bez niego ({result.activeEnergy.otherWindows} okien, szacunek telefonu lub brak pomiaru tętna). Opaska liczy wysiłek z tętna, telefon z kroków, więc kcal z obu źródeł nie są wprost porównywalne.</p>
+        : <p>{result.activeEnergyRead ? '' : 'Brak zapisanego odczytu aktywnych kalorii w oknach 10-minutowych dla całej doby (rodzaj „Kalorie aktywne — okna 10 min").'}</p>}
+      <p>Wartość całkowita kalorii pozostaje jedną wartością producenta; udział opaski dotyczy tylko podziału części aktywnej.</p>
+    </>}
+  </div>;
+}
+
 function GoogleDailyCandidates({ date, kind }: { date: string; kind: 'steps' | 'distance' | 'total-calories' | 'active-energy-burned' }) {
   const [result, setResult] = useState<z.infer<typeof dailyReviewSchema> | null>(null);
   const [error, setError] = useState(false);
