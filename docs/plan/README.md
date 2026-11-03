@@ -33,7 +33,7 @@ Stan na 2026-11-03 (szczegóły i dowody: [wyniki testów](../test-results.md), 
 Następne kroki w tej kolejności:
 
 1. Backfill od 2026-01-01: wykonano 2026-11-03 dla dziewięciu rodzajów odświeżania; 306 dób pokrytych, sumy okien zgodne z agregatami dobowymi ([wyniki](../test-results.md)). Masa i tkanka tłuszczowa z API nie są objęte.
-2. Kolejka z anulowaniem i zaznaczenie dłuższej przerwy w tabeli dni. Ponowienia przy 429 (`Retry-After` albo rosnący odstęp z rozrzutem) i wstrzymanie przebiegów po trwałym 429 wykonano 2026-11-03; rodzina źródeł `all-sources` jest jedną stałą w adapterach (zob. kontrakty).
+2. Dłuższa przerwa: wykonano 2026-11-04 — przebieg automatyczny sam uruchamia uzupełnianie, gdy zostają nieodczytane doby (chyba że zatrzymano je ręcznie), a tabela dni oznacza minioną dobę 2026 bez odczytu uwagą o przerwie. Zatrzymanie uzupełniania po bieżącej paczce zastępuje osobną kolejkę z anulowaniem; ogólnej kolejki zadań nie budowano. Ponowienia przy 429 (`Retry-After` albo rosnący odstęp z rozrzutem) i wstrzymanie przebiegów po trwałym 429 wykonano 2026-11-03; rodzina źródeł `all-sources` jest jedną stałą w adapterach (zob. kontrakty).
 3. Kwalifikacja kalorii: wykonano 2026-11-03 (reguła `google-energy-v1`, snapshoty od 2026-01-01, źródło szacunku jako udział opaski; [kontrakty](../data-contracts.md), [decyzje](../decisions.md)). Kroki i dystans zakwalifikowano 2026-11-03 (reguła `google-activity-v1`), masę i tkankę tłuszczową 2026-11-04 (`google-body-v1`). Pozostaje rola źródła „Phone Health Connect” w aktywnej energii. Kolumna „Źródła” (wersja 10, listy źródeł od 2026-01-01) wykonana 2026-11-03.
 4. Seria godzinowa tętna, porównanie wykresów kroków i dystansu z Health, API vs Takeout dla kolejnych dób.
 

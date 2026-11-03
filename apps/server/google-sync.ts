@@ -146,9 +146,25 @@ export class GoogleSyncService {
   start(): void {
     const minutes = this.options.intervalMinutes;
     if (!minutes || this.timer) return;
-    void this.runOnce();
-    this.timer = setInterval(() => void this.runOnce(), minutes * 60000);
+    void this.scheduledRun();
+    this.timer = setInterval(() => void this.scheduledRun(), minutes * 60000);
     this.timer.unref();
+  }
+  /**
+   * One automatic run; when completed days since `backfillFrom` are still uncovered (a pause longer than the 13-day
+   * catch-up, or a kind added later), the backfill is started to fill them. A stopped or failed backfill is not restarted
+   * by the timer until the next run finds the gap again.
+   */
+  async scheduledRun(): Promise<SyncOutcome> {
+    const outcome = await this.runOnce();
+    if (outcome.result === 'ok' && this.backfill?.state !== 'running' && this.backfill?.state !== 'stopping' && this.backfill?.state !== 'stopped' && this.hasGaps()) this.startBackfill();
+    return outcome;
+  }
+  private hasGaps(): boolean {
+    try {
+      const db = this.open();
+      try { return planBackfill(db, backfillFrom, addDays(sourceDay(new Date(this.now()).toISOString()), -1)).length > 0; } finally { db.close(); }
+    } catch { return false; }
   }
   stop(): void { if (this.timer) clearInterval(this.timer); this.timer = undefined; }
   /**

@@ -1,5 +1,10 @@
 # Raport weryfikacji
 
+## 2026-11-04 — automatyczne nadrabianie przerwy
+
+- `npm test`: 110 testów zaliczonych (nowy: przebieg automatyczny na pustym magazynie czyta 13 dni, wykrywa starszą lukę i sam uruchamia uzupełnianie aż do pełnego pokrycia; po ręcznym zatrzymaniu kolejny przebieg nie wznawia go). `npm run build`: poprawny.
+- Przeglądarka: nowe opisy paneli widoczne, tabela dni bez błędów. Oznaczenia doby bez odczytu nie dało się zobaczyć na prawdziwych danych (wszystkie doby 2026 są odczytane); sprawdzone tylko typami, bez testu UI.
+
 ## 2026-11-04 — sprawdzenie w przeglądarce
 
 - Wbudowana przeglądarka aplikacji, `http://localhost:5173/` z serwerem użytkownika (`tsx watch`, magazyn w wersji 10), dane prawdziwe. Sprawdzono: tabelę dni dla 2026-10-06 – 2026-11-04 i 2026-04-01 – 2026-05-12 (sześć metryk, „Część dnia z opaską”, „Źródła”, uwagi, doba w toku), szczegóły komórek kalorii (pełny i starszy model, sam BMR), kroków, dystansu i masy (także ze scaloną kopią), panele „Odświeżanie bieżących dni” (13 rodzajów) i „Uzupełnianie historii” (3991 z 3991 dób). Konsola bez błędów.

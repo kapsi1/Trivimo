@@ -224,3 +224,25 @@ test('serwis odświeżania: krótkie 503 jest ponawiane, trwałe 503 kończy prz
     assert.equal(service.status().pausedUntil, null);
   } finally { env.db.close(); rmSync(env.dir, { recursive: true, force: true }); }
 });
+
+test('przebieg automatyczny: luka starsza niż nadrabianie uruchamia uzupełnianie, a zatrzymane ręcznie nie wraca samo', async () => {
+  const env = migrated();
+  try {
+    await env.ready();
+    const digest = createHash('sha256').update('synthetic-account').digest('hex');
+    const execute = async (db: DatabaseSync, read: { kind: string; begin: string; end: string }) => { const id = createGoogleReadJob(db, digest, read.kind as Parameters<typeof createGoogleReadJob>[2], read.begin, read.end); commitGooglePage(db, id, null, '{}'); };
+    let clock = Date.parse('2026-02-20T10:00:00Z');
+    const service = new GoogleSyncService(env.path, await authorized(), { intervalMinutes: 60, now: () => clock, execute, sleep: async (ms) => { clock += ms; } });
+    // the run reads only the last 13 days; January stays uncovered, so the backfill starts and fills it
+    assert.equal((await service.scheduledRun()).result, 'ok');
+    assert.equal(service.backfillStatus().state, 'running');
+    await service.backfillDone;
+    assert.deepEqual([service.backfillStatus().state, service.backfillStatus().kinds.every((item) => item.covered === item.total)], ['done', true]);
+
+    // a later gap after a manual stop is left for the user to resume
+    clock = Date.parse('2026-04-10T10:00:00Z');
+    service.startBackfill(); service.stopBackfill(); await service.backfillDone;
+    await service.scheduledRun();
+    assert.equal(service.backfillStatus().state, 'stopped');
+  } finally { env.db.close(); rmSync(env.dir, { recursive: true, force: true }); }
+});
