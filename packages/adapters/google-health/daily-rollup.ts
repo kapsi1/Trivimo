@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { readLimitedText } from './limited-json.ts';
+import { googleHttpError } from './rate-limit.ts';
 
 export const dailyRollupTypes = ['steps', 'distance', 'total-calories', 'active-energy-burned'] as const;
 export type DailyRollupType = (typeof dailyRollupTypes)[number];
@@ -54,17 +55,25 @@ export function parseDailyRollup(rawJson: string, type: DailyRollupType): { days
   return { days, nextPageToken: parsed.nextPageToken || null };
 }
 
-/** One bounded page of one-day windows for the half-open civil range [start, end). Unqualified, unreconciled source values. */
 export const dataSourceFamilies = ['all-sources', 'google-wearables', 'google-sources'] as const;
-export async function dailyRollupPage(input: { type: DailyRollupType; start: string; end: string; pageToken?: string; family?: (typeof dataSourceFamilies)[number] }, accessToken: string, send: typeof fetch = fetch): Promise<DailyRollupPage> {
+export type DataSourceFamily = (typeof dataSourceFamilies)[number];
+/**
+ * Family used by every saved read job. `google-wearables` does not separate the phone from the band and `all-sources`
+ * matches the Health app (data contracts, 2026-11-03); jobs do not store a family, so reading another one needs a schema change.
+ */
+export const readSourceFamily: DataSourceFamily = 'all-sources';
+export const sourceFamilyName = (family: DataSourceFamily | undefined) => `users/me/dataSourceFamilies/${z.enum(dataSourceFamilies).parse(family ?? readSourceFamily)}`;
+
+/** One bounded page of one-day windows for the half-open civil range [start, end). Unqualified, unreconciled source values. */
+export async function dailyRollupPage(input: { type: DailyRollupType; start: string; end: string; pageToken?: string; family?: DataSourceFamily }, accessToken: string, send: typeof fetch = fetch): Promise<DailyRollupPage> {
   const type = z.enum(dailyRollupTypes).parse(input.type);
   z.iso.date().parse(input.start); z.iso.date().parse(input.end);
   const span = (Date.parse(`${input.end}T00:00:00Z`) - Date.parse(`${input.start}T00:00:00Z`)) / 86400000;
   if (!(span >= 1 && span <= maxRollupDays(type))) throw new Error('invalid_range');
   if (!accessToken || accessToken.length > 16384 || (input.pageToken !== undefined && (input.pageToken.length === 0 || input.pageToken.length > 8192))) throw new Error('invalid_request');
-  const body = { range: { start: civil(input.start), end: civil(input.end) }, windowSizeDays: 1, dataSourceFamily: `users/me/dataSourceFamilies/${z.enum(dataSourceFamilies).parse(input.family ?? 'all-sources')}`, pageSize: maxRollupDays(type), ...(input.pageToken ? { pageToken: input.pageToken } : {}) };
+  const body = { range: { start: civil(input.start), end: civil(input.end) }, windowSizeDays: 1, dataSourceFamily: sourceFamilyName(input.family), pageSize: maxRollupDays(type), ...(input.pageToken ? { pageToken: input.pageToken } : {}) };
   const response = await send(`https://health.googleapis.com/v4/users/me/dataTypes/${type}/dataPoints:dailyRollUp`, { method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify(body), redirect: 'error', signal: AbortSignal.timeout(15000) });
-  if (!response.ok) throw new Error(`google_http_${response.status}`);
+  if (!response.ok) throw googleHttpError('google_http', response);
   const rawJson = await readLimitedText(response);
   return { rawJson, ...parseDailyRollup(rawJson, type) };
 }

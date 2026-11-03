@@ -103,3 +103,38 @@ test('serwis odświeżania: wznawia niedokończone zadanie, wykonuje plan i zatr
     assert.equal((await unauthorized.runOnce()).result, 'authorization_required');
   } finally { env.db.close(); rmSync(env.dir, { recursive: true, force: true }); }
 });
+
+test('serwis odświeżania: 429 ponawia tę samą stronę z odstępem, a trwałe 429 wstrzymuje kolejne przebiegi', async () => {
+  const env = migrated();
+  try {
+    await env.ready();
+    let limited = 2; let reads = 0; const sleeps: number[] = [];
+    const send: typeof fetch = async (address) => {
+      if (String(address).endsWith('/identity')) return Response.json({ healthUserId: 'synthetic-account' });
+      reads++;
+      return limited-- > 0 ? new Response('', { status: 429, headers: { 'Retry-After': '3' } }) : Response.json({});
+    };
+    let clock = Date.parse('2026-03-10T12:00:00Z');
+    const service = new GoogleSyncService(env.path, await authorized(), { intervalMinutes: 60, now: () => clock, send, sleep: async (ms) => { sleeps.push(ms); }, random: () => 0 });
+    const outcome = await service.runOnce();
+    assert.deepEqual([outcome.result, outcome.reads, sleeps], ['ok', syncKinds.length * 2, [3000, 3000]]);
+    assert.equal(reads, syncKinds.length * 2 + 2);
+    assert.equal(env.db.prepare('SELECT COUNT(*) AS n FROM google_read_pages').get()?.n, syncKinds.length * 2);
+    assert.equal(env.db.prepare("SELECT COUNT(*) AS n FROM google_read_jobs WHERE state != 'complete'").get()?.n, 0);
+
+    limited = Infinity; reads = 0; sleeps.length = 0; clock = Date.parse('2026-03-11T12:00:00Z');
+    const failed = await service.runOnce();
+    assert.deepEqual([failed.result, failed.code, failed.retryAt, reads, sleeps], ['error', 'google_http_429', '2026-03-11T12:00:03.000Z', 4, [3000, 3000, 3000]]);
+    // the unfinished job stays at its saved cursor; nothing is sent until the producer's delay has passed
+    assert.equal(env.db.prepare("SELECT COUNT(*) AS n FROM google_read_jobs WHERE state = 'running' AND cursor IS NULL").get()?.n, 1);
+    const paused = await service.runOnce();
+    assert.deepEqual([paused.code, paused.retryAt, reads], ['rate_limited', '2026-03-11T12:00:03.000Z', 4]);
+    assert.equal(service.status().pausedUntil, '2026-03-11T12:00:03.000Z');
+
+    limited = 0; clock += 3000;
+    const resumed = await service.runOnce();
+    assert.equal(resumed.result, 'ok');
+    assert.equal(service.status().pausedUntil, null);
+    assert.equal(env.db.prepare("SELECT COUNT(*) AS n FROM google_read_jobs WHERE state != 'complete'").get()?.n, 0);
+  } finally { env.db.close(); rmSync(env.dir, { recursive: true, force: true }); }
+});

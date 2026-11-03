@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { readLimitedText } from './limited-json.ts';
+import { googleHttpError } from './rate-limit.ts';
 
 const responseSchema = z.object({ dataPoints: z.array(z.unknown()).max(100).optional(), nextPageToken: z.string().max(8192).optional() }).passthrough();
 export type BodyType = 'weight' | 'body-fat';
@@ -17,7 +18,7 @@ export async function listBodyPage(input: { type: BodyType; start: string; end: 
   url.searchParams.set('pageSize', '100');
   if (input.pageToken) url.searchParams.set('pageToken', input.pageToken);
   const response = await send(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(15000) });
-  if (!response.ok) throw new Error(`google_http_${response.status}`);
+  if (!response.ok) throw googleHttpError('google_http', response);
   const rawJson = await readLimitedText(response);
   const raw = JSON.parse(rawJson) as unknown;
   const parsed = responseSchema.parse(raw);

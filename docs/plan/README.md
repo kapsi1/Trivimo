@@ -33,7 +33,7 @@ Stan na 2026-11-03 (szczegóły i dowody: [wyniki testów](../test-results.md), 
 Następne kroki w tej kolejności:
 
 1. Backfill od 2026-01-01 w paczkach (do 14 dni dla okien i total, do 90 dla pozostałych sum dobowych) jako zadanie odrębne od odświeżania bieżących dni; z postępem i wznowieniem.
-2. Backoff i `Retry-After` przy 429, kolejka z anulowaniem, zaznaczenie dłuższej przerwy w tabeli dni.
+2. Kolejka z anulowaniem i zaznaczenie dłuższej przerwy w tabeli dni. Ponowienia przy 429 (`Retry-After` albo rosnący odstęp z rozrzutem) i wstrzymanie przebiegów po trwałym 429 wykonano 2026-11-03; rodzina źródeł `all-sources` jest jedną stałą w adapterach (zob. kontrakty).
 3. Kwalifikacja kalorii i podłączenie snapshotów do danych Google z użyciem udziału opaski (zamiast progu doby; zob. decyzje o telefonie bez opaski) oraz rozstrzygnięcie roli źródła „Phone Health Connect” w aktywnej energii.
 4. Seria godzinowa tętna, porównanie wykresów kroków i dystansu z Health, API vs Takeout dla kolejnych dób.
 

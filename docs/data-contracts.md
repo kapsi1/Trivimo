@@ -26,7 +26,7 @@ Brak HR nie dowodzi braku opaski, a obecność jednej próbki nie dowodzi noszen
 - Reconciliation dostawcy i sumowanie surowych rekordów mają różne znaczenie przy nakładaniu. Nie zastępuj reconciliation prostą sumą. Te same zapytania o dzień muszą dawać ten sam wynik niezależnie od rozmiaru porcji; rozbieżność zgłoś jako problem, nie maskuj doborem daty początku.
 - Nocne podsumowania przypisuj według końca snu, z zachowaniem sesji i oznaczenia głównej nocy/drzemki. Nie dodawaj nakładających się wersji algorytmu snu. Czuwanie i krótkie przebudzenia mogą nakładać się na fazy, więc nie sumuj bez rozstrzygnięcia.
 
-Różne modele czasu i agregacji opisują [Google rollUp/dailyRollUp](https://developers.google.com/health/aggregate-data). Implementacja przechowuje także parametry zapytania, rodzinę źródeł, wersję kontraktu i kompletność odpowiedzi.
+Różne modele czasu i agregacji opisują [Google rollUp/dailyRollUp](https://developers.google.com/health/aggregate-data). Implementacja przechowuje także parametry zapytania, rodzinę źródeł, wersję kontraktu i kompletność odpowiedzi. Stan 2026-11-03: zadania odczytu nie mają kolumny rodziny źródeł. Wszystkie zapisane odczyty agregatów używają `all-sources` (stała `readSourceFamily` w adapterze, zob. uwagę o `google-wearables` niżej), więc rodzina wynika z wersji kodu. Odczyt innej rodziny wymaga najpierw migracji zapisującej ją w zadaniu, żeby wyniki różnych rodzin nie mieszały się w jednej dobie.
 
 ## Sześć metryk MVP
 

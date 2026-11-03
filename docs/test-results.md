@@ -1,5 +1,11 @@
 # Raport weryfikacji
 
+## 2026-11-03 — 429 i rodzina źródeł
+
+- `npm test`: 97 testów zaliczonych (5 nowych: odczyt `Retry-After` w sekundach i jako data HTTP, nieznana wartość to brak, a nie zero; kod błędu i opóźnienie z adaptera; ponawianie tylko 429; wyczerpanie prób i zbyt długie opóźnienie; przebieg serwisu z dwoma 429, który kończy się bez zdublowanych stron, oraz trwałe 429, po którym zadanie zostaje przy zapisanym kursorze, a następny przebieg do podanego czasu nie wysyła żądań). `npm run build`: poprawny.
+- Rodziny źródeł nie porównywano ponownie: wynik z tego dnia jest w [kontraktach](data-contracts.md). Zmiana tylko ujednolica stałą `all-sources` w obu adapterach rollupów; kształt żądań się nie zmienił.
+- Ograniczenia: tylko odpowiedzi syntetyczne; prawdziwego 429 od Google nie zaobserwowano, więc nie wiadomo, czy wysyła `Retry-After`. Wstrzymanie żyje w pamięci procesu i znika po restarcie serwera. Komunikatu w przeglądarce nie sprawdzano.
+
 ## 2026-11-03 — adapter dziennego agregatu Google (kroki, dystans)
 
 - `npx tsc --noEmit` bez błędów; `npx tsx --test tests/*.test.ts`: 73 testy zaliczone (3 nowe: jawne zero versus brak, odrzucenie okien innych niż doba, kształt żądania, limit 90 dni, HTTP 429). Wspólny czytnik odpowiedzi z limitem rozmiaru wydzielono z odczytu masy bez zmiany zachowania.

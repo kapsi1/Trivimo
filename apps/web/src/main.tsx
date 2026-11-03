@@ -100,8 +100,8 @@ function googleJobsError(error: unknown): string {
   return 'Nie udało się pobrać listy zadań Google. Sprawdź połączenie z serwerem i spróbuj ponownie.';
 }
 const syncStatusSchema = z.object({
-  automatic: z.number().nullable(), running: z.boolean(), unfinishedJobs: z.number(),
-  last: z.object({ at: z.string(), result: z.enum(['ok', 'authorization_required', 'scope_missing', 'migration_required', 'error']), code: z.string().optional(), reads: z.number() }).nullable(),
+  automatic: z.number().nullable(), running: z.boolean(), unfinishedJobs: z.number(), pausedUntil: z.string().nullable(),
+  last: z.object({ at: z.string(), result: z.enum(['ok', 'authorization_required', 'scope_missing', 'migration_required', 'error']), code: z.string().optional(), reads: z.number(), retryAt: z.string().optional() }).nullable(),
   kinds: z.array(z.object({ kind: z.string(), lastReadAt: z.string().nullable(), coveredThrough: z.string().nullable() })),
 });
 const syncLabels: Record<string, string> = { steps: 'Kroki', distance: 'Dystans', 'total-calories': 'Kalorie total', 'active-energy-burned': 'Kalorie aktywne', 'heart-rate-10m': 'Tętno (okna)', 'active-energy-10m': 'Kalorie aktywne (okna)', 'total-calories-10m': 'Kalorie total (okna)', 'steps-10m': 'Kroki (okna)', 'distance-10m': 'Dystans (okna)' };
@@ -123,7 +123,7 @@ function GoogleSync() {
     } catch { setError(true); } finally { setBusy(false); }
   }
   const outcome = status?.last;
-  const text = !outcome ? 'Jeszcze nie uruchomiono w tej sesji serwera.' : outcome.result === 'ok' ? `Ostatnie odświeżenie: ${outcome.at} (${outcome.reads} odczytów).` : outcome.result === 'authorization_required' || outcome.result === 'scope_missing' ? 'Odświeżenie wymaga ponownej autoryzacji z wymaganymi zakresami.' : outcome.result === 'migration_required' ? 'Magazyn wymaga migracji z kopią zapasową.' : `Ostatnie odświeżenie nie powiodło się${outcome.code ? ` (kod: ${outcome.code})` : ''}; zapisane dane pozostały bez zmian, kolejna próba nastąpi przy następnym uruchomieniu.`;
+  const text = !outcome ? 'Jeszcze nie uruchomiono w tej sesji serwera.' : outcome.result === 'ok' ? `Ostatnie odświeżenie: ${outcome.at} (${outcome.reads} odczytów).` : outcome.result === 'authorization_required' || outcome.result === 'scope_missing' ? 'Odświeżenie wymaga ponownej autoryzacji z wymaganymi zakresami.' : outcome.result === 'migration_required' ? 'Magazyn wymaga migracji z kopią zapasową.' : outcome.code === 'rate_limited' || /http_429$/.test(outcome.code ?? '') ? `Google ogranicza liczbę zapytań (429) mimo ponowień z odstępem; zapisane dane pozostały bez zmian, a odczyty są wstrzymane do ${outcome.retryAt ?? '—'}.` : `Ostatnie odświeżenie nie powiodło się${outcome.code ? ` (kod: ${outcome.code})` : ''}; zapisane dane pozostały bez zmian, kolejna próba nastąpi przy następnym uruchomieniu.`;
   return <section><h3>Odświeżanie bieżących dni</h3>
     <p>Odczyt obejmuje dzisiejszą dobę oraz ostatnie trzy zakończone doby (po przerwie także dni od ostatniego odczytu, do 13). Każdy odczyt zachowuje oryginał. {status?.automatic ? `Automatycznie co ${status.automatic} min, gdy serwer działa; przerwa w działaniu serwera nie jest nadrabiana wstecz poza tym zakresem.` : 'Automatyczne odświeżanie jest wyłączone (zmienna TRIVIMO_GOOGLE_SYNC_MINUTES, od 15 do 1440 min).'}</p>
     {error && <p role="alert">Nie udało się odczytać stanu lub uruchomić odświeżenia.</p>}

@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { plainDecimal } from './daily-rollup.ts';
+import { plainDecimal, sourceFamilyName, type DataSourceFamily } from './daily-rollup.ts';
 import { readLimitedText } from './limited-json.ts';
+import { googleHttpError } from './rate-limit.ts';
 
 /** Ten-minute physical-time windows: the detailed series behind the daily sums, and heart rate as wear evidence. */
 export const windowRollupTypes = ['heart-rate', 'active-energy-burned', 'total-calories', 'steps', 'distance'] as const;
@@ -45,16 +46,16 @@ export function parseWindowRollup(rawJson: string, type: WindowRollupType): { wi
   return { windows, nextPageToken: parsed.nextPageToken || null };
 }
 
-/** One bounded page of ten-minute windows for the half-open UTC range [start, end). Unqualified source values from all sources. */
-export async function windowRollupPage(input: { type: WindowRollupType; start: string; end: string; pageToken?: string }, accessToken: string, send: typeof fetch = fetch): Promise<WindowRollupPage> {
+/** One bounded page of ten-minute windows for the half-open UTC range [start, end). Unqualified values of the saved-read source family. */
+export async function windowRollupPage(input: { type: WindowRollupType; start: string; end: string; pageToken?: string; family?: DataSourceFamily }, accessToken: string, send: typeof fetch = fetch): Promise<WindowRollupPage> {
   const type = z.enum(windowRollupTypes).parse(input.type);
   z.iso.datetime().parse(input.start); z.iso.datetime().parse(input.end);
   const span = Date.parse(input.end) - Date.parse(input.start);
   if (!(span >= windowSeconds * 1000 && span <= maxWindowRangeDays * 86400000) || (Date.parse(input.start) / 1000) % windowSeconds !== 0 || (Date.parse(input.end) / 1000) % windowSeconds !== 0) throw new Error('invalid_range');
   if (!accessToken || accessToken.length > 16384 || (input.pageToken !== undefined && (input.pageToken.length === 0 || input.pageToken.length > 8192))) throw new Error('invalid_request');
-  const body = { range: { startTime: new Date(input.start).toISOString(), endTime: new Date(input.end).toISOString() }, windowSize: `${windowSeconds}s`, pageSize: 10000, dataSourceFamily: 'users/me/dataSourceFamilies/all-sources', ...(input.pageToken ? { pageToken: input.pageToken } : {}) };
+  const body = { range: { startTime: new Date(input.start).toISOString(), endTime: new Date(input.end).toISOString() }, windowSize: `${windowSeconds}s`, pageSize: 10000, dataSourceFamily: sourceFamilyName(input.family), ...(input.pageToken ? { pageToken: input.pageToken } : {}) };
   const response = await send(`https://health.googleapis.com/v4/users/me/dataTypes/${type}/dataPoints:rollUp`, { method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify(body), redirect: 'error', signal: AbortSignal.timeout(20000) });
-  if (!response.ok) throw new Error(`google_http_${response.status}`);
+  if (!response.ok) throw googleHttpError('google_http', response);
   const rawJson = await readLimitedText(response);
   return { rawJson, ...parseWindowRollup(rawJson, type) };
 }

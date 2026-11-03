@@ -3,6 +3,7 @@ import { lstatSync } from 'node:fs';
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { listBodyPage } from '../../packages/adapters/google-health/body-read.ts';
+import { googleHttpError } from '../../packages/adapters/google-health/rate-limit.ts';
 import { windowRollupPage } from '../../packages/adapters/google-health/window-rollup.ts';
 import { dailyRollupPage, dailyRollupTypes, maxRollupDays, type DailyRollupType } from '../../packages/adapters/google-health/daily-rollup.ts';
 import { commitGooglePage, createGoogleReadJob, isWindowKind, windowJobKinds, type GoogleJobKind, type WindowJobKind } from '../../packages/storage/google-pages.ts';
@@ -16,7 +17,7 @@ const jobSchema = z.object({ account_digest: z.string().regex(/^[0-9a-f]{64}$/),
 
 async function accountDigest(token: string, send: typeof fetch): Promise<string> {
   const response = await send('https://health.googleapis.com/v4/users/me/identity', { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(15000) });
-  if (!response.ok) throw new Error(`google_identity_http_${response.status}`);
+  if (!response.ok) throw googleHttpError('google_identity_http', response);
   const text = await response.text();
   if (text.length > 16384) throw new Error('identity_response_too_large');
   const identity = z.object({ healthUserId: z.string().regex(/^[a-zA-Z0-9-]{1,63}$/) }).parse(JSON.parse(text) as unknown);
