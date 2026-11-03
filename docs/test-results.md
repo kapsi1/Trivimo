@@ -1,5 +1,15 @@
 # Raport weryfikacji
 
+## 2026-11-03 — diagnostyka listy zadań Google
+
+- `pnpm exec tsx --test tests/google-job-day.test.ts tests/google-pages.test.ts`: 3 testy syntetyczne zaliczone poza sandboxem, w tym rozróżnienie błędów bez ujawniania szczegółów. `pnpm run build` i `git diff --check`: poprawne na Node 26.13.0.
+- Wcześniejszy komunikat przypisywał każdy błąd listy migracji. Nie udało się połączyć z instancją użytkownika pod `127.0.0.1:5173`, więc przyczyna konkretnego błędu pozostaje nieustalona; ręcznej weryfikacji po poprawce nie wykonano. Nie czytano prywatnej bazy ani pomiarów.
+
+## 2026-11-03 — tożsamość kandydatów i konta Google
+
+- `node --import tsx --test tests/google-body-source-day.test.ts tests/body-source-day.test.ts`: 6 testów syntetycznych zaliczonych poza sandboxem, w tym wiele kont bez zapisanych stron oraz ochrona identyfikatorów. `npm run build`: poprawny na Node 26.13.0.
+- Widok pokazuje stan identyfikacji kandydata; nie potwierdza tożsamości między źródłami ani nie publikuje wyników. Nie wykonano ręcznej próby przeglądarki ani odczytu prywatnych pomiarów. Próba uruchomienia przez pnpm wymagała odtworzenia zależności z istniejącego `package-lock.json` przez `npm ci`; menedżera pakietów projektu nie zmieniono.
+
 ## 2026-11-03 — Node 26 LTS
 
 - Na zainstalowanym Node 26.13.0 `node --import tsx --test --test-timeout=10000 tests/google-pages.test.ts`, pełne `npm test` (67 testów) i `npm run build`: poprawne. Testy lokalnego API uruchomiono poza sandboxem. `tsx` wypisuje ostrzeżenie deprecacji `module.register()`.

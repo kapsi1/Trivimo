@@ -80,7 +80,7 @@ function GoogleConnection() {
   return <section><h2>Google Health</h2>
     {error && <p role="alert">Nie udało się rozpocząć autoryzacji lub odczytać jej stanu.</p>}
     {!status ? <p>Sprawdzanie konfiguracji…</p> : !status.configured ? <p>Klient OAuth nie jest skonfigurowany. Instrukcja znajduje się w dokumentacji środowiska.</p> : <>
-      <p>{status.connected ? 'Autoryzacja działa w bieżącej sesji serwera.' : 'Konto nie jest autoryzowane w bieżącej sesji serwera.'} Tokeny są przechowywane tylko w pamięci. Dostępny jest próbny odczyt wagi i tkanki tłuszczowej; wyniki nie są jeszcze kwalifikowane.</p>
+      <p>{status.connected ? 'Konto jest autoryzowane.' : 'Konto nie jest autoryzowane.'} Token odświeżania jest zapisany na dysku, zaszyfrowany kontem Windows; przeglądarka go nie widzi. Dostępny jest próbny odczyt wagi i tkanki tłuszczowej; wyniki nie są jeszcze kwalifikowane.</p>
       {status.connected && <p>Przyznane zakresy odczytu: {status.grantedScopes.length} z 2.</p>}
       <p>Aplikacja poprosi o odczyt aktywności i pomiarów zdrowotnych, aby w przyszłości pobierać sześć metryk M1. Zakresy nie obejmują zapisu do Google.</p>
       <button type="button" disabled={busy} onClick={() => void connect()}>{busy ? 'Przekierowanie…' : 'Autoryzuj konto Google'}</button>
@@ -90,6 +90,14 @@ function GoogleConnection() {
 }
 
 const googleJobSchema = z.object({ id: z.uuid(), kind: z.enum(['weight', 'body-fat']), start: z.iso.datetime(), end: z.iso.datetime(), state: z.enum(['running', 'complete']), createdAt: z.iso.datetime(), pages: z.number().int().nonnegative() });
+function googleJobsError(error: unknown): string {
+  const code = error instanceof Error ? error.message : '';
+  if (code === 'migration_required') return 'Wersja magazynu wymaga migracji z kopią zapasową.';
+  if (code === 'store_unavailable') return 'Nie można otworzyć magazynu. Sprawdź lokalizację bazy i dostęp do pliku.';
+  if (code === 'service_unavailable') return 'Usługa odczytu Google jest niedostępna. Sprawdź konfigurację serwera i lokalizację bazy.';
+  if (code === 'invalid_jobs_response') return 'Serwer zwrócił nieoczekiwany format listy zadań. Sprawdź wersje serwera i interfejsu.';
+  return 'Nie udało się pobrać listy zadań Google. Sprawdź połączenie z serwerem i spróbuj ponownie.';
+}
 function GoogleReadJobs() {
   const [jobs, setJobs] = useState<z.infer<typeof googleJobSchema>[] | null>(null);
   const [kind, setKind] = useState<'weight' | 'body-fat'>('weight');
@@ -97,17 +105,23 @@ function GoogleReadJobs() {
   const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false);
   async function refresh() {
     const response = await fetch('/api/google/jobs');
-    if (!response.ok) throw new Error('migration_required');
-    setJobs(z.array(googleJobSchema).parse(await response.json()));
+    if (!response.ok) {
+      const data = await response.json().catch(() => null) as { error?: unknown } | null;
+      throw new Error(typeof data?.error === 'string' ? data.error : 'request_failed');
+    }
+    const parsed = z.array(googleJobSchema).safeParse(await response.json());
+    if (!parsed.success) throw new Error('invalid_jobs_response');
+    setJobs(parsed.data);
   }
-  useEffect(() => { void refresh().catch(() => setMessage('Magazyn nie jest gotowy do odczytu Google. Wymagana jest migracja bazy z kopią.')); }, []);
+  function retry() { setMessage(''); void refresh().catch((error: unknown) => setMessage(googleJobsError(error))); }
+  useEffect(() => { retry(); }, []);
   async function run(path: string, body: object) {
     setBusy(true); setMessage('');
     try {
       const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Trivimo-Request': '1' }, body: JSON.stringify(body) });
       if (!response.ok) { const data = await response.json() as { error?: string }; throw new Error(data.error); }
-      await refresh();
       setMessage(path.endsWith('/next') ? 'Strona została zapisana; nie przeliczono wyników dnia.' : 'Zadanie zapisano. Możesz pobrać pierwszą stronę.');
+      try { await refresh(); } catch { setMessage('Operacja zakończona, ale nie udało się odświeżyć listy zadań. Odśwież listę przed kolejną operacją.'); setJobs(null); }
     } catch (error) { const code = error instanceof Error ? error.message : ''; setMessage(code === 'account_changed' ? 'Zadanie należy do innego konta Google.' : code === 'authorization_required' || code === 'scope_missing' ? 'Ponów autoryzację z wymaganym zakresem.' : 'Nie udało się wykonać operacji. Zapisane strony i postęp pozostają bez zmian.'); }
     finally { setBusy(false); }
   }
@@ -116,6 +130,7 @@ function GoogleReadJobs() {
     <label>Data w Warszawie <input type="date" min="2026-01-01" max="9998-12-31" value={date} disabled={busy} onChange={(event) => setDate(event.target.value)} /></label>{' '}
     <button type="button" disabled={busy || !date || !jobs} onClick={() => void run('/api/google/jobs', { kind, date })}>Przygotuj zadanie</button>
     {message && <p role="status">{message}</p>}
+    {!jobs && <button type="button" disabled={busy} onClick={retry}>Ponów odczyt listy zadań</button>}
     {jobs && jobs.length > 0 && <div className="table-wrap"><table><thead><tr><th>Typ</th><th>Zakres UTC</th><th>Stan</th><th>Strony</th><th>Akcja</th></tr></thead><tbody>{jobs.map((job) => <tr key={job.id}><td>{job.kind === 'weight' ? 'Masa ciała' : 'Tkanka tłuszczowa'}</td><td>{job.start} – {job.end}</td><td>{job.state === 'complete' ? 'Odczyt zakończony' : 'Do kontynuacji'}</td><td>{job.pages}</td><td>{job.state === 'running' && <button type="button" disabled={busy} onClick={() => void run('/api/google/jobs/next', { id: job.id })}>Pobierz stronę</button>}</td></tr>)}</tbody></table></div>}
   </section>;
 }
@@ -222,7 +237,7 @@ function BodyComparison({ date }: { date: string }) {
   const [kind, setKind] = useState<'weight' | 'body_fat'>('weight');
   const [visible, setVisible] = useState(false);
   return <div><h3>Porównanie pomiarów źródłowych</h3>
-    <p>Kandydaci są przypisani do dnia warszawskiego. Powtórzone odczyty i kopie między źródłami nie zostały uzgodnione, a kompletność jest nieznana. Zgodność czasu lub wartości nie potwierdza tożsamości pomiaru.</p>
+    <p>Kandydaci są przypisani do dnia warszawskiego. Powtórzone odczyty i kopie między źródłami nie zostały uzgodnione, a kompletność jest nieznana. Identyfikator źródłowy ani zgodność czasu lub wartości nie potwierdzają tożsamości pomiaru między źródłami.</p>
     {!visible ? <button type="button" onClick={() => setVisible(true)}>Pokaż pomiary</button> : <>
       <label>Rodzaj <select value={kind} onChange={(event) => setKind(event.target.value as 'weight' | 'body_fat')}><option value="weight">Masa ciała</option><option value="body_fat">Tkanka tłuszczowa</option></select></label>
       <BodyCandidates key={`takeout-${kind}`} date={date} kind={kind} source="takeout" />
@@ -251,10 +266,10 @@ function BodyCandidates({ date, kind, source }: { date: string; kind: 'weight' |
           <p>Zakończenie odczytu nie potwierdza kompletności danych w źródle ani powiązania kont z importem.</p>
         </div>}
         {result.unassigned > 0 && <p>Niektórych rekordów źródłowych nie udało się przypisać do dnia lub odczytać.</p>}
-        {result.multipleAccounts && <p>Pokazano dane więcej niż jednego konta Google. Nie zostały one połączone.</p>}
+        {result.multipleAccounts && <p>Zapisane zadania obejmują więcej niż jedno konto Google. Konta nie zostały połączone.</p>}
         {result.rows.length === 0 ? <p>Nie znaleziono pomiarów dla wybranej daty; kompletność źródła jest nieznana.</p> : <>
-          <div className="table-wrap"><table><thead><tr><th>Czas źródła</th><th>Oryginał ({kind === 'weight' ? 'g' : '%'})</th><th>Po przeliczeniu</th><th>Źródło</th></tr></thead><tbody>
-            {result.rows.map((row, index) => <tr key={index}><td>{row.timestamp}</td><td>{row.originalValue || '—'}</td><td>{row.converted.status === 'parsed' ? `${row.converted.value.replace('.', ',')} ${row.converted.unit}` : 'Nie można przeliczyć'}</td><td>{row.origin || 'Nieznane'}</td></tr>)}
+          <div className="table-wrap"><table><thead><tr><th>Czas źródła</th><th>Oryginał ({kind === 'weight' ? 'g' : '%'})</th><th>Po przeliczeniu</th><th>Źródło</th><th>Tożsamość</th></tr></thead><tbody>
+            {result.rows.map((row, index) => <tr key={index}><td>{row.timestamp}</td><td>{row.originalValue || '—'}</td><td>{row.converted.status === 'parsed' ? `${row.converted.value.replace('.', ',')} ${row.converted.unit}` : 'Nie można przeliczyć'}</td><td>{row.origin || 'Nieznane'}</td><td>{row.identity === 'identified' ? 'Identyfikator źródłowy' : row.identity === 'candidate' ? 'Kandydat do ustalenia' : 'Nierozstrzygnięta'}</td></tr>)}
           </tbody></table></div>
         </>}
         {result.truncated && <p>Wyniki są ograniczone; pokazano {result.rows.length} z co najmniej {result.matched} dopasowanych wierszy.</p>}

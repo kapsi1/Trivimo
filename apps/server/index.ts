@@ -5,7 +5,9 @@ import { takeoutDatabasePath } from '../../packages/storage/location.ts';
 import { TakeoutService } from './takeout-service.ts';
 import { GoogleAuth } from './google-auth.ts';
 import { GoogleReadService } from './google-read-service.ts';
+import { DpapiTokenStore } from './token-store.ts';
 import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 const sourcePath = takeoutDatabasePath();
 let sourceDb: DatabaseSync | undefined;
@@ -16,8 +18,10 @@ function getSourceDb(): DatabaseSync | undefined {
 }
 let googleAuth: GoogleAuth | undefined;
 if (process.env.TRIVIMO_GOOGLE_CLIENT_FILE) {
-  try { googleAuth = GoogleAuth.fromJson(JSON.parse(readFileSync(process.env.TRIVIMO_GOOGLE_CLIENT_FILE, 'utf8')) as unknown); }
+  const store = process.platform === 'win32' && sourcePath ? new DpapiTokenStore(join(dirname(sourcePath), 'google-token.dpapi')) : undefined;
+  try { googleAuth = GoogleAuth.fromJson(JSON.parse(readFileSync(process.env.TRIVIMO_GOOGLE_CLIENT_FILE, 'utf8')) as unknown, store); }
   catch { console.error('Nie można wczytać konfiguracji klienta Google OAuth.'); }
+  await googleAuth?.restore();
 }
 createApp(createDemoDatabase(), getSourceDb, sourcePath ? new TakeoutService(sourcePath) : undefined, [], googleAuth, googleAuth && sourcePath ? new GoogleReadService(sourcePath, googleAuth) : undefined).listen(3000, '127.0.0.1', () => {
   console.log('Lokalne API: http://127.0.0.1:3000');

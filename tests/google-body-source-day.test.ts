@@ -48,6 +48,19 @@ test('zakresy zadań obejmują także niezakończony odczyt bez stron i nie dowo
   } finally { db.close(); }
 });
 
+test('ostrzega o wielu kontach także dla zadań bez zapisanych stron', () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    db.exec(`CREATE TABLE google_read_jobs(id TEXT, account_digest TEXT, kind TEXT, range_start TEXT, range_end TEXT, created_at TEXT, state TEXT); CREATE TABLE google_read_pages(job_id TEXT, page_number INTEGER, raw_json TEXT);`);
+    const insert = db.prepare('INSERT INTO google_read_jobs VALUES (?, ?, ?, ?, ?, ?, ?)');
+    insert.run('one', 'private-a', 'weight', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z', '2026-01-03T00:00:00Z', 'running');
+    insert.run('two', 'private-b', 'weight', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z', '2026-01-03T00:00:00Z', 'running');
+    const result = readGoogleBodySourceDay(db, 'weight', '2026-01-01');
+    assert.equal(result.multipleAccounts, true); assert.equal(result.rows.length, 0);
+    assert.doesNotMatch(JSON.stringify(result), /private-a|private-b/);
+  } finally { db.close(); }
+});
+
 test('REST nie ujawnia identyfikatorów konta ani źródłowego rekordu', async () => {
   const { createApp } = await import('../apps/server/app.ts'); const { createDemoDatabase } = await import('../packages/storage/days.ts');
   const db = new DatabaseSync(':memory:'); const demo = createDemoDatabase();
