@@ -28,11 +28,11 @@ Syntetyczna brama P0 została wykonana i opisana w [ukończonych próbach](../co
 
 ## Stan M1 i następne kroki
 
-Stan na 2026-11-03 (szczegóły i dowody: [wyniki testów](../test-results.md), reguły: [kontrakty](../data-contracts.md), decyzje: [rejestr](../decisions.md)). Zrobione i sprawdzone (syntetycznie oraz na koncie użytkownika, bez przeglądarki): autoryzacja Google z trwałym tokenem, magazyn w wersji 9, odczyty sum dobowych i okien 10-minutowych (kroki, dystans, kalorie total i aktywne, tętno), odświeżanie automatyczne z polityką odczytów, widok dnia (kandydaci, udział opaski, przebieg doby) i kolumna udziału opaski w tabeli dni. Nie zrobione: kwalifikacja i snapshoty kanoniczne z danych Google, wartości w głównych komórkach tabeli dni.
+Stan na 2026-11-03 (szczegóły i dowody: [wyniki testów](../test-results.md), reguły: [kontrakty](../data-contracts.md), decyzje: [rejestr](../decisions.md)). Zrobione i sprawdzone (syntetycznie oraz na koncie użytkownika, bez przeglądarki): autoryzacja Google z trwałym tokenem, magazyn w wersji 9, odczyty sum dobowych i okien 10-minutowych (kroki, dystans, kalorie total i aktywne, tętno), odświeżanie automatyczne z polityką odczytów, widok dnia (kandydaci, udział opaski, przebieg doby) i kolumna udziału opaski w tabeli dni. Uzupełniono historię od 2026-01-01 (backfill). Nie zrobione: kwalifikacja i snapshoty kanoniczne z danych Google, wartości w głównych komórkach tabeli dni.
 
 Następne kroki w tej kolejności:
 
-1. Backfill od 2026-01-01: kod wykonano 2026-11-03 (paczki 13 dób dla okien, 14 dla total, 90 dla pozostałych sum; postęp z pokrycia dób w bazie, zatrzymanie i wznowienie, panel „Uzupełnianie historii”). Pozostaje pierwszy przebieg na koncie użytkownika i sprawdzenie widoku w przeglądarce.
+1. Backfill od 2026-01-01: wykonano 2026-11-03 dla dziewięciu rodzajów odświeżania; 306 dób pokrytych, sumy okien zgodne z agregatami dobowymi ([wyniki](../test-results.md)). Masa i tkanka tłuszczowa z API nie są objęte.
 2. Kolejka z anulowaniem i zaznaczenie dłuższej przerwy w tabeli dni. Ponowienia przy 429 (`Retry-After` albo rosnący odstęp z rozrzutem) i wstrzymanie przebiegów po trwałym 429 wykonano 2026-11-03; rodzina źródeł `all-sources` jest jedną stałą w adapterach (zob. kontrakty).
 3. Kwalifikacja kalorii i podłączenie snapshotów do danych Google z użyciem udziału opaski (zamiast progu doby; zob. decyzje o telefonie bez opaski) oraz rozstrzygnięcie roli źródła „Phone Health Connect” w aktywnej energii.
 4. Seria godzinowa tętna, porównanie wykresów kroków i dystansu z Health, API vs Takeout dla kolejnych dób.

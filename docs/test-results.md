@@ -3,7 +3,9 @@
 ## 2026-11-03 — uzupełnianie historii (backfill)
 
 - `npm test`: 99 testów zaliczonych (2 nowe: pokrycie dób tylko po ich końcu, podział luk na paczki w limitach, granice dób warszawskich w paczce obejmującej zmianę czasu; przebieg serwisu z zatrzymaniem po paczce, wznowieniem bez powtórzeń, ponowieniem i oczekiwaniem po trwałym 429 oraz pustym kolejnym przebiegiem). `npm run build`: poprawny.
-- Ograniczenia: tylko odpowiedzi syntetyczne. Przebiegu na koncie użytkownika i panelu w przeglądarce nie sprawdzono (serwer nie był uruchomiony, a środowisko nie miało ścieżki klienta OAuth). Masa i tkanka tłuszczowa nie są objęte.
+- Ograniczenia testów: tylko odpowiedzi syntetyczne. Masa i tkanka tłuszczowa nie są objęte.
+- Przebieg na koncie użytkownika (2026-11-03, uruchomiony przez użytkownika, zakończony): sprawdzenie tylko do odczytu skryptem poza repozytorium. Wszystkie dziewięć rodzajów pokrywa 306 dób (2026-01-01 – 2026-11-02), plan uzupełniania jest pusty, 207 zadań w stanie „complete” i żadne w toku, każde zadanie ma jedną stronę, `verifyGooglePages` bez błędów, 3 usunięcia polityki odczytów (pośrednie odczyty doby w toku). Strony Google zajmują razem ok. 13,5 MB; baza urosła o ok. 11 MB.
+- Spójność: sumy okien 10-minutowych w dobie warszawskiej równe agregatowi `dailyRollUp` dla kroków i dystansu na 306 dobach, dla kalorii total na 304 dobach dokładnie i na 2 z różnicą poniżej 0,1 %, dla aktywnej energii na wszystkich 180 dobach z wartością. Aktywna energia ma wartości od 2026-05-07 bez luk, okna tętna od 2026-04-30 (135 dób z co najmniej jednym oknem); wcześniejsze doby API nie zwraca i pozostają brakiem, nie zerem. Nie porównywano z Takeout ani z aplikacją Health, a panelu w przeglądarce nie sprawdzał agent.
 
 ## 2026-11-03 — 429 i rodzina źródeł
 
