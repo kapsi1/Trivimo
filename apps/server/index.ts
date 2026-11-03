@@ -5,6 +5,7 @@ import { takeoutDatabasePath } from '../../packages/storage/location.ts';
 import { TakeoutService } from './takeout-service.ts';
 import { GoogleAuth } from './google-auth.ts';
 import { GoogleReadService } from './google-read-service.ts';
+import { GoogleSyncService } from './google-sync.ts';
 import { DpapiTokenStore } from './token-store.ts';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -23,6 +24,10 @@ if (process.env.TRIVIMO_GOOGLE_CLIENT_FILE) {
   catch { console.error('Nie można wczytać konfiguracji klienta Google OAuth.'); }
   await googleAuth?.restore();
 }
-createApp(createDemoDatabase(), getSourceDb, sourcePath ? new TakeoutService(sourcePath) : undefined, [], googleAuth, googleAuth && sourcePath ? new GoogleReadService(sourcePath, googleAuth) : undefined).listen(3000, '127.0.0.1', () => {
+// Automatic refresh is configured separately from opening the UI: unset or invalid means manual only.
+const syncMinutes = Number(process.env.TRIVIMO_GOOGLE_SYNC_MINUTES);
+const googleSync = googleAuth && sourcePath ? new GoogleSyncService(sourcePath, googleAuth, { intervalMinutes: Number.isInteger(syncMinutes) && syncMinutes >= 15 && syncMinutes <= 1440 ? syncMinutes : null }) : undefined;
+createApp(createDemoDatabase(), getSourceDb, sourcePath ? new TakeoutService(sourcePath) : undefined, [], googleAuth, googleAuth && sourcePath ? new GoogleReadService(sourcePath, googleAuth) : undefined, googleSync).listen(3000, '127.0.0.1', () => {
   console.log('Lokalne API: http://127.0.0.1:3000');
+  googleSync?.start();
 });

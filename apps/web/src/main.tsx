@@ -84,6 +84,7 @@ function GoogleConnection() {
       {status.connected && <p>Przyznane zakresy odczytu: {status.grantedScopes.length} z 2.</p>}
       <p>Aplikacja poprosi o odczyt aktywności i pomiarów zdrowotnych, aby w przyszłości pobierać sześć metryk M1. Zakresy nie obejmują zapisu do Google.</p>
       <button type="button" disabled={busy} onClick={() => void connect()}>{busy ? 'Przekierowanie…' : 'Autoryzuj konto Google'}</button>
+      {status.connected && <GoogleSync />}
       {status.connected && <GoogleReadJobs />}
     </>}
   </section>;
@@ -98,6 +99,40 @@ function googleJobsError(error: unknown): string {
   if (code === 'invalid_jobs_response') return 'Serwer zwrócił nieoczekiwany format listy zadań. Sprawdź wersje serwera i interfejsu.';
   return 'Nie udało się pobrać listy zadań Google. Sprawdź połączenie z serwerem i spróbuj ponownie.';
 }
+const syncStatusSchema = z.object({
+  automatic: z.number().nullable(), running: z.boolean(), unfinishedJobs: z.number(),
+  last: z.object({ at: z.string(), result: z.enum(['ok', 'authorization_required', 'scope_missing', 'migration_required', 'error']), code: z.string().optional(), reads: z.number() }).nullable(),
+  kinds: z.array(z.object({ kind: z.string(), lastReadAt: z.string().nullable(), coveredThrough: z.string().nullable() })),
+});
+const syncLabels: Record<string, string> = { steps: 'Kroki', distance: 'Dystans', 'total-calories': 'Kalorie total', 'active-energy-burned': 'Kalorie aktywne', 'heart-rate-10m': 'Tętno (okna)', 'active-energy-10m': 'Kalorie aktywne (okna)' };
+function GoogleSync() {
+  const [status, setStatus] = useState<z.infer<typeof syncStatusSchema> | null>(null);
+  const [busy, setBusy] = useState(false); const [error, setError] = useState(false);
+  async function load() {
+    const response = await fetch('/api/google/sync-status');
+    if (!response.ok) throw new Error('Status');
+    setStatus(syncStatusSchema.parse(await response.json()));
+  }
+  useEffect(() => { void load().catch(() => setError(true)); }, []);
+  async function refresh() {
+    setBusy(true); setError(false);
+    try {
+      const response = await fetch('/api/google/sync', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Trivimo-Request': '1' }, body: '{}' });
+      if (!response.ok) throw new Error('Odświeżenie');
+      await load();
+    } catch { setError(true); } finally { setBusy(false); }
+  }
+  const outcome = status?.last;
+  const text = !outcome ? 'Jeszcze nie uruchomiono w tej sesji serwera.' : outcome.result === 'ok' ? `Ostatnie odświeżenie: ${outcome.at} (${outcome.reads} odczytów).` : outcome.result === 'authorization_required' || outcome.result === 'scope_missing' ? 'Odświeżenie wymaga ponownej autoryzacji z wymaganymi zakresami.' : outcome.result === 'migration_required' ? 'Magazyn wymaga migracji z kopią zapasową.' : `Ostatnie odświeżenie nie powiodło się${outcome.code ? ` (kod: ${outcome.code})` : ''}; zapisane dane pozostały bez zmian, kolejna próba nastąpi przy następnym uruchomieniu.`;
+  return <section><h3>Odświeżanie bieżących dni</h3>
+    <p>Odczyt obejmuje dzisiejszą dobę oraz ostatnie trzy zakończone doby (po przerwie także dni od ostatniego odczytu, do 13). Każdy odczyt zachowuje oryginał. {status?.automatic ? `Automatycznie co ${status.automatic} min, gdy serwer działa; przerwa w działaniu serwera nie jest nadrabiana wstecz poza tym zakresem.` : 'Automatyczne odświeżanie jest wyłączone (zmienna TRIVIMO_GOOGLE_SYNC_MINUTES, od 15 do 1440 min).'}</p>
+    {error && <p role="alert">Nie udało się odczytać stanu lub uruchomić odświeżenia.</p>}
+    {status && <p role="status">{text}{status.unfinishedJobs > 0 ? ` Niedokończone zadania: ${status.unfinishedJobs}.` : ''}</p>}
+    <button type="button" disabled={busy || status?.running} onClick={() => void refresh()}>{busy ? 'Odświeżanie…' : 'Odśwież teraz'}</button>
+    {status && <ul>{status.kinds.map((item) => <li key={item.kind}>{syncLabels[item.kind] ?? item.kind}: {item.lastReadAt ? `odczytano ${item.lastReadAt}, pokryte do ${item.coveredThrough ?? '—'}` : 'brak zapisanego odczytu'}</li>)}</ul>}
+  </section>;
+}
+
 function GoogleReadJobs() {
   const [jobs, setJobs] = useState<z.infer<typeof googleJobSchema>[] | null>(null);
   const [kind, setKind] = useState<'weight' | 'body-fat' | 'steps' | 'distance' | 'total-calories' | 'active-energy-burned' | 'heart-rate-10m' | 'active-energy-10m'>('weight');

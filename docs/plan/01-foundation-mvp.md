@@ -20,7 +20,7 @@ Próbne nowe zadania odczytu masy i tkanki tłuszczowej wybierają dzień warsza
 - [ ] Wdrożyć sześć typów MVP z [planu API](02-health-api.md) i [Takeout](03-import-migration.md); brak archiwalnego total/active zachować jako brak, nie odzyskiwać z obecnych ustawień BMR.
 - [ ] Wprowadzić osobne: ręczny import historii, odświeżenie bieżących dni i przeliczenie lokalne po zmianie reguł. Przeliczenie nie wymaga ponownego pobrania wszystkich oryginałów. Kolejka z postępem i wznowieniem; anulowanie dalszej pracy nie jest rollbackiem.
 - [ ] Pierwszy backfill od 2026-01-01 do końca ostatniej zakończonej doby. Dziś widoczny jako dzień częściowy, bez włączania do analiz pełnych dób. Domyślnie odświeżać ostatnie trzy zakończone dni i dzisiejszy odczyt; starsze zmiany przez mechanizm API albo okresową/ręczną rekonsyliację, bez obietnicy kompletności krótkiego okna.
-- [ ] Scheduler działa w procesie serwera. Gdy komputer jest wyłączony, zaznacz przerwę i nadrób po uruchomieniu; nie obiecuj działania przeglądarki w tle. Harmonogram i automatyzację konfigurować osobno od samego otwarcia tabeli.
+- [ ] Scheduler działa w procesie serwera (wdrożone: odświeżanie dzisiejszej doby i trzech ostatnich zakończonych dób, wznowienie niedokończonych zadań, nadrobienie przerwy do 13 dni, zmienna `TRIVIMO_GOOGLE_SYNC_MINUTES`, przycisk „Odśwież teraz”; do zrobienia: zaznaczenie dłuższej przerwy w tabeli dni, backoff przy 429, rekonsyliacja starszych dni, kolejka z anulowaniem i porządkowanie powtórzonych odczytów). Pierwotne wymaganie:  Gdy komputer jest wyłączony, zaznacz przerwę i nadrób po uruchomieniu; nie obiecuj działania przeglądarki w tle. Harmonogram i automatyzację konfigurować osobno od samego otwarcia tabeli.
 
 ## M1: UI
 

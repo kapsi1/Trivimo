@@ -18,6 +18,7 @@ import { z } from 'zod';
 import type { TakeoutService } from './takeout-service.ts';
 import type { GoogleAuth } from './google-auth.ts';
 import type { GoogleReadService } from './google-read-service.ts';
+import type { GoogleSyncService } from './google-sync.ts';
 
 async function readJson(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
@@ -31,7 +32,7 @@ async function readJson(request: IncomingMessage): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
 }
 
-export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => DatabaseSync | undefined), takeout?: TakeoutService, extraLocalOrigins: readonly string[] = [], googleAuth?: GoogleAuth, googleRead?: GoogleReadService): Server {
+export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => DatabaseSync | undefined), takeout?: TakeoutService, extraLocalOrigins: readonly string[] = [], googleAuth?: GoogleAuth, googleRead?: GoogleReadService, googleSync?: GoogleSyncService): Server {
   if (extraLocalOrigins.some((origin) => !/^http:\/\/(?:127\.0\.0\.1|localhost):\d+$/.test(origin))) throw new Error('Nieprawidłowy lokalny Origin');
   const session = randomBytes(32).toString('hex');
   const server = createServer((request, response) => {
@@ -116,6 +117,17 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
         response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
         response.end(JSON.stringify({ singleExistingAccount: accounts === 1, unassignedImports }));
       } catch { response.writeHead(500, { 'Cache-Control': 'no-store' }).end(); }
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/api/google/sync-status') {
+      if (!googleSync) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify(googleSync.status()));
+      return;
+    }
+    if (request.method === 'POST' && url.pathname === '/api/google/sync') {
+      if (!origin || !allowedOrigins.includes(origin) || request.headers['x-trivimo-request'] !== '1' || request.headers['content-type'] !== 'application/json') { response.writeHead(403, { 'Cache-Control': 'no-store' }).end(); return; }
+      if (!googleSync) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
+      void googleSync.runOnce().then((outcome) => response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify(outcome)));
       return;
     }
     if (request.method === 'GET' && url.pathname === '/api/google/band-share') {
