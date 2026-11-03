@@ -4,6 +4,8 @@
 
 2026-11-03: dotychczas zaimportowany eksport Google Health pochodzi z jednego konta Google. W aplikacji zapisano wyłącznie lokalny identyfikator i decyzję przypisania, bez adresu e-mail. Dla kolejnych importów nie zakładać automatycznie tego samego konta. Użytkownik potwierdził utworzenie projektu i klienta OAuth; rzeczywista autoryzacja potwierdziła oba zakresy odczytu, natomiast odczyt danych pozostaje do sprawdzenia.
 
+2026-11-03: autoryzacja Google ma przetrwać restart serwera. Zapisywany jest wyłącznie token odświeżania i lista zakresów, zaszyfrowane Windows DPAPI (zakres CurrentUser), w pliku `google-token.dpapi` obok bazy Takeout; przeglądarka nie widzi sekretów, a token dostępu pozostaje w pamięci. Jawne odrzucenie odświeżenia (400/401) usuwa zapis; timeout i 5xx go zachowują. Poza Windows zapis nie działa i autoryzacja zostaje w pamięci. Plik nie jest przenośny między kontami ani komputerami.
+
 1. Rozwój Health Sync zostaje wstrzymany. Powstaje nowa aplikacja, teraz jej dokumentacja. Nie migrujemy ani nie usuwamy danych podczas planowania.
 2. Własna baza jest źródłem prawdy. API jest głównym bieżącym źródłem Google; Takeout importem historii; własny adapter Connect opcjonalny.
 3. Desktop w przeglądarce najpierw, możliwy Android później. UI początkowo prosty i ciemny, z tabelami, wykresami i później mapami/szczegółami.

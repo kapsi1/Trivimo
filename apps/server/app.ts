@@ -50,7 +50,8 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
       response.setHeader('Referrer-Policy', 'no-referrer');
       response.setHeader('Content-Security-Policy', "default-src 'none'; base-uri 'none'; frame-ancestors 'none'");
       if (!googleAuth) { response.writeHead(503).end('Autoryzacja jest niedostępna.'); return; }
-      void googleAuth.finish(callbackUrl.searchParams.get('state'), callbackUrl.searchParams.get('code')).then(() => {
+      void googleAuth.finish(callbackUrl.searchParams.get('state'), callbackUrl.searchParams.get('code')).then((returnTo) => {
+        if (returnTo) { response.writeHead(303, { Location: `${returnTo}/` }).end(); return; }
         response.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' }).end('Autoryzacja zakończona. Możesz zamknąć tę kartę i wrócić do Trivimo.');
       }).catch(() => { response.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' }).end('Nie udało się zakończyć autoryzacji. Wróć do Trivimo i spróbuj ponownie.'); });
       return;
@@ -68,11 +69,11 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
     if (request.method === 'POST' && url.pathname === '/api/google/start') {
       if (!origin || !allowedOrigins.includes(origin) || request.headers['x-trivimo-request'] !== '1' || request.headers['content-type'] !== 'application/json') { response.writeHead(403, { 'Cache-Control': 'no-store' }).end(); return; }
       if (!googleAuth) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
-      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify({ url: googleAuth.start() }));
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify({ url: googleAuth.start(origin) }));
       return;
     }
     if ((request.method === 'GET' && url.pathname === '/api/google/jobs') || (request.method === 'POST' && (url.pathname === '/api/google/jobs' || url.pathname === '/api/google/jobs/next'))) {
-      if (!googleRead) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
+      if (!googleRead) { response.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify({ error: 'service_unavailable' })); return; }
       if (request.method === 'POST' && (!origin || !allowedOrigins.includes(origin) || request.headers['x-trivimo-request'] !== '1' || request.headers['content-type'] !== 'application/json')) { response.writeHead(403, { 'Cache-Control': 'no-store' }).end(); return; }
       void (async () => {
         try {
@@ -92,7 +93,7 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
           }
           response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }).end(JSON.stringify(result));
         } catch (error) {
-          const code = error instanceof Error && ['migration_required', 'authorization_required', 'scope_missing', 'account_changed', 'job_conflict', 'range_too_large'].includes(error.message) ? error.message : 'google_read_failed';
+          const code = error instanceof Error && ['migration_required', 'store_unavailable', 'authorization_required', 'scope_missing', 'account_changed', 'job_conflict', 'range_too_large'].includes(error.message) ? error.message : 'google_read_failed';
           response.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify({ error: code }));
         }
       })();

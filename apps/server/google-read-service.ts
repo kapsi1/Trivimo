@@ -38,8 +38,12 @@ export async function readGoogleJobPage(db: DatabaseSync, auth: GoogleAuth, jobI
 export class GoogleReadService {
   constructor(private readonly path: string, private readonly auth: GoogleAuth, private readonly send: typeof fetch = fetch) {}
   private open(): DatabaseSync {
-    if (!lstatSync(this.path).isFile() || lstatSync(this.path).isSymbolicLink()) throw new Error('invalid_store');
-    const db = new DatabaseSync(this.path);
+    let db: DatabaseSync;
+    try {
+      const stat = lstatSync(this.path);
+      if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('invalid_store');
+      db = new DatabaseSync(this.path);
+    } catch { throw new Error('store_unavailable'); }
     if (db.prepare('PRAGMA application_id').get()?.application_id !== 1414682185 || db.prepare('PRAGMA user_version').get()?.user_version !== 5) { db.close(); throw new Error('migration_required'); }
     return db;
   }
