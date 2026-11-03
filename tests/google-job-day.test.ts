@@ -26,3 +26,20 @@ test('REST tworzy zadanie dla doby warszawskiej i zachowuje wcześniejszy format
     ]);
   } finally { await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())); db.close(); }
 });
+
+test('lista zadań rozróżnia brak magazynu, migrację i nieznany błąd bez ujawniania szczegółów', async () => {
+  let failure = 'store_unavailable';
+  const service = { list: () => { throw new Error(failure); } } as unknown as GoogleReadService;
+  const db = createDemoDatabase(); const server = createApp(db, undefined, undefined, [], undefined, service);
+  try {
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address(); assert.ok(address && typeof address !== 'string');
+    const base = `http://127.0.0.1:${address.port}`;
+    const cookie = (await fetch(`${base}/api/session`)).headers.get('set-cookie')?.split(';')[0]; assert.ok(cookie);
+    for (const [input, expected] of [['store_unavailable', 'store_unavailable'], ['migration_required', 'migration_required'], ['private path', 'google_read_failed']]) {
+      failure = input!;
+      const response: Response = await fetch(`${base}/api/google/jobs`, { headers: { Cookie: cookie } });
+      assert.equal(response.status, 400); assert.deepEqual(await response.json(), { error: expected });
+    }
+  } finally { await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())); db.close(); }
+});
