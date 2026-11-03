@@ -1,10 +1,10 @@
 # Środowisko developerskie
 
-Przykład używa TypeScript, React i Vite, Node 24 LTS, wbudowanego `node:sqlite`, npm, Zod oraz test runnera Node przez tsx. Wersje bibliotek przypięto w `package.json` i `package-lock.json`. API nasłuchuje wyłącznie na 127.0.0.1. Tabela przykładowa korzysta z bazy w pamięci; osobna zakładka pokazuje surowe wiersze lokalnego importu Takeout, jeśli baza istnieje.
+Przykład używa TypeScript, React i Vite, Node 26 LTS od wersji 26.13 lub Node 24 LTS, wbudowanego `node:sqlite`, npm, Zod oraz test runnera Node przez tsx. Wersje bibliotek przypięto w `package.json` i `package-lock.json`. API nasłuchuje wyłącznie na 127.0.0.1. Tabela przykładowa korzysta z bazy w pamięci; osobna zakładka pokazuje surowe wiersze lokalnego importu Takeout, jeśli baza istnieje.
 
 W systemie Windows można uruchomić `start-trivimo.cmd` poza środowiskiem izolowanym. Skrypt uruchamia serwer i interfejs w tle; stronę otwiera się pod `http://localhost:5173/`. Jeśli port jest zajęty, zgłasza problem i nie zatrzymuje innych procesów.
 
-Alternatywnie w PowerShell, po zainstalowaniu Node 24:
+Alternatywnie w PowerShell, po zainstalowaniu obsługiwanej wersji Node:
 
 ```powershell
 npm ci

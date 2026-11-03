@@ -12,6 +12,7 @@ export const sourcePageSchema = z.object({
 export const bodyReviewSchema = z.object({
   rows: z.array(z.object({ timestamp: z.string(), origin: z.string(), originalValue: z.string(), converted: convertedValueSchema, identity: z.enum(['identified', 'candidate', 'unresolved']) })),
   matched: z.number().int().nonnegative(), truncated: z.boolean(), unassigned: z.number().int().nonnegative(), coverage: z.literal('unknown'), multipleAccounts: z.boolean().optional(),
+  jobs: z.array(z.object({ start: z.string(), end: z.string(), state: z.enum(['running', 'complete']) })).optional(), jobsTruncated: z.boolean().optional(),
 });
 export type SourceKind = z.infer<typeof sourceKindSchema>;
 export type SourcePage = z.infer<typeof sourcePageSchema>;

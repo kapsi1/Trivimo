@@ -1,5 +1,30 @@
 # Raport weryfikacji
 
+## 2026-11-03 — Node 26 LTS
+
+- Na zainstalowanym Node 26.13.0 `node --import tsx --test --test-timeout=10000 tests/google-pages.test.ts`, pełne `npm test` (67 testów) i `npm run build`: poprawne. Testy lokalnego API uruchomiono poza sandboxem. `tsx` wypisuje ostrzeżenie deprecacji `module.register()`.
+- Zakres obsługiwanych wersji obejmuje Node 24 oraz Node 26 od 26.13; konfiguracja CI przewiduje oba warianty. CI nie zostało uruchomione w tej sesji. Prywatnej bazy i rzeczywistego odczytu Google nie sprawdzano.
+
+## 2026-11-03 — ponowienie testu magazynu na Node 24
+
+- Systemowy Node 26.7.0 zatrzymał test `google-pages.test.ts` podczas pierwszej kopii SQLite przed migracją; przyczyna techniczna zatrzymania nie została ustalona. Projekt wymaga Node 24.
+- Na Node 24.22.1 `node --import tsx --test tests/google-pages.test.ts`: zaliczony. Następnie `npm test` z Node 24.22.1 w PATH: 67 testów syntetycznych zaliczonych poza sandboxem, w tym test magazynu i lokalnego API. Nie sprawdzano prywatnej bazy ani rzeczywistego odczytu Google.
+
+## 2026-11-03 — dzień warszawski w zadaniu Google
+
+- `npx tsx --test tests/google-job-day.test.ts tests/warsaw-day.test.ts tests/google-body-read.test.ts`: 5 testów syntetycznych zaliczonych poza sandboxem, w tym REST, kompatybilność poprzedniego formatu zakresu oraz obie zmiany czasu. `npm run build`: poprawny.
+- Test `tests/google-pages.test.ts` nie zakończył się podczas dwóch prób i został przerwany; przyczyny nie ustalono. Nie wykonano ręcznej próby interfejsu ani rzeczywistego odczytu Google. Istniejące zadania zachowują swoje zapisane zakresy.
+
+## 2026-11-03 — zakresy zapisanych odczytów Google
+
+- `npx tsx --test tests/google-body-source-day.test.ts tests/body-source-day.test.ts`: 5 testów syntetycznych zaliczonych poza sandboxem; obejmują zadanie bez zapisanych stron, granice dnia przy zmianie czasu i brak ujawniania identyfikatorów. `npm run build` i `git diff --check`: poprawne.
+- Podgląd pokazuje do 50 zapisanych zadań nakładających się na dzień, ich zakresy UTC i stan. Zakończenie zadania nie potwierdza kompletności źródła ani tożsamości kont. Nie wykonano ręcznej próby przeglądarki ani odczytu prywatnych pomiarów.
+
+## 2026-11-03 — porównanie źródeł w widoku dnia
+
+- `npx tsx --test tests/body-source-day.test.ts tests/google-body-source-day.test.ts`: 4 testy syntetyczne zaliczone poza sandboxem; w sandboxie test HTTP nie mógł połączyć się z localhost. `npm run build` i `git diff --check`: poprawne.
+- Wspólny wybór typu pokazuje kandydatów Takeout i Google dla tej samej daty; odczyty i błędy pozostają niezależne. Widok nie rozstrzyga tożsamości ani kompletności i nie tworzy wyniku dnia. Nie wykonano ręcznej próby przeglądarki ani porównania prywatnych pomiarów.
+
 ## 2026-11-03 — przegląd kandydatów Google
 
 - `npm test`: 65 testów syntetycznych zaliczonych; po doprecyzowaniu wczesnego zatrzymania odczytu ponowiono 3 testy `google-body-source-day.test.ts` z powodzeniem. `npm run build` i `git diff --check`: poprawne. Testy obejmują dzień Warszawy, zakres stron, dokładną liczbę i ochronę identyfikatorów w odpowiedzi.

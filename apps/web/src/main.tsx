@@ -111,10 +111,10 @@ function GoogleReadJobs() {
     } catch (error) { const code = error instanceof Error ? error.message : ''; setMessage(code === 'account_changed' ? 'Zadanie należy do innego konta Google.' : code === 'authorization_required' || code === 'scope_missing' ? 'Ponów autoryzację z wymaganym zakresem.' : 'Nie udało się wykonać operacji. Zapisane strony i postęp pozostają bez zmian.'); }
     finally { setBusy(false); }
   }
-  return <section><h3>Odczyt próbny</h3><p>Jedno zadanie obejmuje dzień UTC i wybrany typ. Każdy przycisk pobiera najwyżej jedną stronę; oryginały nie są jeszcze kwalifikowane ani łączone z Takeout.</p>
+  return <section><h3>Odczyt próbny</h3><p>Jedno zadanie obejmuje wybrany dzień warszawski i rodzaj pomiaru. Przygotowanie zapisuje zadanie; pobranie strony odczytuje jedną porcję danych Google. Oryginały nie są jeszcze kwalifikowane ani łączone z Takeout.</p>
     <label>Rodzaj <select value={kind} disabled={busy} onChange={(event) => setKind(event.target.value as typeof kind)}><option value="weight">Masa ciała</option><option value="body-fat">Tkanka tłuszczowa</option></select></label>{' '}
-    <label>Data UTC <input type="date" value={date} disabled={busy} onChange={(event) => setDate(event.target.value)} /></label>{' '}
-    <button type="button" disabled={busy || !date || !jobs} onClick={() => { const next = new Date(`${date}T00:00:00Z`); next.setUTCDate(next.getUTCDate() + 1); void run('/api/google/jobs', { kind, start: `${date}T00:00:00Z`, end: next.toISOString().replace('.000Z', 'Z') }); }}>Przygotuj zadanie</button>
+    <label>Data w Warszawie <input type="date" min="2026-01-01" max="9998-12-31" value={date} disabled={busy} onChange={(event) => setDate(event.target.value)} /></label>{' '}
+    <button type="button" disabled={busy || !date || !jobs} onClick={() => void run('/api/google/jobs', { kind, date })}>Przygotuj zadanie</button>
     {message && <p role="status">{message}</p>}
     {jobs && jobs.length > 0 && <div className="table-wrap"><table><thead><tr><th>Typ</th><th>Zakres UTC</th><th>Stan</th><th>Strony</th><th>Akcja</th></tr></thead><tbody>{jobs.map((job) => <tr key={job.id}><td>{job.kind === 'weight' ? 'Masa ciała' : 'Tkanka tłuszczowa'}</td><td>{job.start} – {job.end}</td><td>{job.state === 'complete' ? 'Odczyt zakończony' : 'Do kontynuacji'}</td><td>{job.pages}</td><td>{job.state === 'running' && <button type="button" disabled={busy} onClick={() => void run('/api/google/jobs/next', { id: job.id })}>Pobierz stronę</button>}</td></tr>)}</tbody></table></div>}
   </section>;
@@ -212,20 +212,29 @@ function DailyOverview({ dirty, busy, onDirty, onBusy }: { dirty: boolean; busy:
       </tbody></table></div>
       <h3>Uwagi</h3>{response.snapshot.notes.length ? <ul>{response.snapshot.notes.map((note) => <li key={note}>{note}</li>)}</ul> : <p>Brak uwag.</p>}
       </>}
-      <BodyCandidates key={`body-${date}`} date={date} source="takeout" />
-      <BodyCandidates key={`google-body-${date}`} date={date} source="google" />
+      <BodyComparison key={`body-${date}`} date={date} />
       {response.notesAvailable && <UserNoteEditor key={`note-${date}`} date={date} initial={response.userNote} onDirty={onDirty} onBusy={onBusy} />}
     </>}
   </section>;
 }
 
-function BodyCandidates({ date, source }: { date: string; source: 'takeout' | 'google' }) {
+function BodyComparison({ date }: { date: string }) {
   const [kind, setKind] = useState<'weight' | 'body_fat'>('weight');
   const [visible, setVisible] = useState(false);
+  return <div><h3>Porównanie pomiarów źródłowych</h3>
+    <p>Kandydaci są przypisani do dnia warszawskiego. Powtórzone odczyty i kopie między źródłami nie zostały uzgodnione, a kompletność jest nieznana. Zgodność czasu lub wartości nie potwierdza tożsamości pomiaru.</p>
+    {!visible ? <button type="button" onClick={() => setVisible(true)}>Pokaż pomiary</button> : <>
+      <label>Rodzaj <select value={kind} onChange={(event) => setKind(event.target.value as 'weight' | 'body_fat')}><option value="weight">Masa ciała</option><option value="body_fat">Tkanka tłuszczowa</option></select></label>
+      <BodyCandidates key={`takeout-${kind}`} date={date} kind={kind} source="takeout" />
+      <BodyCandidates key={`google-${kind}`} date={date} kind={kind} source="google" />
+    </>}
+  </div>;
+}
+
+function BodyCandidates({ date, kind, source }: { date: string; kind: 'weight' | 'body_fat'; source: 'takeout' | 'google' }) {
   const [result, setResult] = useState<z.infer<typeof bodyReviewSchema> | null>(null);
   const [error, setError] = useState(false);
   useEffect(() => {
-    if (!visible) return;
     const controller = new AbortController();
     setResult(null); setError(false);
     fetch(`/api/${source === 'google' ? 'google/body-candidates' : 'body-candidates'}?kind=${kind}&date=${encodeURIComponent(date)}`, { signal: controller.signal })
@@ -233,22 +242,23 @@ function BodyCandidates({ date, source }: { date: string; source: 'takeout' | 'g
       .then((data: unknown) => setResult(bodyReviewSchema.parse(data)))
       .catch(() => { if (!controller.signal.aborted) setError(true); });
     return () => controller.abort();
-  }, [date, kind, visible, source]);
-  return <div><h3>Pomiary źródłowe {source === 'google' ? 'Google Health API' : 'Takeout'} w tym dniu</h3>
-    <p>To kandydaci przypisani do dnia warszawskiego. Powtórzone odczyty i kopie między źródłami nie zostały jeszcze uzgodnione, a kompletność jest nieznana; nie tworzą automatycznie średniej.</p>
-    {!visible ? <button type="button" onClick={() => setVisible(true)}>Pokaż pomiary</button> : <>
-      <label>Rodzaj <select value={kind} onChange={(event) => setKind(event.target.value as 'weight' | 'body_fat')}><option value="weight">Masa ciała</option><option value="body_fat">Tkanka tłuszczowa</option></select></label>
+  }, [date, kind, source]);
+  return <div><h4>{source === 'google' ? 'Google Health API' : 'Takeout'}</h4>
       {error ? <p role="alert">Nie udało się odczytać pomiarów źródłowych.</p> : !result ? <p>Ładowanie…</p> : <>
+        {result.jobs && <div><p>Zapisane zadania odczytu nakładające się na dzień Warszawy (granice UTC, koniec wyłączony):</p>
+          {result.jobs.length ? <ul>{result.jobs.map((job, index) => <li key={index}>{job.start} – {job.end}: {job.state === 'complete' ? 'odczyt zakończony' : 'odczyt niezakończony'}</li>)}</ul> : <p>Brak zapisanego zadania dla tego zakresu.</p>}
+          {result.jobsTruncated && <p>Lista zadań jest ograniczona do 50.</p>}
+          <p>Zakończenie odczytu nie potwierdza kompletności danych w źródle ani powiązania kont z importem.</p>
+        </div>}
         {result.unassigned > 0 && <p>Niektórych rekordów źródłowych nie udało się przypisać do dnia lub odczytać.</p>}
         {result.multipleAccounts && <p>Pokazano dane więcej niż jednego konta Google. Nie zostały one połączone.</p>}
         {result.rows.length === 0 ? <p>Nie znaleziono pomiarów dla wybranej daty; kompletność źródła jest nieznana.</p> : <>
           <div className="table-wrap"><table><thead><tr><th>Czas źródła</th><th>Oryginał ({kind === 'weight' ? 'g' : '%'})</th><th>Po przeliczeniu</th><th>Źródło</th></tr></thead><tbody>
             {result.rows.map((row, index) => <tr key={index}><td>{row.timestamp}</td><td>{row.originalValue || '—'}</td><td>{row.converted.status === 'parsed' ? `${row.converted.value.replace('.', ',')} ${row.converted.unit}` : 'Nie można przeliczyć'}</td><td>{row.origin || 'Nieznane'}</td></tr>)}
           </tbody></table></div>
-          {result.truncated && <p>Wyniki są ograniczone; pokazano {result.rows.length} z co najmniej {result.matched} dopasowanych wierszy.</p>}
         </>}
+        {result.truncated && <p>Wyniki są ograniczone; pokazano {result.rows.length} z co najmniej {result.matched} dopasowanych wierszy.</p>}
       </>}
-    </>}
   </div>;
 }
 

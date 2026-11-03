@@ -8,6 +8,7 @@ import { readCanonicalDay } from '../../packages/storage/canonical-days.ts';
 import { readUserNote } from '../../packages/storage/user-notes.ts';
 import { readBodySourceDay } from '../../packages/storage/body-source-day.ts';
 import { readGoogleBodySourceDay } from '../../packages/storage/google-body-source-day.ts';
+import { warsawDay } from '../../packages/domain/warsaw-day.ts';
 import { unassignedSessions } from '../../packages/storage/source-accounts.ts';
 import { userNoteInputSchema } from '../../packages/contracts/day-snapshot.ts';
 import { z } from 'zod';
@@ -80,7 +81,14 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
           else {
             const body = await readJson(request);
             if (url.pathname.endsWith('/next')) result = await googleRead.next(z.object({ id: z.uuid() }).strict().parse(body).id);
-            else { const input = z.object({ kind: z.enum(['weight', 'body-fat']), start: z.iso.datetime(), end: z.iso.datetime() }).strict().parse(body); result = await googleRead.start(input.kind, input.start, input.end); }
+            else {
+              const input = z.union([
+                z.object({ kind: z.enum(['weight', 'body-fat']), date: z.iso.date() }).strict(),
+                z.object({ kind: z.enum(['weight', 'body-fat']), start: z.iso.datetime(), end: z.iso.datetime() }).strict(),
+              ]).parse(body);
+              const range = 'date' in input ? warsawDay(input.date) : input;
+              result = await googleRead.start(input.kind, range.start, range.end);
+            }
           }
           response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }).end(JSON.stringify(result));
         } catch (error) {

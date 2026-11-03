@@ -6,8 +6,8 @@ import { readGoogleBodySourceDay } from '../packages/storage/google-body-source-
 test('przegląd wybiera tylko nakładające się strony, dzień Warszawy i dokładny oryginał', () => {
   const db = new DatabaseSync(':memory:');
   try {
-    db.exec(`CREATE TABLE google_read_jobs(id TEXT, account_digest TEXT, kind TEXT, range_start TEXT, range_end TEXT, created_at TEXT); CREATE TABLE google_read_pages(job_id TEXT, page_number INTEGER, raw_json TEXT);`);
-    const job = db.prepare('INSERT INTO google_read_jobs VALUES (?, ?, ?, ?, ?, ?)');
+    db.exec(`CREATE TABLE google_read_jobs(id TEXT, account_digest TEXT, kind TEXT, range_start TEXT, range_end TEXT, created_at TEXT, state TEXT DEFAULT 'complete'); CREATE TABLE google_read_pages(job_id TEXT, page_number INTEGER, raw_json TEXT);`);
+    const job = db.prepare('INSERT INTO google_read_jobs (id, account_digest, kind, range_start, range_end, created_at) VALUES (?, ?, ?, ?, ?, ?)');
     const page = db.prepare('INSERT INTO google_read_pages VALUES (?, ?, ?)');
     job.run('one', 'a', 'weight', '2026-03-28T00:00:00Z', '2026-03-30T00:00:00Z', '2026-04-01T00:00:00Z');
     page.run('one', 1, '{"dataPoints":[{"name":"users/synthetic/dataTypes/weight/dataPoints/1","dataSource":{"platform":"SYNTHETIC"},"weight":{"sampleTime":{"physicalTime":"2026-03-28T23:00:00Z"},"weightGrams":9007199254740993}},{"weight":{"sampleTime":{"physicalTime":"2026-03-29T22:00:00Z"},"weightGrams":70000}}]}');
@@ -25,8 +25,8 @@ test('przegląd wybiera tylko nakładające się strony, dzień Warszawy i dokł
 test('tłuszcz, błędna wartość i nierozstrzygnięta tożsamość pozostają jawne', () => {
   const db = new DatabaseSync(':memory:');
   try {
-    db.exec(`CREATE TABLE google_read_jobs(id TEXT, account_digest TEXT, kind TEXT, range_start TEXT, range_end TEXT, created_at TEXT); CREATE TABLE google_read_pages(job_id TEXT, page_number INTEGER, raw_json TEXT);`);
-    db.prepare('INSERT INTO google_read_jobs VALUES (?, ?, ?, ?, ?, ?)').run('one', 'a', 'body-fat', '2026-01-01T00:00:00Z', '2026-01-03T00:00:00Z', '2026-01-04T00:00:00Z');
+    db.exec(`CREATE TABLE google_read_jobs(id TEXT, account_digest TEXT, kind TEXT, range_start TEXT, range_end TEXT, created_at TEXT, state TEXT DEFAULT 'complete'); CREATE TABLE google_read_pages(job_id TEXT, page_number INTEGER, raw_json TEXT);`);
+    db.prepare('INSERT INTO google_read_jobs (id, account_digest, kind, range_start, range_end, created_at) VALUES (?, ?, ?, ?, ?, ?)').run('one', 'a', 'body-fat', '2026-01-01T00:00:00Z', '2026-01-03T00:00:00Z', '2026-01-04T00:00:00Z');
     db.prepare('INSERT INTO google_read_pages VALUES (?, ?, ?)').run('one', 1, '{"dataPoints":[{"bodyFat":{"sampleTime":{"physicalTime":"2026-01-01T12:00:00Z"},"percentage":0}},{"bodyFat":{"sampleTime":{"physicalTime":"invalid"},"percentage":10}}]}');
     const result = readGoogleBodySourceDay(db, 'body_fat', '2026-01-01');
     assert.deepEqual(result.rows[0]?.converted, { status: 'parsed', value: '0', unit: '%' });
@@ -34,11 +34,25 @@ test('tłuszcz, błędna wartość i nierozstrzygnięta tożsamość pozostają 
   } finally { db.close(); }
 });
 
+test('zakresy zadań obejmują także niezakończony odczyt bez stron i nie dowodzą kompletności', () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    db.exec(`CREATE TABLE google_read_jobs(id TEXT, account_digest TEXT, kind TEXT, range_start TEXT, range_end TEXT, created_at TEXT, state TEXT); CREATE TABLE google_read_pages(job_id TEXT, page_number INTEGER, raw_json TEXT);`);
+    const insert = db.prepare('INSERT INTO google_read_jobs VALUES (?, ?, ?, ?, ?, ?, ?)');
+    insert.run('a', 'private-account', 'weight', '2026-03-28T23:00:00Z', '2026-03-29T10:00:00Z', '2026-04-01T00:00:00Z', 'running');
+    insert.run('b', 'private-account', 'weight', '2026-03-29T22:00:00Z', '2026-03-30T00:00:00Z', '2026-04-01T00:00:00Z', 'complete');
+    const result = readGoogleBodySourceDay(db, 'weight', '2026-03-29');
+    assert.deepEqual(result.jobs, [{ start: '2026-03-28T23:00:00Z', end: '2026-03-29T10:00:00Z', state: 'running' }]);
+    assert.equal(result.coverage, 'unknown'); assert.equal(result.jobsTruncated, false);
+    assert.doesNotMatch(JSON.stringify(result), /private-account/);
+  } finally { db.close(); }
+});
+
 test('REST nie ujawnia identyfikatorów konta ani źródłowego rekordu', async () => {
   const { createApp } = await import('../apps/server/app.ts'); const { createDemoDatabase } = await import('../packages/storage/days.ts');
   const db = new DatabaseSync(':memory:'); const demo = createDemoDatabase();
-  db.exec(`CREATE TABLE google_read_jobs(id TEXT, account_digest TEXT, kind TEXT, range_start TEXT, range_end TEXT, created_at TEXT); CREATE TABLE google_read_pages(job_id TEXT, page_number INTEGER, raw_json TEXT); PRAGMA user_version = 5;`);
-  db.prepare('INSERT INTO google_read_jobs VALUES (?, ?, ?, ?, ?, ?)').run('job-private', 'account-private', 'weight', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z', '2026-01-03T00:00:00Z');
+  db.exec(`CREATE TABLE google_read_jobs(id TEXT, account_digest TEXT, kind TEXT, range_start TEXT, range_end TEXT, created_at TEXT, state TEXT DEFAULT 'complete'); CREATE TABLE google_read_pages(job_id TEXT, page_number INTEGER, raw_json TEXT); PRAGMA user_version = 5;`);
+  db.prepare('INSERT INTO google_read_jobs (id, account_digest, kind, range_start, range_end, created_at) VALUES (?, ?, ?, ?, ?, ?)').run('job-private', 'account-private', 'weight', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z', '2026-01-03T00:00:00Z');
   db.prepare('INSERT INTO google_read_pages VALUES (?, ?, ?)').run('job-private', 1, '{"dataPoints":[{"name":"record-private","weight":{"sampleTime":{"physicalTime":"2026-01-01T12:00:00Z"},"weightGrams":70000}}]}');
   const server = createApp(demo, db);
   try {

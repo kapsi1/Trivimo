@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { createApp } from '../apps/server/app.ts';
+import type { GoogleReadService } from '../apps/server/google-read-service.ts';
+import { createDemoDatabase } from '../packages/storage/days.ts';
+
+test('REST tworzy zadanie dla doby warszawskiej i zachowuje wcześniejszy format zakresu', async () => {
+  const calls: string[][] = [];
+  const service = { start: async (...args: string[]) => { calls.push(args); return { id: 'synthetic' }; } } as unknown as GoogleReadService;
+  const db = createDemoDatabase(); const server = createApp(db, undefined, undefined, [], undefined, service);
+  try {
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address(); assert.ok(address && typeof address !== 'string');
+    const base = `http://127.0.0.1:${address.port}`;
+    const cookie = (await fetch(`${base}/api/session`)).headers.get('set-cookie')?.split(';')[0]; assert.ok(cookie);
+    const headers = { Cookie: cookie, Origin: 'http://localhost:5173', 'Content-Type': 'application/json', 'X-Trivimo-Request': '1' };
+    const post = (body: object) => fetch(`${base}/api/google/jobs`, { method: 'POST', headers, body: JSON.stringify(body) });
+    assert.equal((await post({ kind: 'weight', date: '2026-03-29' })).status, 200);
+    assert.equal((await post({ kind: 'body-fat', date: '2026-10-25' })).status, 200);
+    assert.equal((await post({ kind: 'weight', start: '2026-01-01T00:00:00Z', end: '2026-01-02T00:00:00Z' })).status, 200);
+    assert.equal((await post({ kind: 'weight', date: '2025-12-31' })).status, 400);
+    assert.deepEqual(calls, [
+      ['weight', '2026-03-28T23:00:00.000Z', '2026-03-29T22:00:00.000Z'],
+      ['body-fat', '2026-10-24T22:00:00.000Z', '2026-10-25T23:00:00.000Z'],
+      ['weight', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z'],
+    ]);
+  } finally { await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())); db.close(); }
+});

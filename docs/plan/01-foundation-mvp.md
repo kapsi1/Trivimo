@@ -14,6 +14,8 @@ Wykonane próby syntetycznego przepływu i parserów opisuje [P0 — wykonane](.
 
 W trakcie: powstał syntetycznie testowany przepływ od jawnych decyzji i dowodów przez projekcję sześciu metryk, zapis rewizji, REST i widok dnia. Uwzględnia czas warszawski, kwalifikację kalorii, średnie zaakceptowanych pomiarów i deterministyczne uwagi. Osobne notatki użytkownika i ich historia zostały [wykonane](../completed/01-p0-probes.md). Schemat magazynu został zaktualizowany po wykonaniu kopii na wskazanym dysku, lecz rzeczywiste dane nie są jeszcze automatycznie kwalifikowane ani przeliczane; polityka źródeł i ocena danych wymagają walidacji.
 
+Próbne nowe zadania odczytu masy i tkanki tłuszczowej wybierają dzień warszawski; starsze zadania zachowują zapisany zakres UTC. To nadal pojedynczy ręczny odczyt stron, nie synchronizacja ani potwierdzenie kompletności.
+
 - [ ] Wdrożyć źródłowe wersje, obserwacje, tożsamość/repliki, definicje, projekcje dnia i ustrukturyzowane uwagi. Import ma preview, podsumowanie zakresu i checkpoint porcji. Zapis transakcyjny oraz idempotencja powtórzenia.
 - [ ] Wdrożyć sześć typów MVP z [planu API](02-health-api.md) i [Takeout](03-import-migration.md); brak archiwalnego total/active zachować jako brak, nie odzyskiwać z obecnych ustawień BMR.
 - [ ] Wprowadzić osobne: ręczny import historii, odświeżenie bieżących dni i przeliczenie lokalne po zmianie reguł. Przeliczenie nie wymaga ponownego pobrania wszystkich oryginałów. Kolejka z postępem i wznowieniem; anulowanie dalszej pracy nie jest rollbackiem.
@@ -22,7 +24,7 @@ W trakcie: powstał syntetycznie testowany przepływ od jawnych decyzji i dowod�
 
 ## M1: UI
 
-Wykonano początkowy widok tabeli zapisanych wyników: zakres do 366 dni, filtr dni z automatycznymi uwagami, wybór metryk, sortowanie według daty i osobna kolumna notatek. Sortowanie według wartości zachowuje dokładność i umieszcza braki na końcu. Podstawowe szczegóły pokazują stan i rewizję; wirtualizacja oraz pełne pochodzenie i decyzje pozostają otwarte. Rzeczywiste dane nadal nie są automatycznie przeliczane.
+Wykonano początkowy widok tabeli zapisanych wyników: zakres do 366 dni, filtr dni z automatycznymi uwagami, wybór metryk, sortowanie według daty i osobna kolumna notatek. Sortowanie według wartości zachowuje dokładność i umieszcza braki na końcu. Widok dnia pozwala zestawić kandydatów masy lub tkanki tłuszczowej z Takeout i zapisanych stron Google, bez rozstrzygania ich tożsamości; pokazuje także zakresy i stan zapisanych zadań Google, bez wnioskowania o kompletności źródła. Podstawowe szczegóły pokazują stan i rewizję; wirtualizacja oraz pełne pochodzenie i decyzje pozostają otwarte. Rzeczywiste dane nadal nie są automatycznie przeliczane.
 
 - [ ] Lewa nawigacja/zakładki: Przegląd, Dane, Źródła/Importy, Ustawienia. Prosty ciemny motyw, czytelne jednostki, fokus i kontrast, brak docelowego redesignu na tym etapie.
 - [ ] Tabela: data, sześć metryk, Uwagi; sortowanie, zakres dat, wybór kolumn, filtrowanie problemów i wirtualizacja przy dużych zakresach. Liczby pozostają liczbami. Puste pole ma rozróżnialny status w szczegółach/tooltipie; bez zera i bez nieczytelnych kodów we wszystkich komórkach.
