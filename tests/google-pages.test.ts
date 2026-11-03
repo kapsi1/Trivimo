@@ -51,6 +51,8 @@ test('strona i kursor są atomowe, a wznowienie zachowuje oryginalny JSON', asyn
       const { id } = await created.json() as { id: string }; const saved = await fetch(`${base}/api/google/jobs/next`, { method: 'POST', headers, body: JSON.stringify({ id }) });
       assert.equal(saved.status, 200); assert.doesNotMatch(await saved.text(), /private-synthetic/);
       const list = await fetch(`${base}/api/google/jobs`, { headers: { Cookie: cookie } }); assert.doesNotMatch(await list.text(), /private-synthetic|account_digest/);
+      const share = await fetch(`${base}/api/google/band-share-range?from=2026-03-01&to=2026-03-03`, { headers: { Cookie: cookie } }); assert.equal(share.status, 200); assert.equal(((await share.json()) as unknown[]).length, 3);
+      assert.equal((await fetch(`${base}/api/google/band-share-range?from=2026-01-01&to=2027-06-01`, { headers: { Cookie: cookie } })).status, 400);
     } finally { await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())); demo.close(); }
     verifyTakeout(path);
     db.prepare("UPDATE google_read_pages SET raw_json = '{}' WHERE job_id = ? AND page_number = 1").run(job);

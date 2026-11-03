@@ -9,7 +9,7 @@ import { readUserNote } from '../../packages/storage/user-notes.ts';
 import { readBodySourceDay } from '../../packages/storage/body-source-day.ts';
 import { readGoogleBodySourceDay } from '../../packages/storage/google-body-source-day.ts';
 import { dailyRollupTypes } from '../../packages/adapters/google-health/daily-rollup.ts';
-import { readBandShareDay } from '../../packages/storage/google-band-share-day.ts';
+import { readBandShareDay, readBandShareRange } from '../../packages/storage/google-band-share-day.ts';
 import { readGoogleDailySourceDay } from '../../packages/storage/google-daily-source-day.ts';
 import { warsawDay } from '../../packages/domain/warsaw-day.ts';
 import { unassignedSessions } from '../../packages/storage/source-accounts.ts';
@@ -128,6 +128,16 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
       if (!origin || !allowedOrigins.includes(origin) || request.headers['x-trivimo-request'] !== '1' || request.headers['content-type'] !== 'application/json') { response.writeHead(403, { 'Cache-Control': 'no-store' }).end(); return; }
       if (!googleSync) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
       void googleSync.runOnce().then((outcome) => response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify(outcome)));
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/api/google/band-share-range') {
+      const from = z.iso.date().safeParse(url.searchParams.get('from')), to = z.iso.date().safeParse(url.searchParams.get('to'));
+      if (!from.success || !to.success || from.data > to.data || (Date.parse(to.data) - Date.parse(from.data)) / 86400000 > 365 || Number(from.data.slice(0, 4)) < 2026 || Number(to.data.slice(0, 4)) > 9998) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
+      const source = typeof sourceDb === 'function' ? sourceDb() : sourceDb;
+      if (!source || source.prepare('PRAGMA user_version').get()?.user_version !== 8) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
+      try {
+        response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }).end(JSON.stringify(readBandShareRange(source, from.data, to.data)));
+      } catch { response.writeHead(500, { 'Cache-Control': 'no-store' }).end(); }
       return;
     }
     if (request.method === 'GET' && url.pathname === '/api/google/band-share') {

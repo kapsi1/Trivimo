@@ -201,6 +201,7 @@ const rangeSchema = z.discriminatedUnion('state', [
   z.object({ state: z.literal('ready'), days: z.array(z.object({ date: z.iso.date(), snapshot: daySnapshotSchema.nullable(), userNote: userNoteSchema.nullable() })) }),
 ]);
 
+const bandRangeSchema = z.array(z.object({ date: z.iso.date(), totalWindows: z.number().int().positive(), heartRate: z.object({ windows: z.number().int().nonnegative() }).nullable() }));
 function DailyTable({ onViewSources }: { onViewSources: () => void }) {
   const [to, setTo] = useState(warsawToday);
   const [from, setFrom] = useState(() => { const date = new Date(`${warsawToday()}T00:00:00Z`); date.setUTCDate(date.getUTCDate() - 29); return date.toISOString().slice(0, 10); });
@@ -211,6 +212,7 @@ function DailyTable({ onViewSources }: { onViewSources: () => void }) {
   const [visibleMetrics, setVisibleMetrics] = useState<Set<(typeof dailyMetrics)[number][0]>>(() => new Set(dailyMetrics.map(([key]) => key)));
   const [result, setResult] = useState<z.infer<typeof rangeSchema> | null>(null);
   const [error, setError] = useState(false);
+  const [band, setBand] = useState<Map<string, { windows: number; total: number }> | null>(null);
   const valid = !!from && !!to && from <= to && (Date.parse(to) - Date.parse(from)) / 86400000 <= 365;
   useEffect(() => {
     setResult(null); setError(false);
@@ -222,6 +224,17 @@ function DailyTable({ onViewSources }: { onViewSources: () => void }) {
       .catch(() => { if (!controller.signal.aborted) setError(true); });
     return () => controller.abort();
   }, [from, to, valid]);
+  useEffect(() => {
+    setBand(null);
+    if (!valid) return;
+    const controller = new AbortController();
+    fetch(`/api/google/band-share-range?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, { signal: controller.signal })
+      .then((response) => { if (!response.ok) throw new Error('Opaska'); return response.json(); })
+      .then((data: unknown) => setBand(new Map(bandRangeSchema.parse(data).flatMap((item) => item.heartRate ? [[item.date, { windows: item.heartRate.windows, total: item.totalWindows }] as const] : []))))
+      .catch(() => { /* the column then shows "—": the band share is an optional addition to the table */ });
+    return () => controller.abort();
+  }, [from, to, valid]);
+  const today = warsawToday();
   function sortOn(key: typeof sortBy) {
     if (key === sortBy) setDescending((value) => !value);
     else { setSortBy(key); setDescending(key === 'date'); }
@@ -236,8 +249,8 @@ function DailyTable({ onViewSources }: { onViewSources: () => void }) {
     <p>Dzień aplikacji: Europe/Warsaw. Maksymalnie 366 dni; brak wyliczonego wyniku pozostaje pusty.</p>
     {!valid ? <p role="alert">Wybierz poprawny zakres do 366 dni.</p> : error ? <p role="alert">Nie udało się odczytać tabeli.</p> : !result ? <p>Ładowanie…</p> : result.state === 'not_ready' ? <p>Wyniki dzienne nie są jeszcze przygotowane.</p> : <>
       {!result.days.some((day) => day.snapshot !== null) && <div role="status" className="empty-results"><p>W tym zakresie nie ma jeszcze obliczonych wyników dziennych. Pobrane i zaimportowane dane źródłowe nie są jeszcze automatycznie przeliczane na tę tabelę.</p><button type="button" onClick={onViewSources}>Zobacz dane źródłowe</button></div>}
-      <div className="table-wrap"><table><thead><tr><th scope="col" aria-sort={sortBy === 'date' ? descending ? 'descending' : 'ascending' : undefined}><button type="button" onClick={() => sortOn('date')}>Data {sortBy === 'date' ? descending ? '↓' : '↑' : ''}</button></th>{dailyMetrics.filter(([key]) => visibleMetrics.has(key)).map(([key, label, unit]) => <th key={key} scope="col" aria-sort={sortBy === key ? descending ? 'descending' : 'ascending' : undefined}><button type="button" onClick={() => sortOn(key)}>{label} ({unit}) {sortBy === key ? descending ? '↓' : '↑' : ''}</button></th>)}<th>Uwagi</th><th>Moja notatka</th></tr></thead><tbody>
-        {result.days.filter((day) => !problems || (day.snapshot?.notes.length ?? 0) > 0).sort((a, b) => compareDailyRows(a, b, sortBy, descending)).map((day) => <tr key={day.date}><td>{day.date}</td>{dailyMetrics.filter(([key]) => visibleMetrics.has(key)).map(([key, label, , decimals]) => { const metric = day.snapshot?.metrics[key]; return <td key={key}><button type="button" className="metric-cell" aria-label={`${label}, ${day.date}: ${metric ? quality[metric.status] : 'Brak obliczonego wyniku'}`} onClick={() => setSelected({ date: day.date, key })}>{metric?.value == null ? '—' : formatRational(metric.value, decimals)}</button></td>; })}<td>{day.snapshot?.notes.join('; ') || '—'}</td><td>{day.userNote?.content || '—'}</td></tr>)}
+      <div className="table-wrap"><table><thead><tr><th scope="col" aria-sort={sortBy === 'date' ? descending ? 'descending' : 'ascending' : undefined}><button type="button" onClick={() => sortOn('date')}>Data {sortBy === 'date' ? descending ? '↓' : '↑' : ''}</button></th>{dailyMetrics.filter(([key]) => visibleMetrics.has(key)).map(([key, label, unit]) => <th key={key} scope="col" aria-sort={sortBy === key ? descending ? 'descending' : 'ascending' : undefined}><button type="button" onClick={() => sortOn(key)}>{label} ({unit}) {sortBy === key ? descending ? '↓' : '↑' : ''}</button></th>)}<th scope="col" title="Udział doby warszawskiej, w której urządzenie mierzyło tętno (okna 10-minutowe). Dowód pomiaru, nie noszenia przez całe okno; — oznacza brak zapisanego odczytu tętna dla całej doby.">Udział opaski</th><th>Uwagi</th><th>Moja notatka</th></tr></thead><tbody>
+        {result.days.filter((day) => !problems || (day.snapshot?.notes.length ?? 0) > 0).sort((a, b) => compareDailyRows(a, b, sortBy, descending)).map((day) => <tr key={day.date}><td>{day.date}{day.date === today && <span title="Doba jeszcze trwa: wartości mogą się zmienić po kolejnym odczycie lub synchronizacji urządzenia."> (w toku)</span>}</td>{dailyMetrics.filter(([key]) => visibleMetrics.has(key)).map(([key, label, , decimals]) => { const metric = day.snapshot?.metrics[key]; return <td key={key}><button type="button" className="metric-cell" aria-label={`${label}, ${day.date}: ${metric ? quality[metric.status] : 'Brak obliczonego wyniku'}`} onClick={() => setSelected({ date: day.date, key })}>{metric?.value == null ? '—' : formatRational(metric.value, decimals)}</button></td>; })}<td>{(() => { const share = band?.get(day.date); return share ? <span title={`${share.windows} z ${share.total} okien 10-minutowych z tętnem`}>{(share.windows / share.total * 100).toLocaleString('pl-PL', { maximumFractionDigits: 0 })}%</span> : '—'; })()}</td><td>{day.snapshot?.notes.join('; ') || '—'}</td><td>{day.userNote?.content || '—'}</td></tr>)}
       </tbody></table>{problems && !result.days.some((day) => (day.snapshot?.notes.length ?? 0) > 0) && <p>Brak dni z uwagami w wybranym zakresie.</p>}</div>
       {selected && (() => { const day = result.days.find((item) => item.date === selected.date); const definition = dailyMetrics.find(([key]) => key === selected.key); const metric = day?.snapshot?.metrics[selected.key]; if (!day || !definition) return null; return <section aria-label="Szczegóły metryki"><h3>{definition[1]} — {day.date}</h3><p>Stan: {metric ? quality[metric.status] : 'Brak obliczonego wyniku'}.</p><p>Wartość: {metric?.value == null ? 'brak' : `${formatRational(metric.value, definition[3])} ${definition[2]}`}.</p><p>Rewizja wyniku: {day.snapshot?.revision ?? 'brak'}. Szczegóły źródła i decyzji kwalifikacyjnych nie są jeszcze zapisane w tej projekcji.</p><button type="button" onClick={() => setSelected(null)}>Zamknij szczegóły</button></section>; })()}
     </>}
@@ -317,6 +330,7 @@ function BandShare({ date }: { date: string }) {
   }, [date]);
   const percent = (part: number, whole: number) => `${(part / whole * 100).toLocaleString('pl-PL', { maximumFractionDigits: 0 })}%`;
   return <div><h4>Udział opaski w dobie (dzień warszawski, okna 10-minutowe)</h4>
+    {date === warsawToday() && <p role="status">Doba jeszcze trwa: wartości są częściowe i rosną z kolejnymi odczytami oraz synchronizacją urządzenia; nie traktuj ich jako pełnej doby.</p>}
     {error ? <p role="alert">Nie udało się odczytać udziału opaski.</p> : !result ? <p>Ładowanie…</p> : !result.heartRate ? <p>Brak zapisanego odczytu tętna dla całej doby (rodzaj „Tętno — okna 10 min"). Bez niego nie wiadomo, kiedy opaska mierzyła.</p> : <>
       <p>Tętno z urządzenia w {result.heartRate.windows} z {result.totalWindows} okien ({percent(result.heartRate.windows, result.totalWindows)} doby). To dowód pomiaru, nie dowód noszenia przez całe okno.</p>
       {result.activeEnergy ? <p>Aktywne kalorie: {result.activeEnergy.bandKcal.replace('.', ',')} kcal w oknach z tętnem opaski ({result.activeEnergy.bandWindows} okien) i {result.activeEnergy.otherKcal.replace('.', ',')} kcal w oknach bez niego ({result.activeEnergy.otherWindows} okien, szacunek telefonu lub brak pomiaru tętna). Opaska liczy wysiłek z tętna, telefon z kroków, więc kcal z obu źródeł nie są wprost porównywalne.</p>
@@ -339,6 +353,7 @@ function GoogleDailyCandidates({ date, kind }: { date: string; kind: 'steps' | '
     return () => controller.abort();
   }, [date, kind]);
   return <div><h4>Google Health API — {({ steps: 'kroki', distance: 'dystans', 'total-calories': 'kalorie total (zawiera BMR)', 'active-energy-burned': 'kalorie aktywne' })[kind]} (doba producenta)</h4>
+    {date === warsawToday() && <p role="status">Doba jeszcze trwa: wartości są częściowe i rosną z kolejnymi odczytami oraz synchronizacją urządzenia; nie traktuj ich jako pełnej doby.</p>}
     {error ? <p role="alert">Nie udało się odczytać zapisanych agregatów.</p> : !result ? <p>Ładowanie…</p> : <>
       {result.multipleAccounts && <p>Zapisane zadania obejmują więcej niż jedno konto Google. Konta nie zostały połączone.</p>}
       {result.rows.length === 0 ? <p>{result.jobs.length ? 'Zapisane zadania nie zawierają wartości dla tej doby; brak wartości nie oznacza zera.' : 'Brak zapisanego zadania dla tej doby.'} Kompletność źródła jest nieznana.</p> : <div className="table-wrap"><table><thead><tr><th>Oryginał ({({ steps: 'kroki', distance: 'mm', 'total-calories': 'kcal', 'active-energy-burned': 'kcal' })[kind]})</th><th>Po przeliczeniu</th><th>Zapisano</th><th>Odczyt</th></tr></thead><tbody>

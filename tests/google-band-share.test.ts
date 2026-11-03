@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseWindowRollup, windowRollupPage } from '../packages/adapters/google-health/window-rollup.ts';
 import { createDemoDatabase } from '../packages/storage/days.ts';
-import { readBandShareDay } from '../packages/storage/google-band-share-day.ts';
+import { readBandShareDay, readBandShareRange } from '../packages/storage/google-band-share-day.ts';
 import { warsawDay } from '../packages/domain/warsaw-day.ts';
 
 const point = (start: string, extra: object) => ({ startTime: start, endTime: new Date(Date.parse(start) + 600000).toISOString(), ...extra });
@@ -58,5 +58,22 @@ test('udział opaski: okna tętna dzielą aktywne kcal, brakujący odczyt nie je
     assert.equal(readBandShareDay(db, '2026-03-02').heartRate, null);
     assert.equal(readBandShareDay(db, '2026-03-29').totalWindows, 138);
     assert.equal(readBandShareDay(db, '2026-10-25').totalWindows, 150);
+  } finally { db.close(); }
+});
+
+test('udział opaski w zakresie: najnowszy odczyt wygrywa, odczytano bez okien to nie brak odczytu', () => {
+  const db = store();
+  try {
+    const first = warsawDay('2026-03-02'), second = warsawDay('2026-03-03');
+    const hr = (start: string) => JSON.stringify({ rollupDataPoints: [point(start, { heartRate: { beatsPerMinuteAvg: 80 } })] });
+    // older job reads only the first day; newer job reads days 1-2 (the newer one claims both)
+    save(db, 'old', 'heart-rate-10m', first.start, first.end, hr(first.start));
+    db.prepare("UPDATE google_read_jobs SET created_at = '2026-03-04T00:00:00.000Z' WHERE id = 'old'").run();
+    save(db, 'new', 'heart-rate-10m', first.start, second.end, JSON.stringify({ rollupDataPoints: [point(first.start, { heartRate: { beatsPerMinuteAvg: 80 } }), point(new Date(Date.parse(first.start) + 600000).toISOString(), { heartRate: { beatsPerMinuteAvg: 81 } })] }));
+    const rows = readBandShareRange(db, '2026-03-02', '2026-03-04');
+    assert.deepEqual(rows.map((row) => row.date), ['2026-03-02', '2026-03-03', '2026-03-04']);
+    assert.deepEqual(rows.map((row) => row.heartRate), [{ windows: 2 }, { windows: 0 }, null]);
+    assert.deepEqual(readBandShareDay(db, '2026-03-02').heartRate, { windows: 2 });
+    assert.throws(() => readBandShareRange(db, '2026-01-01', '2027-06-01'), /range_too_large/);
   } finally { db.close(); }
 });
