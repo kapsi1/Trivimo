@@ -4,17 +4,18 @@ import { z } from 'zod';
 import { sourceDay } from '../../packages/domain/source-day.ts';
 import { warsawDay } from '../../packages/domain/warsaw-day.ts';
 import type { GoogleJobKind } from '../../packages/storage/google-pages.ts';
+import { applyReadPolicy, registerAutomaticJob } from '../../packages/storage/google-read-policy.ts';
 import type { GoogleAuth } from './google-auth.ts';
 import { readGoogleJobPage, startGoogleReadJob } from './google-read-service.ts';
 
 /** Kinds refreshed automatically: the six M1 metrics' raw material plus the ten-minute wear evidence. */
-export const syncKinds = ['steps', 'distance', 'total-calories', 'active-energy-burned', 'heart-rate-10m', 'active-energy-10m'] as const;
+export const syncKinds = ['steps', 'distance', 'total-calories', 'active-energy-burned', 'heart-rate-10m', 'active-energy-10m', 'total-calories-10m', 'steps-10m', 'distance-10m'] as const;
 export type SyncKind = (typeof syncKinds)[number];
 export interface SyncRead { kind: SyncKind; first: string; last: string; begin: string; end: string }
 export interface SyncOutcome { at: string; result: 'ok' | 'authorization_required' | 'scope_missing' | 'migration_required' | 'error'; code?: string; reads: number }
 
 const maxCatchUpDays = 13; // keeps a ten-minute-window range within 14 days even across a 25-hour day
-const windowed = (kind: SyncKind) => kind === 'heart-rate-10m' || kind === 'active-energy-10m';
+const windowed = (kind: SyncKind) => kind.endsWith('-10m');
 const addDays = (date: string, days: number) => new Date(Date.parse(`${date}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
 
 /** Civil days are stored as producer dates; ten-minute windows as the UTC bounds of the Warsaw days. */
@@ -67,13 +68,14 @@ export class GoogleSyncService {
   private open(): DatabaseSync {
     let db: DatabaseSync;
     try { const stat = lstatSync(this.path); if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('invalid_store'); db = new DatabaseSync(this.path); } catch { throw new Error('store_unavailable'); }
-    if (db.prepare('PRAGMA application_id').get()?.application_id !== 1414682185 || db.prepare('PRAGMA user_version').get()?.user_version !== 8) { db.close(); throw new Error('migration_required'); }
+    if (db.prepare('PRAGMA application_id').get()?.application_id !== 1414682185 || db.prepare('PRAGMA user_version').get()?.user_version !== 9) { db.close(); throw new Error('migration_required'); }
     return db;
   }
   private execute: Execute = async (db, read) => {
     if (this.options.execute) return this.options.execute(db, read);
     const id = await startGoogleReadJob(db, this.auth, read.kind as GoogleJobKind, read.begin, read.end, this.options.send);
-    for (let page = 0; page < 50; page++) if ((await readGoogleJobPage(db, this.auth, id, this.options.send)).complete) return;
+    registerAutomaticJob(db, id);
+    for (let page = 0; page < 50; page++) if ((await readGoogleJobPage(db, this.auth, id, this.options.send)).complete) { applyReadPolicy(db, id, this.now()); return; }
   };
   /** Start the background loop: one catch-up run now, then every interval. Does nothing when no interval is configured. */
   start(): void {
@@ -94,7 +96,7 @@ export class GoogleSyncService {
       db = this.open();
       const kinds = syncKinds.map((kind) => `'${kind}'`).join(',');
       for (const job of db.prepare(`SELECT id FROM google_read_jobs WHERE state = 'running' AND kind IN (${kinds}) ORDER BY created_at`).all()) {
-        for (let page = 0; page < 50; page++) { if ((await readGoogleJobPage(db, this.auth, String(job.id), this.options.send)).complete) break; }
+        for (let page = 0; page < 50; page++) { if ((await readGoogleJobPage(db, this.auth, String(job.id), this.options.send)).complete) { applyReadPolicy(db, String(job.id), this.now()); break; } }
         reads++;
       }
       const interval = (this.options.intervalMinutes ?? 60) * 60000;

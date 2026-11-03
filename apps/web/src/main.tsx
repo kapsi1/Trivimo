@@ -90,7 +90,7 @@ function GoogleConnection() {
   </section>;
 }
 
-const googleJobSchema = z.object({ id: z.uuid(), kind: z.enum(['weight', 'body-fat', 'steps', 'distance', 'total-calories', 'active-energy-burned', 'heart-rate-10m', 'active-energy-10m']), start: z.string().max(40), end: z.string().max(40), state: z.enum(['running', 'complete']), createdAt: z.iso.datetime(), pages: z.number().int().nonnegative() });
+const googleJobSchema = z.object({ id: z.uuid(), kind: z.enum(['weight', 'body-fat', 'steps', 'distance', 'total-calories', 'active-energy-burned', 'heart-rate-10m', 'active-energy-10m', 'total-calories-10m', 'steps-10m', 'distance-10m']), start: z.string().max(40), end: z.string().max(40), state: z.enum(['running', 'complete']), createdAt: z.iso.datetime(), pages: z.number().int().nonnegative() });
 function googleJobsError(error: unknown): string {
   const code = error instanceof Error ? error.message : '';
   if (code === 'migration_required') return 'Wersja magazynu wymaga migracji z kopią zapasową.';
@@ -104,7 +104,7 @@ const syncStatusSchema = z.object({
   last: z.object({ at: z.string(), result: z.enum(['ok', 'authorization_required', 'scope_missing', 'migration_required', 'error']), code: z.string().optional(), reads: z.number() }).nullable(),
   kinds: z.array(z.object({ kind: z.string(), lastReadAt: z.string().nullable(), coveredThrough: z.string().nullable() })),
 });
-const syncLabels: Record<string, string> = { steps: 'Kroki', distance: 'Dystans', 'total-calories': 'Kalorie total', 'active-energy-burned': 'Kalorie aktywne', 'heart-rate-10m': 'Tętno (okna)', 'active-energy-10m': 'Kalorie aktywne (okna)' };
+const syncLabels: Record<string, string> = { steps: 'Kroki', distance: 'Dystans', 'total-calories': 'Kalorie total', 'active-energy-burned': 'Kalorie aktywne', 'heart-rate-10m': 'Tętno (okna)', 'active-energy-10m': 'Kalorie aktywne (okna)', 'total-calories-10m': 'Kalorie total (okna)', 'steps-10m': 'Kroki (okna)', 'distance-10m': 'Dystans (okna)' };
 function GoogleSync() {
   const [status, setStatus] = useState<z.infer<typeof syncStatusSchema> | null>(null);
   const [busy, setBusy] = useState(false); const [error, setError] = useState(false);
@@ -135,7 +135,7 @@ function GoogleSync() {
 
 function GoogleReadJobs() {
   const [jobs, setJobs] = useState<z.infer<typeof googleJobSchema>[] | null>(null);
-  const [kind, setKind] = useState<'weight' | 'body-fat' | 'steps' | 'distance' | 'total-calories' | 'active-energy-burned' | 'heart-rate-10m' | 'active-energy-10m'>('weight');
+  const [kind, setKind] = useState<'weight' | 'body-fat' | 'steps' | 'distance' | 'total-calories' | 'active-energy-burned' | 'heart-rate-10m' | 'active-energy-10m' | 'total-calories-10m' | 'steps-10m' | 'distance-10m'>('weight');
   const [date, setDate] = useState(() => { const d = new Date(`${warsawToday()}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); });
   const [lastDate, setLastDate] = useState('');
   const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false);
@@ -165,13 +165,13 @@ function GoogleReadJobs() {
     finally { setBusy(false); }
   }
   return <section><h3>Odczyt próbny</h3><p>Jedno zadanie obejmuje wybrany dzień i rodzaj pomiaru; masa i tłuszcz używają dnia warszawskiego, kroki, dystans i kalorie doby cywilnej producenta. Przygotowanie zapisuje zadanie; pobranie strony odczytuje jedną porcję danych Google. Oryginały nie są jeszcze kwalifikowane ani łączone z Takeout.</p>
-    <label>Rodzaj <select value={kind} disabled={busy} onChange={(event) => setKind(event.target.value as typeof kind)}><optgroup label="Pomiary (doba warszawska)"><option value="weight">Masa ciała</option><option value="body-fat">Tkanka tłuszczowa</option></optgroup><optgroup label="Sumy dobowe (doba producenta)"><option value="steps">Kroki — suma doby</option><option value="distance">Dystans — suma doby</option><option value="total-calories">Kalorie total — suma doby (zawiera BMR)</option><option value="active-energy-burned">Kalorie aktywne — suma doby</option></optgroup><optgroup label="Okna 10 min (doba warszawska)"><option value="heart-rate-10m">Tętno — okna 10 min</option><option value="active-energy-10m">Kalorie aktywne — okna 10 min</option></optgroup></select></label>{' '}
+    <label>Rodzaj <select value={kind} disabled={busy} onChange={(event) => setKind(event.target.value as typeof kind)}><optgroup label="Pomiary (doba warszawska)"><option value="weight">Masa ciała</option><option value="body-fat">Tkanka tłuszczowa</option></optgroup><optgroup label="Sumy dobowe (doba producenta)"><option value="steps">Kroki — suma doby</option><option value="distance">Dystans — suma doby</option><option value="total-calories">Kalorie total — suma doby (zawiera BMR)</option><option value="active-energy-burned">Kalorie aktywne — suma doby</option></optgroup><optgroup label="Okna 10 min (doba warszawska)"><option value="heart-rate-10m">Tętno — okna 10 min</option><option value="active-energy-10m">Kalorie aktywne — okna 10 min</option><option value="total-calories-10m">Kalorie total — okna 10 min</option><option value="steps-10m">Kroki — okna 10 min</option><option value="distance-10m">Dystans — okna 10 min</option></optgroup></select></label>{' '}
     <label>Data w Warszawie <input type="date" min="2026-01-01" max="9998-12-31" value={date} disabled={busy} onChange={(event) => setDate(event.target.value)} /></label>{' '}
     {daily && <><label>Do dnia (włącznie, opcjonalnie; do {kind === 'total-calories' ? 14 : 90} dób) <input type="date" min={date} max="9998-12-31" value={lastDate} disabled={busy} onChange={(event) => setLastDate(event.target.value)} /></label>{' '}</>}
     <button type="button" disabled={busy || !date || !jobs || rangeInvalid} onClick={() => void run('/api/google/jobs', daily && lastDate ? { kind, start: date, end: nextCivilDay(lastDate) } : { kind, date })}>Przygotuj zadanie</button>
     {message && <p role="status">{message}</p>}
     {!jobs && <button type="button" disabled={busy} onClick={retry}>Ponów odczyt listy zadań</button>}
-    {jobs && jobs.length > 0 && <div className="table-wrap"><table><thead><tr><th>Typ</th><th>Zakres UTC / doby</th><th>Stan</th><th>Strony</th><th>Akcja</th></tr></thead><tbody>{jobs.map((job) => <tr key={job.id}><td>{({ weight: 'Masa ciała', 'body-fat': 'Tkanka tłuszczowa', steps: 'Kroki — suma doby', distance: 'Dystans — suma doby', 'total-calories': 'Kalorie total — suma doby', 'active-energy-burned': 'Kalorie aktywne — suma doby', 'heart-rate-10m': 'Tętno — okna 10 min', 'active-energy-10m': 'Kalorie aktywne — okna 10 min' })[job.kind]}</td><td>{job.start} – {job.end}{job.kind === 'steps' || job.kind === 'distance' || job.kind === 'total-calories' || job.kind === 'active-energy-burned' ? ' (doba producenta)' : ''}</td><td>{job.state === 'complete' ? 'Odczyt zakończony' : 'Do kontynuacji'}</td><td>{job.pages}</td><td>{job.state === 'running' && <button type="button" disabled={busy} onClick={() => void run('/api/google/jobs/next', { id: job.id })}>Pobierz stronę</button>}</td></tr>)}</tbody></table></div>}
+    {jobs && jobs.length > 0 && <div className="table-wrap"><table><thead><tr><th>Typ</th><th>Zakres UTC / doby</th><th>Stan</th><th>Strony</th><th>Akcja</th></tr></thead><tbody>{jobs.map((job) => <tr key={job.id}><td>{({ weight: 'Masa ciała', 'body-fat': 'Tkanka tłuszczowa', steps: 'Kroki — suma doby', distance: 'Dystans — suma doby', 'total-calories': 'Kalorie total — suma doby', 'active-energy-burned': 'Kalorie aktywne — suma doby', 'heart-rate-10m': 'Tętno — okna 10 min', 'active-energy-10m': 'Kalorie aktywne — okna 10 min', 'total-calories-10m': 'Kalorie total — okna 10 min', 'steps-10m': 'Kroki — okna 10 min', 'distance-10m': 'Dystans — okna 10 min' })[job.kind]}</td><td>{job.start} – {job.end}{job.kind === 'steps' || job.kind === 'distance' || job.kind === 'total-calories' || job.kind === 'active-energy-burned' ? ' (doba producenta)' : ''}</td><td>{job.state === 'complete' ? 'Odczyt zakończony' : 'Do kontynuacji'}</td><td>{job.pages}</td><td>{job.state === 'running' && <button type="button" disabled={busy} onClick={() => void run('/api/google/jobs/next', { id: job.id })}>Pobierz stronę</button>}</td></tr>)}</tbody></table></div>}
   </section>;
 }
 
@@ -302,6 +302,7 @@ function BodyComparison({ date }: { date: string }) {
     <GoogleDailyCandidates key="daily-total" date={date} kind="total-calories" />
     <GoogleDailyCandidates key="daily-active" date={date} kind="active-energy-burned" />
     <BandShare key="band-share" date={date} />
+    <DaySeries key="day-series" date={date} />
   </div>;
 }
 
@@ -316,6 +317,38 @@ const bandShareSchema = z.object({
   activeEnergy: z.object({ bandKcal: z.string(), bandWindows: z.number().int(), otherKcal: z.string(), otherWindows: z.number().int() }).nullable(),
   activeEnergyRead: z.boolean(),
 });
+const seriesSchema = z.object({
+  unit: z.enum(['steps', 'mm', 'kcal']), windowsPerDay: z.number(), windows: z.number(),
+  hours: z.array(z.object({ start: z.iso.datetime(), value: z.string().nullable() })), total: z.string(),
+}).nullable();
+const seriesMetricLabels = { steps: 'Kroki', distance: 'Dystans', 'total-calories': 'Kalorie total (zawiera BMR)', 'active-energy-burned': 'Kalorie aktywne' } as const;
+function DaySeries({ date }: { date: string }) {
+  const [metric, setMetric] = useState<keyof typeof seriesMetricLabels>('total-calories');
+  const [result, setResult] = useState<z.infer<typeof seriesSchema> | undefined>(undefined);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    setResult(undefined); setError(false);
+    fetch(`/api/google/day-series?metric=${metric}&date=${encodeURIComponent(date)}`, { signal: controller.signal })
+      .then((response) => { if (!response.ok) throw new Error('Seria'); return response.json(); })
+      .then((data: unknown) => setResult(seriesSchema.parse(data)))
+      .catch(() => { if (!controller.signal.aborted) setError(true); });
+    return () => controller.abort();
+  }, [date, metric]);
+  const hourOf = (iso: string) => new Intl.DateTimeFormat('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', hourCycle: 'h23' }).format(new Date(iso));
+  const shown = (value: string) => result?.unit === 'mm' ? (Number(value) / 1000000).toLocaleString('pl-PL', { maximumFractionDigits: 2 }) : Number(value).toLocaleString('pl-PL', { maximumFractionDigits: result?.unit === 'kcal' ? 1 : 0 });
+  const unitLabel = result?.unit === 'mm' ? 'km' : result?.unit === 'kcal' ? 'kcal' : 'kroków';
+  const max = Math.max(0, ...(result?.hours.map((hour) => Number(hour.value ?? 0)) ?? []));
+  return <div><h4>Przebieg doby (godziny, dzień warszawski)</h4>
+    {date === warsawToday() && <p role="status">Doba jeszcze trwa: wykres jest częściowy.</p>}
+    <label>Metryka <select value={metric} onChange={(event) => setMetric(event.target.value as typeof metric)}>{(Object.entries(seriesMetricLabels) as [keyof typeof seriesMetricLabels, string][]).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+    {error ? <p role="alert">Nie udało się odczytać serii.</p> : result === undefined ? <p>Ładowanie…</p> : result === null ? <p>Brak zapisanego odczytu okien 10-minutowych dla całej doby (rodzaj „{({ steps: 'Kroki', distance: 'Dystans', 'total-calories': 'Kalorie total', 'active-energy-burned': 'Kalorie aktywne' })[metric]} — okna 10 min”).</p> : <>
+      <div className="chart" aria-label={`${seriesMetricLabels[metric]} według godziny`}>{result.hours.map((hour) => <div className="bar-row" key={hour.start}><span>{hourOf(hour.start)}</span><div className="track">{hour.value !== null && <div className="bar" style={{ width: `${max > 0 ? Number(hour.value) / max * 100 : 0}%` }} />}</div><span>{hour.value === null ? 'brak' : shown(hour.value)}</span></div>)}</div>
+      <p>Suma godzin: {shown(result.total)} {unitLabel} ({result.windows} z {result.windowsPerDay} okien z wartością). Godzina bez okien to brak odczytu, nie zero.</p>
+    </>}
+  </div>;
+}
+
 function BandShare({ date }: { date: string }) {
   const [result, setResult] = useState<z.infer<typeof bandShareSchema> | null>(null);
   const [error, setError] = useState(false);

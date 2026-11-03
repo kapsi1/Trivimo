@@ -4,11 +4,11 @@ import { z } from 'zod';
 import { dailyRollupTypes, maxRollupDays, parseDailyRollup, type DailyRollupType } from '../adapters/google-health/daily-rollup.ts';
 import { maxWindowRangeDays, parseWindowRollup, windowSeconds } from '../adapters/google-health/window-rollup.ts';
 
-export const windowJobKinds = { 'heart-rate-10m': 'heart-rate', 'active-energy-10m': 'active-energy-burned' } as const;
+export const windowJobKinds = { 'heart-rate-10m': 'heart-rate', 'active-energy-10m': 'active-energy-burned', 'total-calories-10m': 'total-calories', 'steps-10m': 'steps', 'distance-10m': 'distance' } as const;
 export type WindowJobKind = keyof typeof windowJobKinds;
 export const isWindowKind = (kind: string): kind is WindowJobKind => kind in windowJobKinds;
 export type GoogleJobKind = 'weight' | 'body-fat' | DailyRollupType | WindowJobKind;
-const kinds = z.enum(['weight', 'body-fat', ...dailyRollupTypes, 'heart-rate-10m', 'active-energy-10m']);
+const kinds = z.enum(['weight', 'body-fat', ...dailyRollupTypes, ...(Object.keys(windowJobKinds) as WindowJobKind[])]);
 const isDaily = (kind: string): kind is DailyRollupType => (dailyRollupTypes as readonly string[]).includes(kind);
 /** Body jobs hold UTC instants; daily aggregate jobs hold half-open producer civil dates. */
 function validRange(kind: string, start: string, end: string): boolean {

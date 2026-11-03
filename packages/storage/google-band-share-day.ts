@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { parseWindowRollup, windowSeconds, type WindowRollupType } from '../adapters/google-health/window-rollup.ts';
 import { warsawDay } from '../domain/warsaw-day.ts';
+import type { WindowJobKind } from './google-pages.ts';
 
 const scale = 1000000n;
 function toScaled(value: string): bigint {
@@ -12,8 +13,8 @@ function format(value: bigint): string {
   return `${cents / 100n}.${(cents % 100n).toString().padStart(2, '0')}`;
 }
 
-interface Day { date: string; start: number; end: number }
-type Window = { start: number; value: string | null };
+export interface Day { date: string; start: number; end: number }
+export type Window = { start: number; value: string | null };
 
 function dates(from: string, to: string): Day[] {
   const days: Day[] = [];
@@ -28,7 +29,7 @@ function dates(from: string, to: string): Day[] {
  * For each Warsaw day the windows of the newest complete saved job whose UTC range covers the whole day.
  * A day covered by a job with no windows maps to an empty list (read, nothing there); an unread day is absent.
  */
-function savedWindows(db: DatabaseSync, kind: 'heart-rate-10m' | 'active-energy-10m', type: WindowRollupType, days: Day[]): Map<string, Window[]> {
+export function savedWindows(db: DatabaseSync, kind: WindowJobKind, type: WindowRollupType, days: Day[]): Map<string, Window[]> {
   const claimed = new Map<string, Window[]>();
   const pages = db.prepare('SELECT raw_json FROM google_read_pages WHERE job_id = ? ORDER BY page_number LIMIT 50');
   for (const job of db.prepare("SELECT id, range_start, range_end FROM google_read_jobs WHERE kind = ? AND state = 'complete' ORDER BY created_at DESC, id LIMIT 500").all(kind)) {

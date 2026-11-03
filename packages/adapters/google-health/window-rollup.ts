@@ -2,8 +2,8 @@ import { z } from 'zod';
 import { plainDecimal } from './daily-rollup.ts';
 import { readLimitedText } from './limited-json.ts';
 
-/** Ten-minute physical-time windows: heart rate as wear evidence, active energy for its split by wear. */
-export const windowRollupTypes = ['heart-rate', 'active-energy-burned'] as const;
+/** Ten-minute physical-time windows: the detailed series behind the daily sums, and heart rate as wear evidence. */
+export const windowRollupTypes = ['heart-rate', 'active-energy-burned', 'total-calories', 'steps', 'distance'] as const;
 export type WindowRollupType = (typeof windowRollupTypes)[number];
 export const windowSeconds = 600;
 export const maxWindowRangeDays = 14;
@@ -11,10 +11,14 @@ export interface RollupWindow { start: string; end: string; value: string | null
 export interface WindowRollupPage { rawJson: string; windows: RollupWindow[]; nextPageToken: string | null }
 
 const kcal = z.object({ literal: z.string().regex(/^\d{1,12}(?:\.\d{1,40})?(?:[eE][+-]?\d{1,2})?$/) });
+const count = z.string().regex(/^\d{1,18}$/);
 const pointSchema = z.object({
   startTime: z.iso.datetime(), endTime: z.iso.datetime(),
   heartRate: z.object({ beatsPerMinuteAvg: z.number() }).passthrough().optional(),
   activeEnergyBurned: z.object({ kcalSum: kcal }).passthrough().optional(),
+  totalCalories: z.object({ kcalSum: kcal }).passthrough().optional(),
+  steps: z.object({ countSum: count }).passthrough().optional(),
+  distance: z.object({ millimetersSum: count }).passthrough().optional(),
 }).passthrough();
 const responseSchema = z.object({ rollupDataPoints: z.array(pointSchema).max(10000).optional(), nextPageToken: z.string().max(8192).optional() }).passthrough();
 
@@ -29,9 +33,13 @@ export function parseWindowRollup(rawJson: string, type: WindowRollupType): { wi
   for (const point of parsed.rollupDataPoints ?? []) {
     const start = Date.parse(point.startTime), end = Date.parse(point.endTime);
     if (end - start !== windowSeconds * 1000 || (start / 1000) % windowSeconds !== 0) throw new Error('unexpected_window');
-    const present = type === 'heart-rate' ? point.heartRate !== undefined : point.activeEnergyBurned !== undefined;
-    if (!present) continue;
-    windows.push({ start: new Date(start).toISOString(), end: new Date(end).toISOString(), value: type === 'heart-rate' ? null : plainDecimal(point.activeEnergyBurned!.kcalSum.literal) });
+    // Heart rate carries no value text (presence is the evidence); every other type keeps the exact source text.
+    const value = type === 'heart-rate' ? (point.heartRate !== undefined ? null : undefined)
+      : type === 'active-energy-burned' ? (point.activeEnergyBurned ? plainDecimal(point.activeEnergyBurned.kcalSum.literal) : undefined)
+      : type === 'total-calories' ? (point.totalCalories ? plainDecimal(point.totalCalories.kcalSum.literal) : undefined)
+      : type === 'steps' ? point.steps?.countSum : point.distance?.millimetersSum;
+    if (value === undefined) continue;
+    windows.push({ start: new Date(start).toISOString(), end: new Date(end).toISOString(), value });
   }
   if (new Set(windows.map((window) => window.start)).size !== windows.length) throw new Error('duplicate_window');
   return { windows, nextPageToken: parsed.nextPageToken || null };

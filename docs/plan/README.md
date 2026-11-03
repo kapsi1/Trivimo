@@ -26,6 +26,19 @@ Syntetyczna brama P0 została wykonana i opisana w [ukończonych próbach](../co
 - [ ] M5: realny wpis z telefonu w wybranym wariancie, odczyt potwierdzenia, korekta, ponowienie bez duplikatu i zachowanie po niedostępności hosta. Nie wymaga własnej aplikacji Android.
 - [ ] M7: dowód per typ/operacja, wybrany własny rekord, timeout i restart, brak pętli, jawne niewspierane cele; żadnego masowego czyszczenia Connect.
 
+## Stan M1 i następne kroki
+
+Stan na 2026-11-03 (szczegóły i dowody: [wyniki testów](../test-results.md), reguły: [kontrakty](../data-contracts.md), decyzje: [rejestr](../decisions.md)). Zrobione i sprawdzone (syntetycznie oraz na koncie użytkownika, bez przeglądarki): autoryzacja Google z trwałym tokenem, magazyn w wersji 9, odczyty sum dobowych i okien 10-minutowych (kroki, dystans, kalorie total i aktywne, tętno), odświeżanie automatyczne z polityką odczytów, widok dnia (kandydaci, udział opaski, przebieg doby) i kolumna udziału opaski w tabeli dni. Nie zrobione: kwalifikacja i snapshoty kanoniczne z danych Google, wartości w głównych komórkach tabeli dni.
+
+Następne kroki w tej kolejności:
+
+1. Backfill od 2026-01-01 w paczkach (do 14 dni dla okien i total, do 90 dla pozostałych sum dobowych) jako zadanie odrębne od odświeżania bieżących dni; z postępem i wznowieniem.
+2. Backoff i `Retry-After` przy 429, kolejka z anulowaniem, zaznaczenie dłuższej przerwy w tabeli dni.
+3. Kwalifikacja kalorii i podłączenie snapshotów do danych Google z użyciem udziału opaski (zamiast progu doby; zob. decyzje o telefonie bez opaski) oraz rozstrzygnięcie roli źródła „Phone Health Connect” w aktywnej energii.
+4. Seria godzinowa tętna, porównanie wykresów kroków i dystansu z Health, API vs Takeout dla kolejnych dób.
+
+Otwarte pytania i niewyjaśnione rozbieżności: nagłówek Health dla jednej doby wyższy o ok. 0,55 % niż API; suma minutowego pliku Takeout `calories` niższa o ok. 0,2 % dla jednej doby bez opaski; zachowanie polityki odczytów na prawdziwych danych po kilku przebiegach (wcześniejsze odczyty bez znacznika „automatyczny” nie są porządkowane); praca w tle po kilku godzinach i po restarcie komputera oraz widoki w przeglądarce nie były sprawdzone. Zasady pracy użytkownika: git zarządzany ręcznie (nie twórz branchy, commitów ani PR; zapisane w pamięci agenta), odczyt rzeczywistych danych dozwolony (sekcja niżej).
+
 ## Dane rzeczywiste w pracy deweloperskiej
 
 Decyzja użytkownika z 2026-11-03: gdy do dalszej pracy potrzebna jest rzeczywista wartość, kształt odpowiedzi lub przypadek brzegowy, agent może odczytać wartości z Google Health API (przez własną autoryzację aplikacji) oraz z Takeout, zamiast je zgadywać. Przypuszczenia o formatach i znaczeniu pól wolno przyjmować tylko tymczasowo i trzeba je oznaczyć jako niepotwierdzone.

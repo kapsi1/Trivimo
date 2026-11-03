@@ -5,14 +5,14 @@ import { createHash } from 'node:crypto';
 import { listBodyPage } from '../../packages/adapters/google-health/body-read.ts';
 import { windowRollupPage } from '../../packages/adapters/google-health/window-rollup.ts';
 import { dailyRollupPage, dailyRollupTypes, maxRollupDays, type DailyRollupType } from '../../packages/adapters/google-health/daily-rollup.ts';
-import { commitGooglePage, createGoogleReadJob, isWindowKind, windowJobKinds, type GoogleJobKind } from '../../packages/storage/google-pages.ts';
+import { commitGooglePage, createGoogleReadJob, isWindowKind, windowJobKinds, type GoogleJobKind, type WindowJobKind } from '../../packages/storage/google-pages.ts';
 import type { GoogleAuth } from './google-auth.ts';
 
 const bodyScope = 'https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly';
 const activityScope = 'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly';
 const isDaily = (kind: GoogleJobKind): kind is DailyRollupType => (dailyRollupTypes as readonly string[]).includes(kind);
-const scopeFor = (kind: GoogleJobKind) => isDaily(kind) || kind === 'active-energy-10m' ? activityScope : bodyScope;
-const jobSchema = z.object({ account_digest: z.string().regex(/^[0-9a-f]{64}$/), kind: z.enum(['weight', 'body-fat', ...dailyRollupTypes, 'heart-rate-10m', 'active-energy-10m']), range_start: z.string().max(40), range_end: z.string().max(40), cursor: z.string().nullable(), state: z.literal('running') });
+const scopeFor = (kind: GoogleJobKind) => kind === 'weight' || kind === 'body-fat' || kind === 'heart-rate-10m' ? bodyScope : activityScope;
+const jobSchema = z.object({ account_digest: z.string().regex(/^[0-9a-f]{64}$/), kind: z.enum(['weight', 'body-fat', ...dailyRollupTypes, ...(Object.keys(windowJobKinds) as WindowJobKind[])]), range_start: z.string().max(40), range_end: z.string().max(40), cursor: z.string().nullable(), state: z.literal('running') });
 
 async function accountDigest(token: string, send: typeof fetch): Promise<string> {
   const response = await send('https://health.googleapis.com/v4/users/me/identity', { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(15000) });
@@ -51,7 +51,7 @@ export class GoogleReadService {
       if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('invalid_store');
       db = new DatabaseSync(this.path);
     } catch { throw new Error('store_unavailable'); }
-    if (db.prepare('PRAGMA application_id').get()?.application_id !== 1414682185 || db.prepare('PRAGMA user_version').get()?.user_version !== 8) { db.close(); throw new Error('migration_required'); }
+    if (db.prepare('PRAGMA application_id').get()?.application_id !== 1414682185 || db.prepare('PRAGMA user_version').get()?.user_version !== 9) { db.close(); throw new Error('migration_required'); }
     return db;
   }
   list() {
