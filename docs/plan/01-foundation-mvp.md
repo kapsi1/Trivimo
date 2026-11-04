@@ -11,7 +11,7 @@ Wykonane: próby P0 w [P0 — wykonane](../completed/01-p0-probes.md), a magazyn
 
 ## M1: UI
 
-- [ ] Lewa nawigacja/zakładki: Przegląd, Dane, Źródła/Importy, Ustawienia (dziś prowizoryczne zakładki, w tym „Przykład”). Prosty ciemny motyw, czytelne jednostki, fokus i kontrast, brak docelowego redesignu na tym etapie.
+- [ ] Lewa nawigacja/zakładki: Przegląd, Dane, Źródła/Importy, Ustawienia (dziś prowizoryczne zakładki, w tym „Przykład”). Prosty ciemny motyw, czytelne jednostki, fokus i kontrast, brak docelowego redesignu na tym etapie. Propozycja układu (Dzień, Tabela dni, Trendy, Źródła danych, Ustawienia oraz placeholdery treningów i jedzenia) czeka na akceptację w [projekcie UI](../design/ui.md).
 - [ ] Tabela: wirtualizacja przy dużych zakresach.
 - [ ] Kliknięcie komórki: oryginalna wartość źródła, czas/zakres odczytu i porównanie API/Takeout, bez przeładowywania podstawowej tabeli (definicja, reguła, stan, użyty wynik i powód są już pokazywane).
 - [ ] Panel źródeł: ostatni udany odczyt, zakres danych, brakujące uprawnienia, zadania i błędy bez ujawniania sekretów (dziś rozproszone w panelach Google). Eksport CSV wybranej projekcji opcjonalny po podstawowym UI, z zabezpieczeniem przed formułami i zachowaniem jednostek/statusów.

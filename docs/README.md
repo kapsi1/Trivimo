@@ -12,6 +12,7 @@ Stan (2026-11-04): M1 w końcowej fazie — sześć metryk z Google Health API z
 | Ustalenia użytkownika, propozycje i decyzje do podjęcia | [Decyzje](decisions.md) |
 | Kolejność i kryteria etapów | [Plan](plan/README.md) |
 | Pierwsze sześć metryk, ciemna tabela i wykresy | [MVP](plan/01-foundation-mvp.md) |
+| Propozycja UI: nawigacja, widoki, stany wartości, prototyp | [Projekt UI](design/ui.md) |
 | Pełny katalog odczytu Health API, OAuth i agregacja | [Health API](plan/02-health-api.md) |
 | Takeout, opcjonalne dane Connect, migracja historii | [Import i migracja](plan/03-import-migration.md) |
 | Dashboardy, treningi, HR, strefy i mapy | [Analiza i treningi](plan/04-ui-workouts.md) |
