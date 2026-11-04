@@ -11,12 +11,14 @@ Wykonane: próby P0 w [P0 — wykonane](../completed/01-p0-probes.md), a magazyn
 
 ## M1: UI
 
-- [ ] Lewa nawigacja/zakładki: Przegląd, Dane, Źródła/Importy, Ustawienia (dziś prowizoryczne zakładki, w tym „Przykład”). Prosty ciemny motyw, czytelne jednostki, fokus i kontrast, brak docelowego redesignu na tym etapie. Propozycja układu (Dzień, Tabela dni, Trendy, Źródła danych, Ustawienia oraz placeholdery treningów i jedzenia) czeka na akceptację w [projekcie UI](../design/ui.md).
-- [ ] Tabela: wirtualizacja przy dużych zakresach.
-- [ ] Kliknięcie komórki: oryginalna wartość źródła, czas/zakres odczytu i porównanie API/Takeout, bez przeładowywania podstawowej tabeli (definicja, reguła, stan, użyty wynik i powód są już pokazywane).
-- [ ] Panel źródeł: ostatni udany odczyt, zakres danych, brakujące uprawnienia, zadania i błędy bez ujawniania sekretów (dziś rozproszone w panelach Google). Eksport CSV wybranej projekcji opcjonalny po podstawowym UI, z zabezpieczeniem przed formułami i zachowaniem jednostek/statusów.
-- [ ] Seria godzinowa tętna w widoku dnia. (Porównanie kształtu wykresów kroków i dystansu z Health pominięte na razie, jak porównanie z UI Health w kryteriach odbioru.)
-- [ ] Widok na wąskim ekranie telefonu.
+Układ z [projektu UI](../design/ui.md) jest wdrożony (2026-11-04, zob. [M1 — wykonane](../completed/02-m1.md#ui)). Zostało:
+
+- [ ] Tabela: wirtualizacja przy dużych zakresach (rok to dziś ok. 420 wierszy z tygodniami, bez wirtualizacji).
+- [ ] Panel szczegółów: porównanie sum dobowych (kroki, dystans, kalorie) z Takeout. Dla masy i tkanki tłuszczowej panel pokazuje pomiary Takeout tej doby; dla sum nie ma jeszcze wyliczenia doby z wierszy eksportu.
+- [ ] Prognoza spalonych kalorii (`prognoza-spoczynek-v0`): reguła wyboru okien wdrożona w najprostszej postaci (wszystkie dzisiejsze okna bez kroków i aktywnych kcal, co najmniej 6). Ocenić na kilku dobach, czy okna nocne lub dłuższe okno odniesienia dają lepszą stawkę; zmiana metody to nowa wersja reguły.
+- [ ] Eksport CSV wybranej projekcji (przycisk nieaktywny), z zabezpieczeniem przed formułami i zachowaniem jednostek/statusów.
+- [ ] Kopia zapasowa z interfejsu (Ustawienia pokazują polecenia CLI) oraz historia importów i dziennik zdarzeń w „Źródłach danych” — wymagają nowych punktów API.
+- [ ] Widok telefonu sprawdzony tylko w emulacji 375 px w przeglądarce aplikacji; na telefonie nie sprawdzano. (Porównanie kształtu wykresów kroków i dystansu z Health pominięte na razie, jak porównanie z UI Health w kryteriach odbioru.)
 
 ## Kryteria odbioru
 

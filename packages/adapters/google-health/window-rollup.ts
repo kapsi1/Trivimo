@@ -46,6 +46,32 @@ export function parseWindowRollup(rawJson: string, type: WindowRollupType): { wi
   return { windows, nextPageToken: parsed.nextPageToken || null };
 }
 
+export interface HeartRateWindow { start: string; avg: number; min: number; max: number }
+const bpm = z.number().finite().min(0).max(400);
+const heartPointSchema = z.object({
+  startTime: z.iso.datetime(), endTime: z.iso.datetime(),
+  heartRate: z.object({ beatsPerMinuteAvg: bpm, beatsPerMinuteMin: bpm.optional(), beatsPerMinuteMax: bpm.optional() }).passthrough().optional(),
+}).passthrough();
+const heartResponseSchema = z.object({ rollupDataPoints: z.array(heartPointSchema).max(10000).optional() }).passthrough();
+
+/**
+ * Pure: heart-rate values of the ten-minute windows with a measurement, for presentation (mean, min, max of the window).
+ * The producer gives no sample count, so a missing min or max falls back to the mean rather than being guessed.
+ */
+export function parseHeartRateWindows(rawJson: string): HeartRateWindow[] {
+  const parsed = heartResponseSchema.parse(JSON.parse(rawJson));
+  const windows: HeartRateWindow[] = [];
+  for (const point of parsed.rollupDataPoints ?? []) {
+    const start = Date.parse(point.startTime), end = Date.parse(point.endTime);
+    if (end - start !== windowSeconds * 1000 || (start / 1000) % windowSeconds !== 0) throw new Error('unexpected_window');
+    if (!point.heartRate) continue;
+    const { beatsPerMinuteAvg: avg, beatsPerMinuteMin: min = avg, beatsPerMinuteMax: max = avg } = point.heartRate;
+    windows.push({ start: new Date(start).toISOString(), avg, min: Math.min(min, avg), max: Math.max(max, avg) });
+  }
+  if (new Set(windows.map((window) => window.start)).size !== windows.length) throw new Error('duplicate_window');
+  return windows.sort((a, b) => a.start.localeCompare(b.start));
+}
+
 /** One bounded page of ten-minute windows for the half-open UTC range [start, end). Unqualified values of the saved-read source family. */
 export async function windowRollupPage(input: { type: WindowRollupType; start: string; end: string; pageToken?: string; family?: DataSourceFamily }, accessToken: string, send: typeof fetch = fetch): Promise<WindowRollupPage> {
   const type = z.enum(windowRollupTypes).parse(input.type);

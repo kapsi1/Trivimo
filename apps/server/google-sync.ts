@@ -85,6 +85,14 @@ export function coveredDays(db: DatabaseSync, kind: SyncKind, from: string, thro
   return covered;
 }
 
+/** Per day of [from, through] how many of `syncKinds` a complete read covered after the day ended (calendar of history coverage). */
+export function coverageCalendar(db: DatabaseSync, from: string, through: string): { date: string; covered: number }[] {
+  const sets = syncKinds.map((kind) => coveredDays(db, kind, from, through));
+  const days: { date: string; covered: number }[] = [];
+  for (let day = from; day <= through; day = addDays(day, 1)) days.push({ date: day, covered: sets.filter((set) => set.has(day)).length });
+  return days;
+}
+
 /** Uncovered days of [from, through], per kind in `syncKinds` order, grouped into consecutive chunks within the producer limit. */
 export function planBackfill(db: DatabaseSync, from: string, through: string): SyncRead[] {
   const plan: SyncRead[] = [];
@@ -274,6 +282,14 @@ export class GoogleSyncService {
       try { kinds = syncKinds.map((kind) => ({ kind, covered: coveredDays(db, kind, from, through).size, total })); } finally { db.close(); }
     } catch { /* store unavailable: progress unknown, not zero */ }
     return { ...(this.backfill ?? { state: 'idle', from, through, startedAt: null, finishedAt: null, current: null, readsThisRun: 0 }), kinds };
+  }
+  /** Coverage calendar of the backfill range; null when the store is unavailable (unknown, not uncovered). */
+  coverage(): { from: string; through: string; kinds: number; days: { date: string; covered: number }[] } | null {
+    const through = addDays(sourceDay(new Date(this.now()).toISOString()), -1);
+    try {
+      const db = this.open();
+      try { return { from: backfillFrom, through, kinds: syncKinds.length, days: through < backfillFrom ? [] : coverageCalendar(db, backfillFrom, through) }; } finally { db.close(); }
+    } catch { return null; }
   }
   status() {
     let kinds: { kind: SyncKind; lastReadAt: string | null; coveredThrough: string | null }[] = [];

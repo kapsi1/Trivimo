@@ -1,5 +1,12 @@
 # Raport weryfikacji
 
+## 2026-11-04 — interfejs według projektu UI
+
+- `npm test`: 118 testów zaliczonych (nowe: tętno okien z min/maks. i brakiem pól, nieodczytana doba a doba bez okien, DST 23 h; prognoza `prognoza-spoczynek-v0` — stawka z okien bez kroków i aktywnych kcal, brak odczytu wejścia to brak prognozy, za mało okien, doba 25 h, tylko doba bieżąca; kalendarz pokrycia). `npx tsc --noEmit` i `npx vite build`: poprawne.
+- Wbudowana przeglądarka aplikacji, serwer i Vite z `.claude/launch.json`, dane prawdziwe: Dzień (karty, prognoza, „Doba w skrócie” z przerywanymi słupkami prognozy, tętno okien), powiększenie karty kalorii (30 dni) i panel „?” z prognozą, źródłem szacunku, podziałem aktywnych kcal i odczytem; Tabela dni (30 dni, wiersze tygodni); Trendy (90 dni, osiem kart); Źródła danych (połączenia, kalendarz pokrycia 2026). Konsola bez błędów. Widok 375 px: karty dni i dolny pasek, bez poziomego przewijania.
+- Znalezione i poprawione: po starcie serwera widok dnia pokazywał snapshot sprzed zakończenia automatycznego odświeżania aż do kolejnego odpytania stanu (teraz stan jest odpytywany co 5 s, gdy odświeżanie trwa); panel szczegółów pokazywał „Brak odczytu” w trakcie ładowania; odczyty kalorii bez zaokrąglenia.
+- Ograniczenia: nie sprawdzano na telefonie, zmiany czasu i doby starszego modelu w przeglądarce (tylko testy i typy), importu Takeout przez nowy widok ani zapisu notatki. Prognozy nie porównano z wartością na koniec doby.
+
 ## 2026-11-04 — kopia i odtworzenie (kryterium M1)
 
 - `npm run backup:takeout -- D:/Trivimo-bak/kopia-m1-20261104.sqlite` przy działającym serwerze: kopia 367 MB w ok. 2 s. `npm run verify:restore` tej kopii: odtworzenie do pustego katalogu tymczasowego, skróty zgodne, integralność, oryginały Takeout, łańcuchy stron Google i snapshoty poprawne, odczyty źródeł i części dnia z opaską działają, a projekcja przebudowana z oryginałów jest równa opublikowanym snapshotom dla wszystkich 308 dób (2026-01-01 – 2026-11-04, 0 różnych, 0 nieopublikowanych). Czas ok. 19 s.

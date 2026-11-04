@@ -1,6 +1,6 @@
 # Środowisko developerskie
 
-Przykład używa TypeScript, React i Vite, Node 26 LTS od wersji 26.13 lub Node 24 LTS, wbudowanego `node:sqlite`, npm, Zod oraz test runnera Node przez tsx. Wersje bibliotek przypięto w `package.json` i `package-lock.json`. API nasłuchuje wyłącznie na 127.0.0.1. Tabela przykładowa korzysta z bazy w pamięci; osobna zakładka pokazuje surowe wiersze lokalnego importu Takeout, jeśli baza istnieje.
+Projekt używa TypeScript, React i Vite, Node 26 LTS od wersji 26.13 lub Node 24 LTS, wbudowanego `node:sqlite`, npm, Zod oraz test runnera Node przez tsx. Wersje bibliotek przypięto w `package.json` i `package-lock.json`. API nasłuchuje wyłącznie na 127.0.0.1. Interfejs (`apps/web`) realizuje [projekt UI](design/ui.md); kroje pisma są lokalnymi plikami w `apps/web/src/fonts` (SIL OFL), więc strona nie łączy się z Google Fonts.
 
 W systemie Windows można uruchomić `start-trivimo.cmd` poza środowiskiem izolowanym. Skrypt uruchamia serwer i interfejs w tle; stronę otwiera się pod `http://localhost:5173/`. Jeśli port jest zajęty, zgłasza problem i nie zatrzymuje innych procesów.
 
@@ -17,7 +17,7 @@ W drugim terminalu w tym samym katalogu:
 npm run dev:web
 ```
 
-Otwórz adres podany przez Vite i wybierz „Dane Takeout”. Zakładka służy do przeglądania danych. W „Import Takeout” można wkleić pełną ścieżkę rozpakowanego katalogu, sprawdzić podgląd i potwierdzić zapis; polecenia terminalowe poniżej pozostają alternatywą. Widok pokazuje oryginał i, dla znanych jednostek, dokładne przeliczenie bez kwalifikacji pomiaru. Filtr daty odnosi się do tekstu czasu w źródle, nie do doby Europe/Warsaw. `npm test` uruchamia testy syntetyczne, `npm run typecheck` sprawdza typy, a `npm run build` sprawdza typy i buduje interfejs.
+Otwórz adres podany przez Vite; widok startowy to „Dzień”. Oryginalne wiersze Takeout są w „Źródła danych” → „Importy plików”. Tam też można wkleić pełną ścieżkę rozpakowanego katalogu, sprawdzić podgląd i potwierdzić zapis; polecenia terminalowe poniżej pozostają alternatywą. Widok pokazuje oryginał i, dla znanych jednostek, dokładne przeliczenie bez kwalifikacji pomiaru. Filtr daty odnosi się do tekstu czasu w źródle, nie do doby Europe/Warsaw. `npm test` uruchamia testy syntetyczne, `npm run typecheck` sprawdza typy, a `npm run build` sprawdza typy i buduje interfejs.
 
 Schemat przykładu ma wersję `user_version = 1` i powstaje w transakcji. Test sprawdza również syntetyczną bazę plikową, jej ponowne otwarcie oraz kopię przez SQLite backup API i odtworzenie do nowego pliku. Dane przykładowe pozostają w pamięci; magazyn importu jest osobnym plikiem. Funkcja kopii nie jest jeszcze podłączona do migracji i nie obejmuje załączników, szyfrowania ani polityki retencji; nie jest gotowym rozwiązaniem kopii danych zdrowia.
 
@@ -54,7 +54,7 @@ Opcjonalna próba starych parserów: `powershell -NoProfile -ExecutionPolicy Byp
 - Baza aplikacji: `%LOCALAPPDATA%\Trivimo\takeout-raw.sqlite`, obok niej `google-token.dpapi`. Kopie przed migracjami (jedna na wersję) leżą na dysku D: w katalogu `Trivimo-bak`; `npm run migrate:canonical -- <nowa ścieżka kopii>` wykonuje jeden krok (wersje 5→9 przeszły, kolejną dopisz w `apps/server/migrate-canonical.ts`). Kopię trzeba wskazać poza katalogiem repozytorium i nowej nazwy; migrację uruchamiaj przy zatrzymanym serwerze albo ostrożnie, bo kod serwera sprawdza dokładną wersję magazynu.
 - Eksport Takeout do pracy: `test-data/` w repozytorium (poza gitem). Plik klienta OAuth jest w prywatnym katalogu poza repozytorium; jego ścieżkę poda użytkownik (zmienna `TRIVIMO_GOOGLE_CLIENT_FILE`), nie zapisuj jej ani zawartości w docs.
 - Skrypt `npm run google:read` czyta zakres przez ten sam kod co panel i wypisuje tylko status; służy też agentowi do odczytu bez przekazywania sekretów do kontekstu.
-- Punkty REST dla widoku dnia i tabeli: `/api/google/daily-candidates`, `/api/google/band-share`, `/api/google/band-share-range`, `/api/google/day-series`, `/api/google/day-sources`, `/api/google/sync-status`, `POST /api/google/sync`, `/api/google/jobs`. Wszystkie wymagają sesji lokalnej, a POST dodatkowo nagłówka `X-Trivimo-Request`.
+- Punkty REST dla widoku dnia i tabeli: `/api/google/daily-candidates`, `/api/google/band-share`, `/api/google/band-share-range`, `/api/google/day-series`, `/api/google/day-sources`, `/api/google/heart-rate` (okna tętna doby), `/api/google/heart-rate-range` (tętno dób), `/api/google/energy-forecast` (prognoza doby w toku), `/api/google/coverage` (kalendarz pokrycia), `/api/google/sync-status`, `POST /api/google/sync`, `/api/google/jobs`. Wszystkie wymagają sesji lokalnej, a POST dodatkowo nagłówka `X-Trivimo-Request`.
 - Jednorazowe skrypty analizy Takeout/API nie są w repozytorium; ich wnioski są w [kontraktach](data-contracts.md) jako reguły bez wartości.
 
 ## Autoryzacja Google Health — próba lokalna
@@ -68,7 +68,7 @@ npm run dev
 
 Zamiast ustawiać zmienne w każdym terminalu, skopiuj `.env.example` do `.env` w katalogu projektu i uzupełnij `TRIVIMO_GOOGLE_CLIENT_FILE` (opcjonalnie `TRIVIMO_GOOGLE_SYNC_MINUTES` i `TRIVIMO_DATA_DIR`). Plik `.env` jest poza gitem i wczytują go serwer (`npm run dev`, `start-trivimo.cmd`) oraz skrypty `google:read`, `import:takeout`, `verify:takeout`, `backup:takeout`, `migrate:canonical` i `verify:restore`. Zmienna ustawiona w terminalu ma pierwszeństwo przed plikiem. Ścieżki Windows wpisuj bez cudzysłowu, w apostrofach albo z `/`; w cudzysłowie podwójnym parser Node zamienia `\n` na nową linię. W `.env` są tylko ścieżki i ustawienia; sekret klienta zostaje w pliku JSON poza repozytorium.
 
-W drugim terminalu uruchom `npm run dev:web`. Na stronie wybierz „Dane Takeout” → „Google Health” → „Autoryzuj konto Google”. Po zgodzie wróć do aplikacji i odśwież widok. Serwer musi działać na porcie 3000. Nie umieszczaj pliku ani sekretów w repozytorium.
+W drugim terminalu uruchom `npm run dev:web`. Na stronie wybierz „Źródła danych” → „Połączenia” → „Autoryzuj konto Google”. Po zgodzie wróć do aplikacji i odśwież widok. Serwer musi działać na porcie 3000. Nie umieszczaj pliku ani sekretów w repozytorium.
 
 Token dostępu istnieje tylko w pamięci serwera. Token odświeżania jest zapisywany w `google-token.dpapi` obok bazy Takeout, zaszyfrowany Windows DPAPI (CurrentUser); po restarcie i po wygaśnięciu tokenu dostępnego serwer odnawia go automatycznie, a odrzucenie przez Google usuwa zapis i wymaga ponownej autoryzacji. Po autoryzacji przeglądarka wraca na adres, z którego ją rozpoczęto. Odłączanie/uprawnienia oraz pełny odczyt danych Google nie są jeszcze wdrożone; automatyczne odświeżanie i zapis sprawdzono testami z syntetycznym magazynem i szyfrowaniem DPAPI na wartości testowej, nie z prawdziwym kontem. Częściowa zgoda nie jest pełnym dostępem; ekran podaje liczbę przyznanych zakresów. Autoryzację dwóch zakresów sprawdzono na koncie użytkownika; wykonano ograniczony odczyt jednej strony wagi, bez analizy jej wartości.
 

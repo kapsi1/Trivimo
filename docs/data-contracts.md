@@ -97,6 +97,11 @@ Kroki i kalorie aktywne są dodatkowo czytane metodą `list` z `fields=dataPoint
 
 Obserwacje 2026 (tylko liczby dób): do 2026-04 kroki tylko z Google Fit i Androida przez Health Connect; od 2026-05-07 opaska Charge 6 i MobileTrack, kalorie aktywne z obu; Google Fit znika w połowie maja i wraca we wrześniu–październiku; w październiku pojawiają się kalorie aktywne z Health Connect telefonu (24 doby), co dotyczy otwartej roli „Phone Health Connect”.
 
+### Pochodne prezentacyjne UI (2026-11-04)
+
+- Tętno okna: `beatsPerMinuteAvg/Min/Max` z zapisanej strony `heart-rate-10m`; brak min lub maks. zastępuje średnia okna, bez zgadywania. Doba: minimum i maksimum okien oraz średnia średnich okien, nieważona liczbą próbek. Doba nieodczytana to brak odczytu, a doba odczytana bez okien to zero okien z pomiarem; żadna z tych wartości nie jest tętnem spoczynkowym.
+- `prognoza-spoczynek-v0`: tylko dla bieżącej doby warszawskiej; suma dzisiejszych okien total kcal + średnia total kcal okien bez kroków i bez aktywnych kcal × liczba okien od ostatniego okna z wartością do końca doby (23/25 h przy zmianie czasu). Wymaga odczytu okien kroków i aktywnych kcal oraz co najmniej 6 okien spoczynkowych. Nie jest wartością producenta ani BMR, nie jest zapisywana, nie trafia do tabeli, średnich ani eksportu.
+
 ## „Uwagi” i własne notatki
 
 `DataIssue` ma zakres dnia/sesji/metryki, stabilny kod, źródło, stopień, uzasadnienie, wersję oceny i stan rozwiązania. Tekst kolumny „Uwagi” jest deterministyczną projekcją problemów wszystkich wybranych metryk. Stabilna kolejność, bez duplikatów i dopisywania kolejnej kopii przy odświeżeniu. Możliwy dzień z samymi uwagami.

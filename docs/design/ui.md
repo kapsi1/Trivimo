@@ -1,6 +1,6 @@
 # Projekt UI — propozycja
 
-Stan: propozycja z 2026-11-04, częściowo zaakceptowana przez użytkownika tego samego dnia (widok startowy, precyzja masy, kroje pisma, prognoza kalorii, interakcje wykresów; zob. [decyzje](../decisions.md)). Nie jest opisem implementacji. Interaktywny prototyp na danych syntetycznych: [ui-prototype.html](ui-prototype.html), opublikowany jako prywatny [artefakt](https://claude.ai/artifact/PbNSGrNRUVXLGGNt1kaVSU). Reguły danych z [kontraktów](../data-contracts.md) mają pierwszeństwo przed tym projektem.
+Stan: propozycja z 2026-11-04, częściowo zaakceptowana przez użytkownika tego samego dnia (widok startowy, precyzja masy, kroje pisma, prognoza kalorii, interakcje wykresów; zob. [decyzje](../decisions.md)). Wdrożona w `apps/web` tego samego dnia; różnice wdrożenia opisuje sekcja [Wdrożenie](#wdrożenie-2026-11-04). Interaktywny prototyp na danych syntetycznych: [ui-prototype.html](ui-prototype.html), opublikowany jako prywatny [artefakt](https://claude.ai/artifact/PbNSGrNRUVXLGGNt1kaVSU). Reguły danych z [kontraktów](../data-contracts.md) mają pierwszeństwo przed tym projektem.
 
 ## Cel i założenia
 
@@ -92,7 +92,20 @@ Widok „Jedzenie” ma zakładki Dziennik, Produkty i przepisy, Planer, Importy
 - Wiersze tygodni z pokryciem w tabeli i agregacja tygodniowa w trendach — nowe propozycje.
 - Zdarzenia na osi trendów realizują zasadę z [planu analiz](../plan/04-ui-workouts.md): zmiana algorytmu lub urządzenia jest oznaczeniem, nie niewidocznym skokiem.
 
+## Wdrożenie (2026-11-04)
+
+Wdrożono widoki i interakcje opisane wyżej, na danych z serwera. Różnice i ograniczenia:
+
+- Tętno okien (średnia, min, maks.) pochodzi z zapisanych stron odczytu `heart-rate-10m` (`/api/google/heart-rate`, `/api/google/heart-rate-range`); wcześniej obecność okna służyła tylko jako dowód pomiaru.
+- Prognoza: stawka to średnia total kcal ze wszystkich dzisiejszych okien bez kroków i bez aktywnych kcal, co najmniej 6 okien (inaczej brak prognozy); prognoza = suma okien do ostatniego okna z wartością + stawka × pozostałe okna doby. Brak odczytu kroków lub aktywnych kcal oznacza brak prognozy, nie zerową aktywność. Ocena reguły na danych pozostaje w [planie](../plan/01-foundation-mvp.md).
+- „Stan na HH:MM” to czas ostatniego udanego odświeżenia (albo najnowszego odczytu); przerywane słupki zaczynają się od końca ostatniego okna kalorii.
+- Zdarzenia na osi trendów są wyliczane z danych: okresy samej energii bazowej, doby sprzed 2026, pierwsza doba pełnego modelu kalorii i pierwsze ważenie (te dwa tylko w Trendach, które czytają całą historię). Zdarzenia „początek opaski” nie ma, bo próg „dnia z noszeniem” nie jest zatwierdzony.
+- Kalendarz pokrycia: doba jest „pokryta”, gdy wszystkie rodzaje odczytu objął pełny odczyt po jej końcu (`/api/google/coverage`); kolor pośredni oznacza część rodzajów.
+- Panel szczegółów porównuje z Takeout tylko pomiary masy i tkanki tłuszczowej; sumy dobowe z Takeout nie są jeszcze wyliczane.
+- Ustawienia pokazują stałe wartości (strefa, precyzja, tydzień od poniedziałku) i polecenia kopii; kopii, historii importów i dziennika zdarzeń z interfejsu jeszcze nie ma. Stopka nawigacji nie pokazuje ostatniej kopii, bo serwer jej nie zna.
+- Kolumna „Źródła” pokazuje pełne nazwy (otwarte pytanie poniżej).
+
 ## Otwarte pytania
 
 - Kolumna „Źródła” w tabeli: pełne nazwy (dziś) czy skróty z pełną listą w panelu szczegółów.
-- Reguła wyboru okien do stawki prognozy kalorii (do ustalenia na danych przed implementacją).
+- Reguła wyboru okien do stawki prognozy kalorii: wdrożona wersja v0 (wyżej) czeka na ocenę na danych.

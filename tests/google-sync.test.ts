@@ -11,7 +11,7 @@ import { createDemoDatabase } from '../packages/storage/days.ts';
 import { createGoogleReadJob, commitGooglePage } from '../packages/storage/google-pages.ts';
 import { warsawDay } from '../packages/domain/warsaw-day.ts';
 import { GoogleAuth } from '../apps/server/google-auth.ts';
-import { coveredDays, GoogleSyncService, planBackfill, planSync, syncKinds } from '../apps/server/google-sync.ts';
+import { coverageCalendar, coveredDays, GoogleSyncService, planBackfill, planSync, syncKinds } from '../apps/server/google-sync.ts';
 
 function store() {
   const db = createDemoDatabase();
@@ -150,6 +150,7 @@ test('backfill: pokrycie liczy tylko doby odczytane po ich końcu, a plan dzieli
     done(db, 'heart-rate-10m', warsawDay('2026-01-02').start, warsawDay('2026-01-02').end, '2026-01-03T00:00:00.000Z');
     assert.deepEqual([...coveredDays(db, 'steps', '2026-01-01', '2026-04-30')], ['2026-01-01', '2026-01-02', '2026-01-03']);
     assert.deepEqual([...coveredDays(db, 'heart-rate-10m', '2026-01-01', '2026-04-30')], ['2026-01-02']);
+    assert.deepEqual(coverageCalendar(db, '2026-01-01', '2026-01-05'), [{ date: '2026-01-01', covered: 1 }, { date: '2026-01-02', covered: 2 }, { date: '2026-01-03', covered: 1 }, { date: '2026-01-04', covered: 0 }, { date: '2026-01-05', covered: 0 }]);
     const plan = planBackfill(db, '2026-01-01', '2026-04-30');
     const ranges = (kind: string) => plan.filter((read) => read.kind === kind).map((read) => `${read.first}..${read.last}`);
     assert.deepEqual(ranges('steps'), ['2026-01-04..2026-04-03', '2026-04-04..2026-04-30']);

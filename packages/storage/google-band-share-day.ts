@@ -30,21 +30,28 @@ function dates(from: string, to: string): Day[] {
  * A day covered by a job with no windows maps to an empty list (read, nothing there); an unread day is absent.
  */
 export function savedWindows(db: DatabaseSync, kind: WindowJobKind, type: WindowRollupType, days: Day[]): Map<string, Window[]> {
-  const claimed = new Map<string, Window[]>();
+  return savedWindowsWith(db, kind, days, (raw) => parseWindowRollup(raw, type).windows.map((window) => ({ start: Date.parse(window.start), value: window.value })));
+}
+
+/** Same day claiming as `savedWindows`, with a caller-supplied page parser (e.g. heart-rate values for presentation). */
+export function savedWindowsWith<T extends { start: number }>(db: DatabaseSync, kind: WindowJobKind, days: Day[], parse: (rawJson: string) => T[]): Map<string, T[]> {
+  const claimed = new Map<string, T[]>();
   const pages = db.prepare('SELECT raw_json FROM google_read_pages WHERE job_id = ? ORDER BY page_number LIMIT 50');
   for (const job of db.prepare("SELECT id, range_start, range_end FROM google_read_jobs WHERE kind = ? AND state = 'complete' ORDER BY created_at DESC, id LIMIT 500").all(kind)) {
     const from = Date.parse(String(job.range_start)), to = Date.parse(String(job.range_end));
     const needed = days.filter((day) => !claimed.has(day.date) && from <= day.start && to >= day.end);
     if (needed.length === 0) continue;
-    const windows: Window[] = [];
+    const windows: T[] = [];
     for (const page of pages.iterate(job.id)) {
       if (typeof page.raw_json !== 'string') throw new Error('invalid_page');
-      for (const window of parseWindowRollup(page.raw_json, type).windows) windows.push({ start: Date.parse(window.start), value: window.value });
+      windows.push(...parse(page.raw_json));
     }
     for (const day of needed) claimed.set(day.date, windows.filter((window) => window.start >= day.start && window.start < day.end));
   }
   return claimed;
 }
+
+export function warsawDays(from: string, to: string): Day[] { return dates(from, to); }
 
 /**
  * Wear evidence per Warsaw day: share of ten-minute windows with heart rate and the split of active energy by it.
