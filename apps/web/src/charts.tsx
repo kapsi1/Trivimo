@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import { addDays, diffDays, fmtD, isoWeek, MON, mondayOf, nf, niceTicks } from './format.ts';
+import { addDays, diffDays, fitAxis, fmtD, isoWeek, MON, mondayOf, nf, niceTicks } from './format.ts';
 
 /** Tooltip lines as a data attribute: first line is the title (date, hours or week), then value lines. */
 export const tip = (lines: (string | false | null | undefined)[]) => ({ 'data-tip': JSON.stringify(lines.filter(Boolean)) });
@@ -24,8 +24,15 @@ export function Tooltip() {
       if (y + box.height > window.innerHeight - 8) y = event.clientY - box.height - 16;
       element.style.transform = `translate(${Math.max(8, x)}px, ${Math.max(8, y)}px)`;
     };
-    document.addEventListener('pointermove', move); document.addEventListener('pointerleave', hide); document.addEventListener('click', hide); window.addEventListener('scroll', hide, true);
-    return () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerleave', hide); document.removeEventListener('click', hide); window.removeEventListener('scroll', hide, true); };
+    // also hide when the pointer leaves the window, the tab or window loses focus, or the view changes under the pointer
+    const out = (event: PointerEvent) => { if (!event.relatedTarget) hide(); };
+    const visibility = () => { if (document.hidden) hide(); };
+    document.addEventListener('pointermove', move); document.addEventListener('pointerout', out); document.addEventListener('click', hide); document.addEventListener('visibilitychange', visibility);
+    window.addEventListener('scroll', hide, true); window.addEventListener('blur', hide); window.addEventListener('hashchange', hide);
+    return () => {
+      document.removeEventListener('pointermove', move); document.removeEventListener('pointerout', out); document.removeEventListener('click', hide); document.removeEventListener('visibilitychange', visibility);
+      window.removeEventListener('scroll', hide, true); window.removeEventListener('blur', hide); window.removeEventListener('hashchange', hide);
+    };
   }, []);
   return <div ref={ref} className="tip" role="tooltip" hidden />;
 }
@@ -98,7 +105,7 @@ export function HourChart({ hours, metric, height = 150, width = 640, hr }: { ho
   const decimals = metric === 'distance' ? 2 : 0, unit = hourUnits[metric];
   let hrMarks: ReactNode = null;
   if (win.length) {
-    const hticks = niceTicks(Math.max(30, Math.min(...win.map((v) => v.avg)) - 5), Math.max(...win.map((v) => v.avg)) + 5, big ? 4 : 2), h0 = hticks[0]!, h1 = hticks.at(-1)!;
+    const { ticks: hticks, lo: h0, hi: h1 } = fitAxis(Math.min(...win.map((v) => v.avg)), Math.max(...win.map((v) => v.avg)), big ? 4 : 2);
     const y2 = (v: number) => T + (base - T) * (1 - (v - h0) / (h1 - h0)), ws = step / 6, xw = (i: number) => L + i * ws + ws / 2;
     let path = '', previous = -2; for (const v of win) { path += `${v.index === previous + 1 ? 'L' : 'M'}${xw(v.index).toFixed(1)},${y2(v.avg).toFixed(1)}`; previous = v.index; }
     const indexes = new Set(win.map((v) => v.index));
@@ -139,7 +146,7 @@ export function HourChart({ hours, metric, height = 150, width = 640, hr }: { ho
 export function HrDayChart({ windows, slots, hours, height = 150, width = 640 }: { windows: HrWindow[]; slots: number; hours: HourPoint[]; height?: number; width?: number }) {
   const H = height, W = width, L = 36, B = 18, T = 8, base = H - B;
   if (!windows.length) return <p className="sub">Brak pomiarów tętna tej doby.</p>;
-  const ticks = niceTicks(Math.max(30, Math.min(...windows.map((v) => v.min)) - 5), Math.max(...windows.map((v) => v.max)) + 5, H > 200 ? 5 : H < 100 ? 2 : 3), t0 = ticks[0]!, t1 = ticks.at(-1)!;
+  const { ticks, lo: t0, hi: t1 } = fitAxis(Math.min(...windows.map((v) => v.min)), Math.max(...windows.map((v) => v.max)), H > 200 ? 5 : H < 100 ? 2 : 3);
   const step = (W - L) / slots, x = (i: number) => L + i * step + step / 2, y = (v: number) => T + (base - T) * (1 - (v - t0) / (t1 - t0));
   let path = '', previous = -2; for (const v of windows) { path += `${v.index === previous + 1 ? 'L' : 'M'}${x(v.index).toFixed(1)},${y(v.avg).toFixed(1)}`; previous = v.index; }
   const indexes = new Set(windows.map((v) => v.index)), every = W > 900 ? 1 : 3;
@@ -213,7 +220,7 @@ export function HrTrendChart({ points, events = [], highlight, width = 640, heig
   const ok = points.filter((point) => point.avg !== null);
   if (!ok.length) return <p className="sub">Brak pomiarów tętna w tym okresie.</p>;
   const f = frame(points, agg, width, height), { L, T, B, H, W, step, n } = f, big = H > 200;
-  const ticks = niceTicks(Math.max(30, Math.min(...ok.map((point) => point.min!)) - 5), Math.max(...ok.map((point) => point.max!)) + 5, big ? 5 : 3), t0 = ticks[0]!, t1 = ticks.at(-1)!;
+  const { ticks, lo: t0, hi: t1 } = fitAxis(Math.min(...ok.map((point) => point.min!)), Math.max(...ok.map((point) => point.max!)), big ? 5 : 3);
   const y = (v: number) => T + (H - B - T) * (1 - (v - t0) / (t1 - t0)), sw = Math.max(1, Math.min(5, step * 0.5));
   const path = points.reduce((acc, point, i) => point.avg === null ? acc : `${acc}${acc ? 'L' : 'M'}${f.x(i).toFixed(1)},${y(point.avg).toFixed(1)}`, '');
   return <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Tętno: ${ok.length} wartości z ${n}`}>

@@ -92,7 +92,7 @@ function CellBody({ date, metricKey, onOpenDay }: { date: string; metricKey: Met
       : <p>Porównanie sum dobowych z Takeout nie jest jeszcze wyliczane. Oryginalne wiersze eksportu są w „Źródła danych” → „Importy plików”.</p>}</div>
     {snapshot && snapshot.notes.length > 0 && <div className="dsec"><h4>Uwagi dnia</h4><ul className="notes">{snapshot.notes.map((note) => <li key={note}>{note}</li>)}</ul></div>}
     <div className="dsec"><h4>Rewizja</h4><p className="mono">{snapshot ? `r-${snapshot.revision}` : 'brak'}</p></div>
-    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button type="button" className="btn" onClick={() => onOpenDay(date, 'podsumowanie')}>Otwórz dzień</button><button type="button" className="btn ghost" onClick={() => onOpenDay(date, 'pochodzenie')}>Pochodzenie danych</button></div>
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button type="button" className="btn" onClick={() => onOpenDay(date)}>Otwórz dzień</button><button type="button" className="btn ghost" onClick={() => onOpenDay(date, 'pochodzenie')}>Pochodzenie danych</button></div>
   </>;
 }
 

@@ -54,6 +54,22 @@ export function niceTicks(min: number, max: number, count = 3): number[] {
   return ticks;
 }
 
+/**
+ * Axis fitted to the data instead of padded out to round limits: gridlines on a round step, the outer gridline sits just
+ * beyond the data when that is close (e.g. 175 for a maximum of 171), otherwise inside it with a small margin above so
+ * every mark fits (e.g. a line at 200 for a maximum of 212). The plotted range is [lo, hi].
+ */
+export function fitAxis(min: number, max: number, count = 4): { ticks: number[]; lo: number; hi: number } {
+  const span = max - min || Math.max(1, Math.abs(max) * 0.1), raw = span / count, mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((s) => s * mag).find((s) => s >= raw) ?? mag * 10, pad = span * 0.04;
+  let top = Math.ceil(max / step) * step, hi = top;
+  if (top - max > step * 0.4) { top -= step; hi = max + pad; }
+  let bottom = Math.floor(min / step) * step, lo = bottom;
+  if (min - bottom > step * 0.4) { bottom += step; lo = min - pad; }
+  const ticks: number[] = []; for (let value = bottom; value <= top + step / 2; value += step) ticks.push(Number(value.toFixed(6)));
+  return { ticks, lo: Math.min(lo, bottom), hi: Math.max(hi, top) };
+}
+
 /** Polish plural of a count: 1 pomiar, 2–4 pomiary, 5+ pomiarów. */
 export function plural(count: number, one: string, few: string, many: string): string {
   if (count === 1) return one;

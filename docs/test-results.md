@@ -1,5 +1,10 @@
 # Raport weryfikacji
 
+## 2026-11-04 — przebieg doby: sumy w tytułach, data w powiększeniu, oś tętna
+
+- `npm test`: 119 testów zaliczonych (nowy: dopasowanie osi — 171 → górna linia 175, 212 → linia 200 z zakresem do ok. 218, wartości zawsze w zakresie). `npx tsc --noEmit` i `npx vite build`: poprawne.
+- Przeglądarka, dane prawdziwe: 2026-11-03 „Aktywne kcal: 1007 kcal” (wartość producenta, ta sama co w tabeli), „Tętno: śr. 89 · 56–171 bpm”, oś powiększenia 50–175; zmiana daty strzałką w powiększeniu do 2026-10-31 bez zamykania okna, oś 50–200 z marginesem na słupki do 212 bpm.
+
 ## 2026-11-04 — interfejs według projektu UI
 
 - `npm test`: 118 testów zaliczonych (nowe: tętno okien z min/maks. i brakiem pól, nieodczytana doba a doba bez okien, DST 23 h; prognoza `prognoza-spoczynek-v0` — stawka z okien bez kroków i aktywnych kcal, brak odczytu wejścia to brak prognozy, za mało okien, doba 25 h, tylko doba bieżąca; kalendarz pokrycia). `npx tsc --noEmit` i `npx vite build`: poprawne.

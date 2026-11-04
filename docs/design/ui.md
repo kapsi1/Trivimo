@@ -10,7 +10,7 @@ Stan: propozycja z 2026-11-04, częściowo zaakceptowana przez użytkownika tego
 
 ## Nawigacja
 
-Stała lewa nawigacja zastępuje prowizoryczne zakładki (w tym „Przykład”). Na wąskim ekranie dolny pasek: Dzień, Dni, Trendy, Jedzenie, Więcej.
+Stała lewa nawigacja zastępuje prowizoryczne zakładki (w tym „Przykład”); można ją zwinąć do samych ikon (stan zapamiętany w przeglądarce, nazwy w podpowiedziach). Na wąskim ekranie dolny pasek: Dzień, Dni, Trendy, Jedzenie, Więcej.
 
 | Grupa | Pozycja | Stan |
 | --- | --- | --- |
@@ -28,7 +28,7 @@ Pasek górny ma tytuł widoku, kontekst daty lub okresu danego widoku oraz przyc
 
 ### Dzień (ekran startowy — zatwierdzone)
 
-Wybór dnia strzałkami, polem daty, „Dziś”, a z klawiatury ←/→ i `t`. Nagłówek pokazuje „w toku · stan na HH:MM” dla bieżącej doby i „doba 23 h / 25 h” przy zmianie czasu. Strefa czasowa nie jest wyświetlana w nagłówkach ani opisach; widać ją tylko w ustawieniach (decyzja z 2026-11-04). Zakładki: Podsumowanie, Przebieg doby, Pochodzenie danych, Jedzenie (M3), Treningi (M2).
+Wybór dnia strzałkami, polem daty, „Dziś”, a z klawiatury ←/→ i `t`. Nagłówek pokazuje „w toku · stan na HH:MM” dla bieżącej doby i „doba 23 h / 25 h” przy zmianie czasu. Strefa czasowa nie jest wyświetlana w nagłówkach ani opisach; widać ją tylko w ustawieniach (decyzja z 2026-11-04). Zakładki: Przebieg doby (domyślna, ustalenie użytkownika 2026-11-04), Podsumowanie, Pochodzenie danych, Jedzenie (M3), Treningi (M2).
 
 - **Podsumowanie:** karty metryk w czterech grupach — Energia, Aktywność, Ciało i Jedzenie (placeholder: spożyte kalorie, bilans). Karta ma wartość, stan, porównanie ze średnią 7 dni z liczbą dób potwierdzonych („6 z 7 dób”) i miniwykres 14 dni (dla masy i tkanki linia łączy dni z pomiarem, bez przerw). Dla masy i tkanki bez pomiaru karta pokazuje „ostatni pomiar … · data”, nie przenosi go na dzień. Grupa Ciało ma też kartę „Tętno”: średnia okien z pomiarem, obok zakres min–maks., porównanie ze średnią 7 dni i miniwykres 14 dni (kreska min–maks., linia średniej); powiększenie pokazuje 7 / 14 / 30 / 90 dni. Pod kartami „Doba w skrócie” (spalone kcal na godzinę z podziałem na aktywne i pozostałe, mały wykres tętna), uwagi automatyczne i edytowalna „Moja notatka”. Bez osobnego paska okien „HR” i opisu udziału opaski pod wykresem: udział opaski jest w tooltipie kalorii i w kolumnie „Opaska” tabeli.
 - **Prognoza spalonych kalorii (doba w toku):** karta „Spalone kalorie” pokazuje w tym samym wierszu co wartość „Prognoza: X kcal”. Na wykresach godzinowych reszta bieżącej godziny i przyszłe godziny są przerywanymi słupkami, a na wykresach dni przerywany obrys nad dzisiejszym słupkiem. Metoda: spalone do teraz + stawka spoczynkowa × pozostały czas doby (23/25 h przy zmianie czasu). Stawka pochodzi z dzisiejszych okien 10-minutowych bez kroków i bez aktywnych kcal. To własna, nazwana i wersjonowana pochodna (`prognoza-spoczynek-v0`), nie wartość producenta ani BMR. Nie trafia do tabeli, średnich ani eksportu. Panel „?” opisuje założenie: rzeczywista wartość zwykle będzie wyższa. Dokładną regułę wyboru okien (np. minimalna liczba okien, okna nocne) trzeba ustalić na danych przed implementacją.
@@ -104,6 +104,7 @@ Wdrożono widoki i interakcje opisane wyżej, na danych z serwera. Różnice i o
 - Panel szczegółów porównuje z Takeout tylko pomiary masy i tkanki tłuszczowej; sumy dobowe z Takeout nie są jeszcze wyliczane.
 - Ustawienia pokazują stałe wartości (strefa, precyzja, tydzień od poniedziałku) i polecenia kopii; kopii, historii importów i dziennika zdarzeń z interfejsu jeszcze nie ma. Stopka nawigacji nie pokazuje ostatniej kopii, bo serwer jej nie zna.
 - Kolumna „Źródła” pokazuje pełne nazwy (otwarte pytanie poniżej).
+- Przebieg doby (ustalenia użytkownika 2026-11-04): tytuły wykresów podają wartość dnia — dla metryk godzinowych wartość dobową producenta (ta sama liczba co na karcie i w tabeli), a sumę godzin tylko przy braku wartości producenta, z dopiskiem; dla tętna średnią okien i zakres min–maks. Powiększenia z zakładki „Przebieg doby” mają wybór daty (strzałki, pole daty, „Dziś”, także ←/→) i zostają otwarte przy zmianie dnia; powiększenia z „Podsumowania” go nie mają. Pasek przewijania ma stałe miejsce (`scrollbar-gutter`), więc chwilowo krótsza strona przy ładowaniu dnia nie przesuwa układu. Oś tętna jest dopasowana do danych: górna linia tuż nad maksimum, gdy jest blisko (np. 175 dla 171), w przeciwnym razie pod nim z marginesem mieszczącym słupki (np. linia 200 dla 212); dół analogicznie.
 
 ## Otwarte pytania
 

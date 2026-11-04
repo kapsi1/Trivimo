@@ -1,7 +1,7 @@
 import { warsawDay } from '../../../packages/domain/warsaw-day.ts';
 import { metricOf, type DayRow, type Forecast, type HeartRateDay, type HeartRateSummary, type MetricKey, type Series, type Snapshot } from './api.ts';
 import { energyTip, weekTitle, type AxisEvent, type HourKey, type HourPoint, type HrTrendPt, type HrWindow, type TrendPt } from './charts.tsx';
-import { addDays, fmtDL, hourOf, mondayOf, nf, timeOf, toNumber } from './format.ts';
+import { addDays, fmtDL, formatRational, hourOf, mondayOf, nf, timeOf, toNumber } from './format.ts';
 import { trendPoints } from './trends.ts';
 
 /** A day's value as a number for charts and means: only valid or provisional values count, anything else is a gap. */
@@ -37,6 +37,19 @@ export function dayTip(row: DayRow | undefined, date: string, key: MetricKey, fo
   const energy = row?.snapshot?.energy;
   if (metric.group === 'energy' && value !== null && energy) lines.push(...energyTip(energy.heartRateWindows, energy.dayWindows));
   return lines;
+}
+
+const hourMetric: Record<HourKey, MetricKey> = { total: 'total_energy', active: 'active_energy', steps: 'steps', distance: 'distance' };
+/**
+ * Day total shown beside an hourly chart: the producer's daily value (same number as the card and the table) when the
+ * snapshot has one; otherwise the sum of the hours, marked as computed. Null when neither exists.
+ */
+export function dayTotal(snapshot: Snapshot | null | undefined, key: HourKey, hours: readonly HourPoint[]): { text: string; computed: boolean } | null {
+  const metric = metricOf(hourMetric[key]), unit = metric.unit || 'kroków', value = snapshot?.metrics[metric.key].value;
+  if (value) return { text: `${formatRational(value, metric.decimals)} ${unit}`, computed: false };
+  const values = hours.flatMap((hour) => hour[key] === null ? [] : [hour[key]!]);
+  if (!values.length) return null;
+  return { text: `${nf(values.reduce((sum, item) => sum + item, 0), metric.decimals)} ${unit}`, computed: true };
 }
 
 export interface DayHours { hours: HourPoint[]; hr: HrWindow[]; slots: number; dayStart: number }

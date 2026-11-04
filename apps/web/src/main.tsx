@@ -10,7 +10,7 @@ import { SettingsView } from './settings.tsx';
 import { SourcesView, type SourcesTab } from './sources.tsx';
 import { TableView, tableRanges, useTablePrefs } from './table.tsx';
 import { aggregations, trendRanges, TrendsView, type TrendLength } from './trends-view.tsx';
-import { Segmented } from './zoom.tsx';
+import { DateControl, Segmented } from './zoom.tsx';
 import './fonts.css';
 import './style.css';
 
@@ -50,7 +50,7 @@ function App() {
 
 function Shell() {
   const [route, setRoute] = useState(() => parseHash(location.hash));
-  const [dayTab, setDayTab] = useState<DayTab>('podsumowanie');
+  const [dayTab, setDayTab] = useState<DayTab>('przebieg');
   const [srcTab, setSrcTab] = useState<SourcesTab>('polaczenia');
   const [trendLength, setTrendLength] = useState<TrendLength>(90);
   const [trendAgg, setTrendAgg] = useState<'day' | 'week'>('day');
@@ -58,6 +58,8 @@ function Shell() {
   const [drawer, setDrawer] = useState<DrawerState | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [syncTick, setSyncTick] = useState(0);
+  const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem('trivimo-side') === 'collapsed'; } catch { return false; } });
+  const toggleSide = () => setCollapsed((value) => { try { localStorage.setItem('trivimo-side', value ? 'open' : 'collapsed'); } catch { /* per-browser convenience only */ } return !value; });
   const dirty = useRef(false);
   const current = useRef(location.hash);
   const today = warsawToday();
@@ -82,12 +84,12 @@ function Shell() {
   }, []);
   const go = useCallback((hash: string) => { if (location.hash === `#${hash}`) return; location.hash = hash; }, []);
   const setDay = (next: string) => { if (next < '2026-01-01' || next > warsawToday()) return; go(next === warsawToday() ? 'dzien' : `dzien/${next}`); };
-  const openDay = (next: string, tab: DayTab = 'podsumowanie') => { setDayTab(tab); setDrawer(null); setDay(next); if (route.view === 'dzien' && next === date) setRoute({ ...route }); };
+  const openDay = (next: string, tab: DayTab = 'przebieg') => { setDayTab(tab); setDrawer(null); setDay(next); if (route.view === 'dzien' && next === date) setRoute({ ...route }); };
 
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && addOpen) { setAddOpen(false); return; }
-      if (route.view !== 'dzien' || document.querySelector('[aria-modal="true"]') || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (route.view !== 'dzien' || document.querySelector('.drawer') || (document.querySelector('.zoom') && !document.querySelector('.zoom .datectl')) || event.ctrlKey || event.metaKey || event.altKey) return;
       if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable]')) return;
       if (event.key === 'ArrowLeft') setDay(addDays(date, -1));
       else if (event.key === 'ArrowRight') setDay(addDays(date, 1));
@@ -101,20 +103,16 @@ function Shell() {
   const syncData = sync.data;
   const lastOk = syncData?.last?.result === 'ok' ? syncData.last.at : syncData?.kinds.map((kind) => kind.lastReadAt).filter((at): at is string => !!at).sort().at(-1);
   const syncBad = sync.error || (syncData?.last && syncData.last.result !== 'ok');
-  const nav = (view: View, ic: ReactNode, label: string, extra?: ReactNode, hash: string = view, soon = false) => <a className={`nav ${soon ? 'is-soon' : ''}`} href={`#${hash}`} aria-current={route.view === view && (hash === view || route.param === hash.split('/')[1]) ? 'page' : undefined}>{ic}<span>{label}</span>{extra}</a>;
+  const nav = (view: View, ic: ReactNode, label: string, extra?: ReactNode, hash: string = view, soon = false) => <a className={`nav ${soon ? 'is-soon' : ''}`} href={`#${hash}`} title={collapsed ? label : undefined} aria-current={route.view === view && (hash === view || route.param === hash.split('/')[1]) ? 'page' : undefined}>{ic}<span>{label}</span>{extra}</a>;
   const bottom = (view: View, ic: ReactNode, label: string) => <button type="button" aria-current={route.view === view ? 'page' : undefined} onClick={() => go(view)}>{ic}<span>{label}</span></button>;
 
   let context: ReactNode = null;
-  if (route.view === 'dzien') context = <div className="datectl">
-    <button type="button" className="iconbtn" aria-label="Poprzedni dzień" disabled={date <= '2026-01-01'} onClick={() => setDay(addDays(date, -1))}>{I.left}</button>
-    <input type="date" value={date} min="2026-01-01" max={today} aria-label="Wybierz dzień" onChange={(event) => { if (event.target.value) setDay(event.target.value); }} />
-    <button type="button" className="iconbtn" aria-label="Następny dzień" disabled={date >= today} onClick={() => setDay(addDays(date, 1))}>{I.right}</button>
-    <button type="button" className="btn ghost" disabled={date === today} onClick={() => setDay(today)}>Dziś</button></div>;
+  if (route.view === 'dzien') context = <DateControl date={date} onDate={setDay} />;
   if (route.view === 'tabela') context = <Segmented label="Zakres" items={tableRanges} value={prefs.range} onChange={(range) => setPrefs({ range })} />;
   if (route.view === 'trendy') context = <><Segmented label="Okres" items={trendRanges} value={trendLength} onChange={setTrendLength} /><Segmented className="hide-sm" label="Agregacja" items={aggregations} value={trendAgg} onChange={setTrendAgg} /></>;
 
   let content: ReactNode;
-  if (route.view === 'dzien') content = <DayView date={date} tab={dayTab} onTab={setDayTab} sync={syncData} onDirty={(value) => { dirty.current = value; }} onDrawer={setDrawer} />;
+  if (route.view === 'dzien') content = <DayView date={date} tab={dayTab} onTab={setDayTab} onDate={setDay} sync={syncData} onDirty={(value) => { dirty.current = value; }} onDrawer={setDrawer} />;
   else if (route.view === 'tabela') content = <TableView range={prefs.range} cols={prefs.cols} onCols={(cols) => setPrefs({ cols: { ...prefs.cols, ...cols } })} onDrawer={setDrawer} onOpenDay={(next) => openDay(next)} />;
   else if (route.view === 'trendy') content = <TrendsView length={trendLength} agg={trendAgg} onLength={setTrendLength} onAgg={setTrendAgg} onDrawer={setDrawer} />;
   else if (route.view === 'treningi') content = <WorkoutsView />;
@@ -122,13 +120,13 @@ function Shell() {
   else if (route.view === 'zrodla') content = <SourcesView tab={srcTab} onTab={setSrcTab} sync={syncData} onSyncChanged={() => setSyncTick((value) => value + 1)} />;
   else content = <SettingsView />;
 
-  return <div className="app">
+  return <div className={`app ${collapsed ? 'collapsed' : ''}`}>
     <aside className="side" aria-label="Nawigacja główna">
-      <div className="brand"><b>Trivimo</b><span>lokalnie</span></div>
+      <div className="brand"><b>Trivimo</b><span>lokalnie</span><button type="button" className="sidetoggle" aria-expanded={!collapsed} aria-label={collapsed ? 'Rozwiń panel nawigacji' : 'Zwiń panel do ikon'} title={collapsed ? 'Rozwiń panel' : 'Zwiń panel'} onClick={toggleSide}>{collapsed ? I.right : I.left}</button></div>
       <nav className="navgroup" aria-label="Dane"><h4>Dane</h4>{nav('dzien', I.day, 'Dzień')}{nav('tabela', I.table, 'Tabela dni')}{nav('trendy', I.trend, 'Trendy')}{nav('treningi', I.run, 'Treningi', <span className="tag soon">M2</span>, 'treningi', true)}</nav>
       <nav className="navgroup" aria-label="Jedzenie"><h4>Jedzenie</h4>{nav('jedzenie', I.book, 'Dziennik', <span className="tag soon food">M3</span>, 'jedzenie/dziennik', true)}{nav('jedzenie', I.food, 'Produkty i przepisy', <span className="tag soon food">M3</span>, 'jedzenie/produkty', true)}{nav('jedzenie', I.plan, 'Planer', <span className="tag soon food">M4</span>, 'jedzenie/planer', true)}</nav>
       <nav className="navgroup" aria-label="System"><h4>System</h4>{nav('zrodla', I.src, 'Źródła danych')}{nav('ustawienia', I.gear, 'Ustawienia')}</nav>
-      <div className="side-foot"><button type="button" className="sync" onClick={() => go('zrodla')}><span className={`dot ${syncBad ? 'warn' : ''}`} /><span>{sync.error ? 'Google Health · stan niedostępny' : `Google Health · ${lastOk ? `odświeżono ${whenOf(lastOk)}` : 'brak odczytu'}`}{syncBad && syncData?.last ? ' · błąd ostatniego odświeżenia' : ''}<br /><span className="faint">{syncData?.automatic ? `automatycznie co ${syncData.automatic} min` : sync.error ? 'zobacz Źródła danych' : 'odświeżanie ręczne'}</span></span></button></div>
+      <div className="side-foot"><button type="button" className="sync" title={collapsed ? `Google Health · ${lastOk ? `odświeżono ${whenOf(lastOk)}` : 'brak odczytu'}` : undefined} onClick={() => go('zrodla')}><span className={`dot ${syncBad ? 'warn' : ''}`} /><span>{sync.error ? 'Google Health · stan niedostępny' : `Google Health · ${lastOk ? `odświeżono ${whenOf(lastOk)}` : 'brak odczytu'}`}{syncBad && syncData?.last ? ' · błąd ostatniego odświeżenia' : ''}<br /><span className="faint">{syncData?.automatic ? `automatycznie co ${syncData.automatic} min` : sync.error ? 'zobacz Źródła danych' : 'odświeżanie ręczne'}</span></span></button></div>
     </aside>
     <div className="main">
       <header className="topbar"><h1>{titles[route.view]}</h1>{context}

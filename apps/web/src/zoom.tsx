@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { addDays, warsawToday } from './format.ts';
 import { InfoButton } from './charts.tsx';
 import { CloseIcon, useDialog } from './details.tsx';
 
@@ -7,6 +8,17 @@ export const zoomSize = () => window.innerWidth < 700 ? { W: 640, H: 260 } : { W
 
 export function Segmented<T extends string | number>({ items, value, onChange, label, className }: { items: [T, string][]; value: T; onChange: (value: T) => void; label: string; className?: string }) {
   return <div className={`seg ${className ?? ''}`} role="group" aria-label={label}>{items.map(([key, text]) => <button type="button" key={String(key)} aria-pressed={value === key} onClick={() => onChange(key)}>{text}</button>)}</div>;
+}
+
+const arrow = (path: string) => <svg viewBox="0 0 24 24" aria-hidden="true"><path d={path} /></svg>;
+/** Day picker: arrows, date field and "Dziś"; days from 2026-01-01 to today. Used in the top bar and in day zooms. */
+export function DateControl({ date, onDate }: { date: string; onDate: (date: string) => void }) {
+  const today = warsawToday();
+  return <div className="datectl">
+    <button type="button" className="iconbtn" aria-label="Poprzedni dzień" disabled={date <= '2026-01-01'} onClick={() => onDate(addDays(date, -1))}>{arrow('M15 5l-7 7 7 7')}</button>
+    <input type="date" value={date} min="2026-01-01" max={today} aria-label="Wybierz dzień" onChange={(event) => { if (event.target.value) onDate(event.target.value); }} />
+    <button type="button" className="iconbtn" aria-label="Następny dzień" disabled={date >= today} onClick={() => onDate(addDays(date, 1))}>{arrow('M9 5l7 7-7 7')}</button>
+    <button type="button" className="btn ghost" disabled={date === today} onClick={() => onDate(today)}>Dziś</button></div>;
 }
 
 export function ZoomDialog({ title, sub, controls, legend, onInfo, onClose, children }: { title: string; sub: string; controls?: ReactNode; legend?: ReactNode; onInfo: () => void; onClose: () => void; children: ReactNode }) {

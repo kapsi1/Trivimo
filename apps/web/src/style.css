@@ -25,6 +25,7 @@
   --side: 236px;
 }
 * { box-sizing: border-box; }
+html { overflow-y: scroll; scrollbar-gutter: stable; }
 html, body { background: var(--bg); color: var(--fg); }
 body { margin: 0; font: 14px/1.5 var(--font-ui); }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--bg); }
@@ -250,6 +251,7 @@ details.diag[open] summary { margin-bottom: 10px; }
 svg .hit { fill: transparent; }
 svg .hit:hover { fill: color-mix(in srgb, var(--fg) 8%, transparent); }
 .tip { position: fixed; left: 0; top: 0; z-index: 70; pointer-events: none; max-width: 300px; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; background: var(--raised); border: 1px solid var(--line-strong); border-radius: 6px; box-shadow: 0 8px 24px rgb(0 0 0 / .45); font-size: 12.5px; line-height: 1.4; font-variant-numeric: tabular-nums; }
+.tip[hidden] { display: none; }
 .tip b { font-weight: 600; }
 .tip span { color: var(--muted); }
 .tip span:first-of-type { color: var(--fg); }
@@ -289,6 +291,22 @@ svg .hit:hover { fill: color-mix(in srgb, var(--fg) 8%, transparent); }
 @media (prefers-reduced-motion: no-preference) { .drawer { animation: slide .18s ease-out; } @keyframes slide { from { transform: translateX(24px); opacity: .6; } } }
 
 /* ---------- uzupełnienia implementacji ---------- */
+/* lewy panel zwinięty do ikon */
+.brand .sidetoggle { margin-left: auto; align-self: center; display: inline-grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--faint); }
+.brand .sidetoggle:hover { color: var(--fg); border-color: var(--line-strong); }
+.brand .sidetoggle svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.app.collapsed { --side: 64px; }
+.app.collapsed .side { padding-left: 10px; padding-right: 10px; align-items: stretch; }
+.app.collapsed .brand { justify-content: center; padding: 0; }
+.app.collapsed .brand b, .app.collapsed .brand span { display: none; }
+.app.collapsed .brand .sidetoggle { margin: 0; }
+.app.collapsed .navgroup h4 { height: 1px; margin: 0 6px 6px; padding: 0; overflow: hidden; color: transparent; background: var(--line); }
+.app.collapsed .nav { justify-content: center; padding: 9px 0; }
+.app.collapsed .nav > span, .app.collapsed .nav .tag { display: none; }
+.app.collapsed .side-foot { align-items: center; padding: 10px 0 0; }
+.app.collapsed .sync > span:not(.dot) { display: none; }
+.app.collapsed .sync .dot { margin-top: 0; }
+
 .boot { padding: 40px 28px; color: var(--muted); }
 .faint { color: var(--faint); }
 .muted { color: var(--muted); }
