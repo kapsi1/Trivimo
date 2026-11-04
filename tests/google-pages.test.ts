@@ -9,7 +9,7 @@ import { migrateCanonicalDays, migrateUserNotes, migrateSourceAccounts, migrateG
 import { createGoogleReadJob, commitGooglePage } from '../packages/storage/google-pages.ts';
 import { verifyTakeout } from '../packages/storage/verify-takeout.ts';
 import { GoogleAuth } from '../apps/server/google-auth.ts';
-import { GoogleReadService, readGoogleJobPage } from '../apps/server/google-read-service.ts';
+import { clearIdentityCache, GoogleReadService, readGoogleJobPage } from '../apps/server/google-read-service.ts';
 
 test('strona i kursor są atomowe, a wznowienie zachowuje oryginalny JSON', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'trivimo-google-pages-')); const path = join(dir, 'db.sqlite'); const db = new DatabaseSync(path);
@@ -33,7 +33,10 @@ test('strona i kursor są atomowe, a wznowienie zachowuje oryginalny JSON', asyn
     const url = new URL(auth.start()); await auth.finish(url.searchParams.get('state'), 'code');
     await assert.rejects(readGoogleJobPage(db, auth, second, async (address) => String(address).endsWith('/identity') ? Response.json({ healthUserId: 'synthetic-account' }) : new Response('', { status: 503 })), /google_http_503/);
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM google_read_pages WHERE job_id = ?').get(second)?.n, 0);
+    // another account always comes with another access token, so its identity is asked again (cleared cache = new token)
+    clearIdentityCache();
     await assert.rejects(readGoogleJobPage(db, auth, second, async () => Response.json({ healthUserId: 'different-account' })), /account_changed/);
+    clearIdentityCache();
     assert.deepEqual(await readGoogleJobPage(db, auth, second, async (address) => String(address).endsWith('/identity') ? Response.json({ healthUserId: 'synthetic-account' }) : new Response('{"dataPoints":[]}')), { complete: true, pageNumber: 1 });
     const { createApp } = await import('../apps/server/app.ts'); const { createDemoDatabase } = await import('../packages/storage/days.ts');
     const mock: typeof fetch = async (address) => String(address).endsWith('/identity') ? Response.json({ healthUserId: 'synthetic-account' }) : Response.json({ dataPoints: [{ value: 'private-synthetic' }] });

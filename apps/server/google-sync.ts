@@ -97,7 +97,11 @@ export function coverageCalendar(db: DatabaseSync, from: string, through: string
   return days;
 }
 
-/** Uncovered days of [from, through], per kind in `syncKinds` order, grouped into consecutive chunks within the producer limit. */
+/**
+ * Uncovered days of [from, through], grouped per kind into consecutive chunks within the producer limit, newest
+ * period first (all kinds of a period before an older one, `syncKinds` order within it). A run stopped part-way
+ * then leaves recent days with every kind read, so their snapshots are qualified, instead of all days half read.
+ */
 export function planBackfill(db: DatabaseSync, from: string, through: string): SyncRead[] {
   const plan: SyncRead[] = [];
   for (const kind of syncKinds) {
@@ -111,17 +115,28 @@ export function planBackfill(db: DatabaseSync, from: string, through: string): S
     }
     if (first) flush(through);
   }
-  return plan;
+  return plan.map((read, index) => ({ read, index })).sort((a, b) => a.read.last < b.read.last ? 1 : a.read.last > b.read.last ? -1 : a.index - b.index).map(({ read }) => read);
 }
 
 export interface BackfillStatus {
   state: 'idle' | 'running' | 'stopping' | 'stopped' | 'done' | 'error';
   from: string; through: string; startedAt: string | null; finishedAt: string | null;
   current: { kind: SyncKind; first: string; last: string } | null; readsThisRun: number; code?: string; retryAt?: string;
+  /** Automatic repeat after a transient error (server error, timeout, network): which attempt and when it runs. */
+  retrying?: { attempt: number; of: number; at: string; code: string };
   kinds: { kind: SyncKind; covered: number; total: number }[];
+  /** Chunks still to read for the range (each is one producer read); null when the store is unavailable. */
+  remainingReads: number | null;
 }
 
 type Execute = (db: DatabaseSync, read: SyncRead) => Promise<void>;
+/**
+ * Backfill repeats of a chunk after a transient failure: producer 5xx, a timeout or a network error (`google_read_failed`
+ * covers those). Reads change nothing and a page is committed only after success, so a repeat resumes the saved cursor.
+ * Authorization, scope, store and response-shape errors are not repeated.
+ */
+export const backfillRetryDelaysMs = [15000, 30000, 60000, 120000, 300000];
+const transientFailure = (code: string | undefined) => !!code && (/^google_(identity_)?http_5\d\d$/.test(code) || code === 'google_read_failed');
 const safeCodes = /^(authorization_required|scope_missing|account_changed|job_conflict|range_too_large|invalid_range|unexpected_window|duplicate_day|duplicate_window|cursor_cycle|response_too_large|token_refresh_failed|(google_|google_identity_)http_\d{3})$/;
 
 export class GoogleSyncService {
@@ -131,7 +146,7 @@ export class GoogleSyncService {
   /** After repeated 429 no run sends requests before this time (kept in memory; a server restart starts afresh). */
   private pausedUntil: number | null = null;
   /** The backfill run of this server process; its progress itself is derived from the store, so it survives restarts. */
-  private backfill: Omit<BackfillStatus, 'kinds'> | null = null;
+  private backfill: Omit<BackfillStatus, 'kinds' | 'remainingReads'> | null = null;
   private stopRequested = false;
   constructor(
     private readonly path: string, private readonly auth: GoogleAuth,
@@ -177,6 +192,10 @@ export class GoogleSyncService {
       const db = this.open();
       try { return planBackfill(db, backfillFrom, addDays(sourceDay(new Date(this.now()).toISOString()), -1)).length > 0; } finally { db.close(); }
     } catch { return false; }
+  }
+  /** Wait before a repeat, waking early when the backfill is stopped. */
+  private async sleepUnlessStopped(ms: number): Promise<void> {
+    for (let left = ms; left > 0 && !this.stopRequested; left -= 1000) await this.sleep(Math.min(1000, left));
   }
   stop(): void { if (this.timer) clearInterval(this.timer); this.timer = undefined; }
   /**
@@ -256,13 +275,13 @@ export class GoogleSyncService {
   }
   private async backfillLoop(): Promise<void> {
     const run = this.backfill!;
-    const end = (state: BackfillStatus['state'], code?: string) => { run.state = state; run.current = null; run.finishedAt = new Date(this.now()).toISOString(); if (code) run.code = code; };
+    const end = (state: BackfillStatus['state'], code?: string) => { run.state = state; run.current = null; delete run.retrying; run.finishedAt = new Date(this.now()).toISOString(); if (code) run.code = code; };
     // days before the refresh's projection window (the last year, from 2026) get their snapshots from the run's own range
     const projectRun = (db: DatabaseSync) => {
       const window = this.projectionFrom(), last = addDays(window, -1) < run.through ? addDays(window, -1) : run.through;
       if (run.from <= last) { try { publishDayRange(db, run.from, last, this.now()); } catch { /* reads stay saved; the next run projects again */ } }
     };
-    let previous = '';
+    let previous = '', failures = 0;
     while (true) {
       if (this.stopRequested) { this.withStore(projectRun); return end('stopped'); }
       if (this.pausedUntil !== null && this.now() < this.pausedUntil) { run.code = 'rate_limited'; run.retryAt = new Date(this.pausedUntil).toISOString(); await this.sleep(Math.min(this.pausedUntil - this.now(), 60000)); continue; }
@@ -278,10 +297,19 @@ export class GoogleSyncService {
         // a chunk planned again right after its complete read would repeat forever; stop and report instead
         if (key === previous) return end('error', 'no_progress');
         previous = key; run.current = { kind: next.kind, first: next.first, last: next.last };
-        await this.execute(db, next); run.readsThisRun++;
+        await this.execute(db, next); run.readsThisRun++; failures = 0; delete run.retrying;
       } catch (error) {
         const failure = this.failure(error);
         if (failure.code === 'google_http_429' || failure.code === 'google_identity_http_429') { previous = ''; continue; }
+        if (transientFailure(failure.code) && failures < backfillRetryDelaysMs.length) {
+          const wait = backfillRetryDelaysMs[failures++]!;
+          run.retrying = { attempt: failures, of: backfillRetryDelaysMs.length, at: new Date(this.now() + wait).toISOString(), code: failure.code! };
+          previous = '';
+          db?.close(); db = undefined; this.running = false;
+          await this.sleepUnlessStopped(wait);
+          continue;
+        }
+        delete run.retrying;
         return end('error', failure.code ?? failure.result);
       } finally { db?.close(); this.running = false; }
     }
@@ -294,12 +322,12 @@ export class GoogleSyncService {
     const through = this.backfill?.through ?? addDays(sourceDay(new Date(this.now()).toISOString()), -1);
     const from = this.backfill?.from ?? backfillFrom;
     const total = Math.max(0, Math.round((Date.parse(`${through}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000) + 1);
-    let kinds: BackfillStatus['kinds'] = [];
+    let kinds: BackfillStatus['kinds'] = []; let remainingReads: number | null = null;
     try {
       const db = this.open();
-      try { kinds = syncKinds.map((kind) => ({ kind, covered: coveredDays(db, kind, from, through).size, total })); } finally { db.close(); }
+      try { kinds = syncKinds.map((kind) => ({ kind, covered: coveredDays(db, kind, from, through).size, total })); remainingReads = planBackfill(db, from, through).length; } finally { db.close(); }
     } catch { /* store unavailable: progress unknown, not zero */ }
-    return { ...(this.backfill ?? { state: 'idle', from, through, startedAt: null, finishedAt: null, current: null, readsThisRun: 0 }), kinds };
+    return { ...(this.backfill ?? { state: 'idle', from, through, startedAt: null, finishedAt: null, current: null, readsThisRun: 0 }), kinds, remainingReads };
   }
   /** Coverage calendar of one year (default: the year of the automatic history start) up to yesterday; null when the store is unavailable (unknown, not uncovered). */
   coverage(year: number = Number(backfillFrom.slice(0, 4))): { from: string; through: string; kinds: number; days: { date: string; covered: number }[] } | null {

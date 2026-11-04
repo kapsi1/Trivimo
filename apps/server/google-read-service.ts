@@ -17,7 +17,26 @@ const isDaily = (kind: GoogleJobKind): kind is DailyRollupType => (dailyRollupTy
 const scopeFor = (kind: GoogleJobKind) => kind === 'weight' || kind === 'body-fat' || kind === 'heart-rate-10m' ? bodyScope : activityScope;
 const jobSchema = z.object({ account_digest: z.string().regex(/^[0-9a-f]{64}$/), kind: z.enum(googleJobKinds), range_start: z.string().max(40), range_end: z.string().max(40), cursor: z.string().nullable(), state: z.literal('running') });
 
+/**
+ * Account digest per access token. A token belongs to one account for its whole life (another account needs a new
+ * authorization and so a new token), so its identity is asked once per token and then reused for every job and page
+ * instead of one extra request each. Keyed by a hash of the token, never the token itself; entries expire with the
+ * token's usual lifetime and the map is bounded.
+ */
+const identities = new Map<string, { digest: string; until: number }>();
+const identityTtlMs = 50 * 60000;
+export function clearIdentityCache(): void { identities.clear(); }
+
 async function accountDigest(token: string, send: typeof fetch): Promise<string> {
+  const key = createHash('sha256').update(token).digest('hex'), now = Date.now(), known = identities.get(key);
+  if (known && known.until > now) return known.digest;
+  const digest = await fetchAccountDigest(token, send);
+  if (identities.size >= 16) identities.clear();
+  identities.set(key, { digest, until: now + identityTtlMs });
+  return digest;
+}
+
+async function fetchAccountDigest(token: string, send: typeof fetch): Promise<string> {
   const response = await send('https://health.googleapis.com/v4/users/me/identity', { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(15000) });
   if (!response.ok) throw googleHttpError('google_identity_http', response);
   const text = await response.text();

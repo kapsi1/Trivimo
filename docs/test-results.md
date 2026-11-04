@@ -1,5 +1,12 @@
 # Raport weryfikacji
 
+## 2026-11-04 — postęp uzupełniania z ETA, import Takeout z pliku ZIP
+
+- `npm test`: 127 testów zaliczonych (nowe: lista i rozpakowanie tylko folderu Google Health, odmowa nadpisania, odrzucenie `..`, ścieżki z dyskiem, dowiązania, złej CRC i „bomby” kompresji; wysłanie → rozpakowanie → podgląd → zapis z usunięciem archiwum i rozpakowanych plików). `npm run build`: poprawny.
+- Archiwum ZIP utworzone `tar -a` z folderu „Google Health” z `test-data` (tylko liczby): 1067 wpisów, 1067 rozpakowanych, 283 MB w ok. 1,2 s, liczba plików zgodna ze źródłem; kopia usunięta po sprawdzeniu.
+- Przeglądarka aplikacji na bazie użytkownika (v11): zbiorczy pasek „Razem: 100 % (3991 z 3991 dób) · zostało paczek: 0”, rozwijana lista według rodzaju, nowy wybór archiwum w „Importy plików”. ETA i wysyłanie archiwum w przeglądarce nie były uruchamiane (uzupełnianie kompletne, bez importu na prawdziwej bazie).
+- Poprawiono: przypisanie konta do importu Takeout odrzucało magazyn v11; import Takeout otwiera bazę z czasem oczekiwania na blokadę (5 s), tak jak odczyty Google.
+
 ## 2026-11-04 — historia sprzed 2026 z API i import CSV z mapowaniem
 
 - Odczyt próbny API (tylko liczby dób z wartością, nic nie zapisano): kroki i dystans od ok. 2023-07, kalorie total i masa w 2023–2025, brak kalorii aktywnych; lata 2018–2022 puste.

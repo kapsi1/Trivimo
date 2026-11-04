@@ -131,49 +131,78 @@ const backfillSchema = z.object({
   state: z.enum(['idle', 'running', 'stopping', 'stopped', 'done', 'error']), from: z.string(), through: z.string(),
   startedAt: z.string().nullable(), finishedAt: z.string().nullable(), readsThisRun: z.number(), code: z.string().optional(), retryAt: z.string().optional(),
   current: z.object({ kind: z.string(), first: z.string(), last: z.string() }).nullable(),
-  kinds: z.array(z.object({ kind: z.string(), covered: z.number(), total: z.number() })),
+  retrying: z.object({ attempt: z.number(), of: z.number(), at: z.string(), code: z.string() }).optional(),
+  kinds: z.array(z.object({ kind: z.string(), covered: z.number(), total: z.number() })), remainingReads: z.number().nullable(),
 });
-const backfillStateText: Record<z.infer<typeof backfillSchema>['state'], string> = { idle: 'Nie uruchomiono w tej sesji serwera.', running: 'Trwa uzupełnianie.', stopping: 'Zatrzymywanie po bieżącej paczce…', stopped: 'Zatrzymano; zapisane paczki zostają.', done: 'Zakończono: wszystkie doby zakresu są pokryte.', error: 'Przerwano z powodu błędu; zapisane paczki zostają.' };
+/** "ok. 1 h 20 min" for a duration in milliseconds. */
+function durationText(ms: number): string {
+  const minutes = Math.max(1, Math.round(ms / 60000)), hours = Math.floor(minutes / 60);
+  return hours ? `${hours} h${minutes % 60 ? ` ${minutes % 60} min` : ''}` : `${minutes} min`;
+}
+/**
+ * Remaining time from the pace of this run (reads per elapsed time, including waits for Google limits); shown after
+ * three reads, so the first slow request does not dominate. An estimate, not a promise.
+ */
+export function backfillEta(status: { state: string; startedAt: string | null; readsThisRun: number; remainingReads: number | null }, nowMs: number): number | null {
+  if (status.state !== 'running' || !status.startedAt || status.readsThisRun < 3 || status.remainingReads === null) return null;
+  const elapsed = nowMs - Date.parse(status.startedAt);
+  return elapsed > 0 ? elapsed / status.readsThisRun * status.remainingReads : null;
+}
+const backfillStateText: Record<z.infer<typeof backfillSchema>['state'], string> = { idle: 'Nie uruchomiono w tej sesji serwera', running: 'Trwa uzupełnianie', stopping: 'Zatrzymywanie po bieżącej paczce…', stopped: 'Zatrzymano; odczytane paczki zostają', done: 'Zakończono', error: 'Przerwano z powodu błędu; zapisane paczki zostają.' };
+const fromKey = 'trivimo-backfill-from';
 /** Progress lives on the server and in the store, so it survives a page reload, a closed tab and a server restart. */
 function GoogleBackfill() {
   const [status, setStatus] = useState<z.infer<typeof backfillSchema> | null>(null);
-  const [busy, setBusy] = useState(false); const [error, setError] = useState(false);
-  const [from, setFrom] = useState('2026-01-01');
+  const [busy, setBusy] = useState(false); const [error, setError] = useState<'' | 'load' | 'start' | 'stop'>('');
+  // the last chosen start date is a per-browser convenience; the run itself lives on the server
+  const [from, setFrom] = useState(() => { try { const saved = localStorage.getItem(fromKey); return saved && /^\d{4}-\d{2}-\d{2}$/.test(saved) ? saved : '2026-01-01'; } catch { return '2026-01-01'; } });
+  const choose = (value: string) => { setFrom(value); try { localStorage.setItem(fromKey, value); } catch { /* not stored */ } };
   async function load() {
     const response = await fetch('/api/google/sync-status');
     if (!response.ok) throw new Error('Status');
     setStatus(z.object({ backfill: backfillSchema }).parse(await response.json()).backfill);
   }
-  useEffect(() => { void load().catch(() => setError(true)); }, []);
+  const reload = () => load().then(() => setError((current) => current === 'load' ? '' : current), () => setError('load'));
+  useEffect(() => { void reload(); }, []);
   const active = status?.state === 'running' || status?.state === 'stopping';
   useEffect(() => {
     if (!active) return;
-    const timer = setInterval(() => void load().then(() => setError(false), () => setError(true)), 2000);
+    const timer = setInterval(() => void reload(), 2000);
     return () => clearInterval(timer);
   }, [active]);
   async function send(action: 'start' | 'stop') {
-    setBusy(true); setError(false);
+    setBusy(true); setError('');
     try {
       const response = await fetch('/api/google/backfill', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Trivimo-Request': '1' }, body: JSON.stringify(action === 'start' ? { action, from } : { action }) });
       if (!response.ok) throw new Error('Uzupełnianie');
       setStatus(backfillSchema.parse(await response.json()));
-    } catch { setError(true); } finally { setBusy(false); }
+    } catch { setError(action); } finally { setBusy(false); }
   }
   const covered = status?.kinds.reduce((sum, item) => sum + item.covered, 0) ?? 0;
   const total = status?.kinds.reduce((sum, item) => sum + item.total, 0) ?? 0;
+  const percent = total > 0 ? Math.floor((covered / total) * 100) : null;
+  const eta = status ? backfillEta(status, Date.now()) : null;
   const yesterday = addDays(warsawToday(), -1);
+  const failed = error !== '' || status?.state === 'error';
+  // one line above the bar: progress, or the error in its place ("Przerwano - błąd serwera (kod: …). Spróbuj ponownie")
+  const reason = (code: string | undefined) => !code ? 'błąd' : code === 'authorization_required' || code === 'scope_missing' ? 'wymagana ponowna autoryzacja Google' : code === 'rate_limited' || /429$/.test(code) ? 'limit zapytań Google'
+    : /^google_(identity_)?http_5\d\d$/.test(code) || code === 'google_read_failed' ? 'błąd serwera' : code === 'migration_required' || code === 'store_unavailable' ? 'magazyn niedostępny' : 'błąd';
+  const line = error === 'load' ? <>Nie udało się odczytać stanu uzupełniania. Spróbuj ponownie</>
+    : error ? <>Nie udało się {error === 'stop' ? 'zatrzymać' : 'uruchomić'} uzupełniania. Spróbuj ponownie</>
+      : !status ? <>Ładowanie…</>
+        : status.state === 'error' ? <>Przerwano - {reason(status.code)}{status.code ? ` (kod: ${status.code})` : ''}. Spróbuj ponownie</>
+          : active && status.retrying ? <>Pobieranie od {status.from} · {reason(status.retrying.code)} (kod: {status.retrying.code}), ponowienie {whenOf(status.retrying.at)} (próba {status.retrying.attempt} z {status.retrying.of})</>
+            : active ? <>Pobieranie od {status.from}{percent !== null ? <> · <b>{percent} %</b></> : null}{eta !== null ? <span className="faint"> · zostało {durationText(eta)}</span> : null}{status.retryAt ? <span className="faint"> · limit Google do {whenOf(status.retryAt)}</span> : null}</>
+              : <>{backfillStateText[status.state]}{percent !== null ? <> · <b>{percent} %</b></> : null}</>;
   return <section><h3>Uzupełnianie historii</h3>
-    <p>Odczytuje z API zakończone doby od wybranej daty (domyślnie {status?.from ?? '2026-01-01'}) do {status?.through ?? 'wczoraj'}, których nie pokrył jeszcze żaden pełny odczyt wykonany po końcu doby, w paczkach (okna 10 min po 13 dób, kalorie total po 14, listy źródeł po 7, masa i tkanka tłuszczowa po 30, pozostałe sumy po 90). Działa w serwerze, więc zamknięcie karty go nie przerywa; przy włączonym odświeżaniu automatycznym startuje samo, gdy zostają luki (także po restarcie serwera), a pokryte doby nie są czytane ponownie.</p>
-    {error && <p role="alert">Nie udało się odczytać stanu lub zmienić uzupełniania.</p>}
-    {status && <>
-      <p role="status">{backfillStateText[status.state]}{status.code ? ` Kod: ${status.code}.` : ''}{status.retryAt ? ` Wstrzymane przez limit Google do ${status.retryAt}.` : ''}{status.current ? ` Bieżąca paczka: ${syncLabels[status.current.kind] ?? status.current.kind}, ${status.current.first} – ${status.current.last}.` : ''}{status.startedAt ? ` Odczyty w tym przebiegu: ${status.readsThisRun}.` : ''}</p>
-      <p>Pokryte doby razem: {covered} z {total}{total > 0 ? ` (${Math.floor((covered / total) * 100)} %)` : ''}.</p>
-      <ul>{status.kinds.map((item) => <li key={item.kind}>{syncLabels[item.kind] ?? item.kind}: <progress max={item.total} value={item.covered} aria-label={`${syncLabels[item.kind] ?? item.kind}: pokryte doby`} /> {item.covered} z {item.total}</li>)}</ul>
-      {active ? <button type="button" disabled={busy || status.state === 'stopping'} onClick={() => void send('stop')}>Zatrzymaj po bieżącej paczce</button>
-        : <><label>Od dnia <input type="date" min={firstDay} max={yesterday} value={from} disabled={busy} onChange={(event) => { if (event.target.value) setFrom(event.target.value); }} /></label>{' '}
-          <button type="button" disabled={busy || !from || from < firstDay || from > yesterday} onClick={() => void send('start')}>{status.from === from && (status.startedAt || covered > 0) ? 'Wznów uzupełnianie' : 'Uzupełnij historię'}</button>
-          <p className="sub">Starsze lata: wybierz wcześniejszą datę. Doby, dla których producent nie ma danych, zostaną odczytane jako puste i nie będą czytane ponownie; tabela pokaże je jako brak, nie zero. Doby sprzed 2026 są kwalifikowane tymi samymi regułami (wersja reguły w szczegółach dnia), bez osobnego audytu tych lat.</p></>}
-    </>}
+    {/* no run in this server session: nothing to report, so neither the line nor the bar is shown */}
+    {(failed || (status && status.state !== 'idle')) && <div className={`bf-msg ${failed || (active && status?.retrying) ? 'bad' : ''}`} role={failed ? 'alert' : 'status'}>
+      <span>{line}</span>
+      {status && <progress max={total || 1} value={covered} aria-label="Postęp uzupełniania historii" />}
+    </div>}
+    {status && (active ? <button type="button" disabled={busy || status.state === 'stopping'} onClick={() => void send('stop')}>Zatrzymaj</button>
+      : <div className="bf-start"><label>Od dnia <input type="date" min={firstDay} max={yesterday} value={from} disabled={busy} onChange={(event) => { if (event.target.value) choose(event.target.value); }} /></label>
+        <button type="button" disabled={busy || !from || from < firstDay || from > yesterday} onClick={() => void send('start')}>{status.from === from && (status.startedAt || covered > 0) ? 'Wznów uzupełnianie' : 'Uzupełnij historię'}</button></div>)}
   </section>;
 }
 
@@ -219,8 +248,33 @@ function GoogleReadJobs() {
   </section>;
 }
 
+const zipErrors: Record<string, string> = {
+  zip_invalid: 'Plik nie jest poprawnym archiwum ZIP (albo jest niekompletny).', zip_truncated: 'Archiwum jest niekompletne.', zip_encrypted: 'Archiwum jest zaszyfrowane.',
+  zip_unsupported_method: 'Archiwum używa nieobsługiwanej kompresji.', zip_symlink: 'Archiwum zawiera dowiązanie symboliczne; nie zostało rozpakowane.', zip_unsafe_path: 'Archiwum zawiera niebezpieczną ścieżkę; nie zostało rozpakowane.',
+  zip_too_many_entries: 'Za dużo plików Google Health w archiwum (limit 5000).', zip_entry_too_large: 'Plik w archiwum przekracza 32 MiB.', zip_ratio: 'Podejrzany współczynnik kompresji; archiwum odrzucone.',
+  zip_too_large: 'Pliki Google Health po rozpakowaniu przekraczają 4 GiB.', zip_checksum: 'Suma kontrolna pliku w archiwum się nie zgadza.', zip_size_mismatch: 'Rozmiar pliku w archiwum się nie zgadza.',
+  upload_too_large: 'Archiwum jest za duże (do 64 GiB).', upload_missing: 'Wysłane archiwum wygasło. Wybierz plik ponownie.', no_google_health: 'Archiwum nie zawiera folderu „Google Health”. Wybierz eksport Takeout z danymi Fitbit/Google Health.',
+};
+/** POST one file with upload progress (fetch has no upload progress). */
+function uploadZip(file: File, onProgress: (sent: number) => void): Promise<{ id: string; entries: number }> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open('POST', '/api/takeout/upload');
+    request.setRequestHeader('Content-Type', 'application/zip'); request.setRequestHeader('X-Trivimo-Request', '1');
+    request.upload.onprogress = (event) => onProgress(event.loaded);
+    request.onload = () => {
+      let data: unknown = null; try { data = JSON.parse(request.responseText); } catch { /* not JSON */ }
+      if (request.status === 200 && typeof data === 'object' && data !== null && 'id' in data && typeof data.id === 'string') resolve({ id: data.id, entries: Number((data as { entries?: unknown }).entries) });
+      else { const code = typeof data === 'object' && data !== null && 'error' in data ? String(data.error) : ''; reject(new Error(zipErrors[code] ?? 'Nie udało się wysłać archiwum do serwera aplikacji.')); }
+    };
+    request.onerror = () => reject(new Error('Nie można połączyć się z serwerem aplikacji.'));
+    request.send(file);
+  });
+}
+
 function TakeoutImport({ onComplete }: { onComplete: () => void }) {
-  const [path, setPath] = useState('');
+  const [archives, setArchives] = useState<File[]>([]);
+  const [progress, setProgress] = useState<{ stage: 'upload' | 'extract'; sent: number; total: number; started: number } | null>(null);
   const [preview, setPreview] = useState<{ token: string; files: number; rows: number; resuming: boolean; accountLinked: boolean } | null>(null);
   const [accountAvailable, setAccountAvailable] = useState(false);
   const [unassignedImports, setUnassignedImports] = useState(0);
@@ -240,18 +294,30 @@ function TakeoutImport({ onComplete }: { onComplete: () => void }) {
   async function submit(endpoint: 'preview' | 'import', body: object) {
     setBusy(true); setError('');
     try {
-      const response = await fetch(`/api/takeout/${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Trivimo-Request': '1' }, body: JSON.stringify(body) });
+      if (endpoint === 'preview') {
+        // send each part, then let the server extract the Google Health folders and plan the import
+        const total = archives.reduce((sum, file) => sum + file.size, 0), started = Date.now(), ids: string[] = [];
+        let before = 0;
+        for (const file of archives) {
+          setProgress({ stage: 'upload', sent: before, total, started });
+          ids.push((await uploadZip(file, (sent) => setProgress({ stage: 'upload', sent: before + sent, total, started }))).id);
+          before += file.size;
+        }
+        setProgress({ stage: 'extract', sent: total, total, started });
+        body = { uploads: ids, sameAccount: (body as { sameAccount?: boolean }).sameAccount ?? false };
+      }
+      const response = await fetch(endpoint === 'preview' ? '/api/takeout/zip-preview' : `/api/takeout/${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Trivimo-Request': '1' }, body: JSON.stringify(body) });
       const data: unknown = await response.json();
       if (!response.ok) {
         const code = typeof data === 'object' && data !== null && 'error' in data ? data.error : '';
-        throw new Error(code === 'pending_other' ? 'Niedokończony import dotyczy innego katalogu. Wskaż jego pierwotny katalog, aby go wznowić.' : code === 'pending_account_locked' ? 'Wznawiany plan nie miał przypisanego konta; odznacz wybór, aby zachować jego zapisane decyzje.' : code === 'account_unavailable' ? 'Nie można jednoznacznie wybrać wcześniejszego konta.' : code === 'plan_changed' ? 'Pliki lub stan importu zmieniły się. Przygotuj podgląd ponownie.' : code === 'preview_expired' ? 'Podgląd wygasł. Przygotuj go ponownie.' : code === 'invalid_directory' ? 'Podaj pełną ścieżkę do katalogu.' : code === 'no_files' ? 'Nie znaleziono plików Google Health w tym katalogu.' : code === 'unsupported_schema' ? 'Eksport zawiera nieobsługiwany układ kolumn.' : code === 'invalid_csv' ? 'Eksport zawiera nieprawidłowy plik CSV lub nieobsługiwane kodowanie.' : 'Nie udało się odczytać katalogu lub zapisać danych. Sprawdź ścieżkę i dostęp serwera.');
+        throw new Error(typeof code === 'string' && zipErrors[code] ? zipErrors[code] : code === 'pending_other' ? 'Niedokończony import dotyczy innego archiwum. Wybierz to samo archiwum (te same pliki), aby go wznowić.' : code === 'pending_account_locked' ? 'Wznawiany plan nie miał przypisanego konta; odznacz wybór, aby zachować jego zapisane decyzje.' : code === 'account_unavailable' ? 'Nie można jednoznacznie wybrać wcześniejszego konta.' : code === 'plan_changed' ? 'Pliki lub stan importu zmieniły się. Przygotuj podgląd ponownie.' : code === 'preview_expired' ? 'Podgląd wygasł. Przygotuj go ponownie.' : code === 'invalid_directory' ? 'Podaj pełną ścieżkę do katalogu.' : code === 'no_files' ? 'Nie znaleziono plików Google Health w tym katalogu.' : code === 'unsupported_schema' ? 'Eksport zawiera nieobsługiwany układ kolumn.' : code === 'invalid_csv' ? 'Eksport zawiera nieprawidłowy plik CSV lub nieobsługiwane kodowanie.' : 'Nie udało się odczytać katalogu lub zapisać danych. Sprawdź ścieżkę i dostęp serwera.');
       }
       if (endpoint === 'preview') {
         if (typeof data !== 'object' || data === null || !('token' in data) || typeof data.token !== 'string' || !('files' in data) || typeof data.files !== 'number' || !('rows' in data) || typeof data.rows !== 'number' || !('resuming' in data) || typeof data.resuming !== 'boolean' || !('accountLinked' in data) || typeof data.accountLinked !== 'boolean') throw new Error('Nieprawidłowa odpowiedź serwera.');
         setPreview({ token: data.token, files: data.files, rows: data.rows, resuming: data.resuming, accountLinked: data.accountLinked });
       } else { setDone(true); setPreview(null); try { const state = await fetch('/api/source-account'); if (state.ok) { const account = await state.json() as { unassignedImports?: number }; if (typeof account.unassignedImports === 'number') setUnassignedImports(account.unassignedImports); } } catch { /* Import was already committed. */ } }
     } catch (failure) { setError(failure instanceof TypeError ? 'Nie można połączyć się z serwerem aplikacji.' : failure instanceof Error ? failure.message : 'Nie udało się wykonać operacji.'); if (endpoint === 'import') setPreview(null); }
-    finally { setBusy(false); }
+    finally { setBusy(false); setProgress(null); }
   }
   async function assignAccount(confirm: boolean) {
     setBusy(true); setError(''); setAccountDone(false);
@@ -273,13 +339,16 @@ function TakeoutImport({ onComplete }: { onComplete: () => void }) {
     finally { setBusy(false); }
   }
   return <section className="import-panel"><h2>Import Google Takeout</h2>
-    <p>Podaj pełną ścieżkę do rozpakowanego katalogu na tym komputerze. Aplikacja najpierw przygotuje podgląd; zapis rozpocznie się po Twoim potwierdzeniu.</p>
-    <label>Ścieżka katalogu <input type="text" value={path} disabled={busy} onChange={(event) => { setPath(event.target.value); setPreview(null); setDone(false); setError(''); }} /></label>
+    <p>Wybierz archiwum .zip z Google Takeout (eksport w kilku częściach: zaznacz wszystkie części naraz). Aplikacja wyśle je do lokalnego serwera, rozpakuje tylko folder „Google Health” i przygotuje podgląd; zapis rozpocznie się po Twoim potwierdzeniu. Wysłane archiwum jest usuwane po rozpakowaniu, a rozpakowane pliki po udanym imporcie (po przerwanym zostają, żeby to samo archiwum wznowiło import).</p>
+    <label>Archiwum Takeout <input type="file" accept=".zip,application/zip" multiple disabled={busy} onChange={(event) => { setArchives([...(event.target.files ?? [])]); setPreview(null); setDone(false); setError(''); }} /></label>
+    {archives.length > 0 && <p className="sub">{archives.map((file) => file.name).join(', ')} · {(archives.reduce((sum, file) => sum + file.size, 0) / 1024 ** 2).toFixed(0)} MB</p>}
+    {progress && <div role="status"><progress max={progress.total || 1} value={progress.stage === 'extract' ? undefined : progress.sent} aria-label="Postęp wysyłania archiwum" style={{ width: '100%' }} />
+      <p className="sub">{progress.stage === 'upload' ? `Wysyłanie: ${Math.floor(progress.sent / Math.max(progress.total, 1) * 100)} %${progress.sent > 0 && Date.now() - progress.started > 2000 ? ` · pozostało ok. ${Math.max(1, Math.round((Date.now() - progress.started) / progress.sent * (progress.total - progress.sent) / 1000))} s` : ''}` : 'Rozpakowywanie folderu Google Health i przygotowanie podglądu…'}</p></div>}
     {accountAvailable && <label className="account-choice"><input type="checkbox" checked={sameAccount} disabled={busy} onChange={(event) => { setSameAccount(event.target.checked); setPreview(null); setDone(false); }} /> Ten eksport pochodzi z tego samego konta Google co wcześniejszy import.</label>}
-    <button type="button" disabled={busy || !path.trim()} onClick={() => void submit('preview', { path: path.trim(), sameAccount })}>{busy ? 'Przetwarzanie…' : 'Przygotuj podgląd'}</button>
+    <button type="button" disabled={busy || archives.length === 0} onClick={() => void submit('preview', { sameAccount })}>{busy ? 'Przetwarzanie…' : 'Przygotuj podgląd'}</button>
     {preview && <div><p>{preview.resuming ? 'Wznowienie zapisanego planu.' : 'Podgląd importu.'} Pliki: {preview.files}, wiersze rozpoznanych typów: {preview.rows}. {preview.accountLinked ? 'Import będzie przypisany do wcześniej potwierdzonego konta.' : 'Import pozostanie bez przypisanego konta.'} Pozostałe pliki Google Health zostaną zachowane jako oryginały. Identyczne pliki nie są zapisywane ponownie.</p><button type="button" disabled={busy} onClick={() => void submit('import', { token: preview.token })}>{busy ? 'Importowanie…' : preview.resuming ? 'Potwierdź wznowienie' : 'Potwierdź import'}</button></div>}
     {error && <p role="alert">{error}</p>}
-    {done && <div><p role="status">Import zakończony. Wartości dzienne nie zostały jeszcze wyliczone.</p><button type="button" onClick={onComplete}>Pokaż dane</button></div>}
+    {done && <div><p role="status">Import zakończony; tymczasowe pliki rozpakowanego archiwum usunięto. Wartości dzienne nie zostały jeszcze wyliczone.</p><button type="button" onClick={onComplete}>Pokaż dane</button></div>}
     {accountAvailable && unassignedImports > 0 && <div><p>Zakończone importy bez przypisanego konta: {unassignedImports}.</p><button type="button" disabled={busy} onClick={() => void assignAccount(false)}>Przygotuj przypisanie konta</button>
       {accountPreview && <div><p>Potwierdź, że wszystkie importy objęte podglądem ({accountPreview.count}) pochodzą z tego samego konta Google co wcześniejsze importy.</p><button type="button" disabled={busy} onClick={() => void assignAccount(true)}>Potwierdź przypisanie</button></div>}</div>}
     {accountDone && <p role="status">Przypisanie zapisane.</p>}

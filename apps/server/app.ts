@@ -289,6 +289,25 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
       } catch { response.writeHead(500, { 'Cache-Control': 'no-store' }).end(); }
       return;
     }
+    if (request.method === 'POST' && (url.pathname === '/api/takeout/upload' || url.pathname === '/api/takeout/zip-preview')) {
+      const upload = url.pathname.endsWith('/upload');
+      if (!origin || !allowedOrigins.includes(origin) || request.headers['x-trivimo-request'] !== '1' || request.headers['content-type'] !== (upload ? 'application/zip' : 'application/json')) { response.writeHead(403, { 'Cache-Control': 'no-store' }).end(); return; }
+      if (!takeout) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
+      void (async () => {
+        try {
+          const result = upload ? await takeout.saveUpload(request)
+            : await (async () => { const input = z.object({ uploads: z.array(z.uuid()).min(1).max(20), sameAccount: z.boolean().optional() }).strict().parse(await readJson(request)); return takeout.previewZip(input.uploads, input.sameAccount ?? false); })();
+          response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }).end(JSON.stringify(result));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : '';
+          const code = /^zip_[a-z_]+$/.test(message) || ['upload_too_large', 'upload_missing', 'no_google_health'].includes(message) ? message
+            : message.startsWith('Niedokończony import') ? 'pending_other' : message.startsWith('Nie znaleziono') ? 'no_files' : message.startsWith('Nieobsługiwany schemat') ? 'unsupported_schema'
+              : message.startsWith('Nieprawidłowy plik CSV') ? 'invalid_csv' : message === 'pending_account_locked' || message === 'account_unavailable' ? message : 'import_failed';
+          if (!response.headersSent) response.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', Connection: 'close' }).end(JSON.stringify({ error: code }));
+        }
+      })();
+      return;
+    }
     if (request.method === 'POST' && (url.pathname === '/api/takeout/preview' || url.pathname === '/api/takeout/import' || url.pathname === '/api/day/note' || url.pathname === '/api/source-account/preview' || url.pathname === '/api/source-account/assign')) {
       if (!origin || !allowedOrigins.includes(origin) || request.headers['x-trivimo-request'] !== '1' || request.headers['content-type'] !== 'application/json') {
         response.writeHead(403, { 'Cache-Control': 'no-store' }).end();

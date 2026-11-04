@@ -148,7 +148,7 @@ export function importTakeout(db: DatabaseSync, directory: string, onPreview?: (
     try {
       db.prepare("INSERT INTO import_sessions VALUES (?, ?, 'running')").run(sessionId, root);
       if (approvedAccountId) {
-        if (![4, 5, 6, 7, 8, 9, 10].includes(Number(db.prepare('PRAGMA user_version').get()?.user_version))) throw new Error('Nieobsługiwana wersja konta');
+        if (![4, 5, 6, 7, 8, 9, 10, 11].includes(Number(db.prepare('PRAGMA user_version').get()?.user_version))) throw new Error('Nieobsługiwana wersja konta');
         db.prepare("INSERT INTO import_account_decisions VALUES (?, 1, ?, 'user_confirmed', ?)").run(sessionId, approvedAccountId, new Date().toISOString());
       }
       const insert = db.prepare('INSERT INTO import_files (session_id, path, kind, digest, row_count) VALUES (?, ?, ?, ?, ?)');

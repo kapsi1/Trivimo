@@ -348,6 +348,8 @@ td.src-c { color: var(--muted); max-width: 280px; overflow: hidden; text-overflo
 .legacy label { color: var(--muted); }
 .legacy label select, .legacy label input:not([type="checkbox"]) { margin-left: 6px; color: var(--fg); }
 .legacy .import-panel label, .legacy label:has(input[type="text"]) { display: flex; flex-direction: column; gap: 4px; }
+/* a checkbox sits inline with its label text */
+.legacy .import-panel label:has(> input[type="checkbox"]) { flex-direction: row; align-items: center; gap: 8px; }
 .legacy input[type="text"] { width: min(100%, 42rem); margin-left: 0 !important; }
 .legacy ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
 .legacy progress { accent-color: var(--accent); vertical-align: middle; }
@@ -356,3 +358,12 @@ td.src-c { color: var(--muted); max-width: 280px; overflow: hidden; text-overflo
 .legacy th, .legacy td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); }
 .legacy th { color: var(--muted); font-weight: 500; font-size: 12px; }
 .legacy [role="alert"] { color: var(--bad); }
+
+/* backfill: one large line (progress, or the error in its place) above a bar of fixed width */
+.bf-msg { display: flex; flex-direction: column; gap: 8px; width: 480px; max-width: 100%; margin: 8px 0 12px; padding: 12px 14px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: var(--r); background: var(--raised); color: var(--fg); font-size: 17px; box-sizing: border-box; }
+.bf-msg.bad { border-left-color: var(--bad); }
+.bf-msg progress { width: 100%; height: 12px; }
+.bf-start { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* history progress bars in the app's accent green */
+.legacy section progress { accent-color: var(--accent); }
+.bf-msg.bad { flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; border-left-color: var(--bad); }

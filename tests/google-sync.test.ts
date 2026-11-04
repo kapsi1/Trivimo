@@ -11,6 +11,7 @@ import { createDemoDatabase } from '../packages/storage/days.ts';
 import { createGoogleReadJob, commitGooglePage } from '../packages/storage/google-pages.ts';
 import { warsawDay } from '../packages/domain/warsaw-day.ts';
 import { GoogleAuth } from '../apps/server/google-auth.ts';
+import { clearIdentityCache } from '../apps/server/google-read-service.ts';
 import { coverageCalendar, coveredDays, GoogleSyncService, planBackfill, planSync, syncKinds } from '../apps/server/google-sync.ts';
 
 function store() {
@@ -153,9 +154,12 @@ test('backfill: pokrycie liczy tylko doby odczytane po ich końcu, a plan dzieli
     assert.deepEqual(coverageCalendar(db, '2026-01-01', '2026-01-05'), [{ date: '2026-01-01', covered: 1 }, { date: '2026-01-02', covered: 2 }, { date: '2026-01-03', covered: 1 }, { date: '2026-01-04', covered: 0 }, { date: '2026-01-05', covered: 0 }]);
     const plan = planBackfill(db, '2026-01-01', '2026-04-30');
     const ranges = (kind: string) => plan.filter((read) => read.kind === kind).map((read) => `${read.first}..${read.last}`);
-    assert.deepEqual(ranges('steps'), ['2026-01-04..2026-04-03', '2026-04-04..2026-04-30']);
+    assert.deepEqual(ranges('steps'), ['2026-04-04..2026-04-30', '2026-01-04..2026-04-03']);
     assert.equal(ranges('total-calories').length, 9);
-    assert.deepEqual(ranges('heart-rate-10m').slice(0, 3), ['2026-01-01..2026-01-01', '2026-01-03..2026-01-15', '2026-01-16..2026-01-28']);
+    assert.deepEqual(ranges('heart-rate-10m').slice(-3), ['2026-01-16..2026-01-28', '2026-01-03..2026-01-15', '2026-01-01..2026-01-01']);
+    // newest period first across kinds: every chunk ends no later than the one before it
+    assert.ok(plan.every((read, index) => index === 0 || read.last <= plan[index - 1]!.last));
+    assert.deepEqual(plan.slice(0, 3).map((read) => read.kind), ['steps', 'distance', 'total-calories']);
     // the window chunk across the spring DST change keeps Warsaw-day bounds and stays within 14 days
     const dst = plan.find((read) => read.kind === 'heart-rate-10m' && read.first <= '2026-03-29' && read.last >= '2026-03-29')!;
     assert.deepEqual([dst.begin, dst.end], [warsawDay(dst.first).start, warsawDay(dst.last).end]);
@@ -208,6 +212,7 @@ test('serwis odświeżania: krótkie 503 jest ponawiane, trwałe 503 kończy prz
   const env = migrated();
   try {
     await env.ready();
+    clearIdentityCache(); // the identity request must really be sent for its 503 to be seen
     let unavailable = 2; let identity503 = 1; const sleeps: number[] = [];
     const send: typeof fetch = async (address) => {
       if (String(address).endsWith('/identity')) return identity503-- > 0 ? new Response('', { status: 503 }) : Response.json({ healthUserId: 'synthetic-account' });
