@@ -103,7 +103,7 @@ function Shell() {
   const syncData = sync.data;
   const lastOk = syncData?.last?.result === 'ok' ? syncData.last.at : syncData?.kinds.map((kind) => kind.lastReadAt).filter((at): at is string => !!at).sort().at(-1);
   const syncBad = sync.error || (syncData?.last && syncData.last.result !== 'ok');
-  const nav = (view: View, ic: ReactNode, label: string, extra?: ReactNode, hash: string = view, soon = false) => <a className={`nav ${soon ? 'is-soon' : ''}`} href={`#${hash}`} title={collapsed ? label : undefined} aria-current={route.view === view && (hash === view || route.param === hash.split('/')[1]) ? 'page' : undefined}>{ic}<span>{label}</span>{extra}</a>;
+  const nav = (view: View, ic: ReactNode, label: string, extra?: ReactNode, hash: string = view, soon = false) => <a className={`nav ${soon ? 'is-soon' : ''}`} href={`#${hash}`} aria-current={route.view === view && (hash === view || route.param === hash.split('/')[1]) ? 'page' : undefined}>{ic}<span>{label}</span>{extra}</a>;
   const bottom = (view: View, ic: ReactNode, label: string) => <button type="button" aria-current={route.view === view ? 'page' : undefined} onClick={() => go(view)}>{ic}<span>{label}</span></button>;
 
   let context: ReactNode = null;

@@ -301,8 +301,17 @@ svg .hit:hover { fill: color-mix(in srgb, var(--fg) 8%, transparent); }
 .app.collapsed .brand b, .app.collapsed .brand span { display: none; }
 .app.collapsed .brand .sidetoggle { margin: 0; }
 .app.collapsed .navgroup h4 { height: 1px; margin: 0 6px 6px; padding: 0; overflow: hidden; color: transparent; background: var(--line); }
-.app.collapsed .nav { justify-content: center; padding: 9px 0; }
-.app.collapsed .nav > span, .app.collapsed .nav .tag { display: none; }
+/* zwinięty panel: najechany (albo z fokusem) element rozwija się nad treścią do pełnej nazwy */
+/* sticky tworzy własny kontekst warstw: cały panel musi leżeć nad treścią (tabela, przygaszone przyciski), pod oknami */
+.app.collapsed .side { overflow: visible; z-index: 30; }
+.app.collapsed .nav { position: relative; gap: 0; width: max-content; min-width: 100%; padding: 9px 13.5px; transition: background-color .18s ease, box-shadow .18s ease, padding-right .18s ease; }
+.app.collapsed .nav > span:not(.tag) { display: inline-block; max-width: 0; margin-left: 0; overflow: hidden; white-space: nowrap; opacity: 0; transition: max-width .2s ease, margin-left .2s ease, opacity .15s ease; }
+.app.collapsed .nav .tag { max-width: 0; padding-inline: 0; margin-left: 0; overflow: hidden; border-width: 0; opacity: 0; transition: max-width .2s ease, margin-left .2s ease, opacity .15s ease; }
+.app.collapsed .nav:hover, .app.collapsed .nav:focus-visible { z-index: 35; padding-right: 16px; background: var(--raised); color: var(--fg); box-shadow: 0 8px 24px rgb(0 0 0 / .4); }
+.app.collapsed .nav[aria-current="page"]:hover, .app.collapsed .nav[aria-current="page"]:focus-visible { box-shadow: inset 2px 0 0 var(--accent), 0 8px 24px rgb(0 0 0 / .4); }
+.app.collapsed .nav:hover > span:not(.tag), .app.collapsed .nav:focus-visible > span:not(.tag) { max-width: 220px; margin-left: 10px; opacity: 1; }
+.app.collapsed .nav:hover .tag, .app.collapsed .nav:focus-visible .tag { max-width: 60px; margin-left: auto; padding-inline: 6px; border-width: 1px; opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .app.collapsed .nav, .app.collapsed .nav > span, .app.collapsed .nav .tag { transition: none; } }
 .app.collapsed .side-foot { align-items: center; padding: 10px 0 0; }
 .app.collapsed .sync > span:not(.dot) { display: none; }
 .app.collapsed .sync .dot { margin-top: 0; }
