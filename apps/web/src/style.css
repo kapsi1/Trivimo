@@ -291,6 +291,8 @@ svg .hit:hover { fill: color-mix(in srgb, var(--fg) 8%, transparent); }
 @media (prefers-reduced-motion: no-preference) { .drawer { animation: slide .18s ease-out; } @keyframes slide { from { transform: translateX(24px); opacity: .6; } } }
 
 /* ---------- uzupełnienia implementacji ---------- */
+.rangectl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rangectl label.check { gap: 6px; }
 /* lewy panel zwinięty do ikon */
 .brand .sidetoggle { margin-left: auto; align-self: center; display: inline-grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--faint); }
 .brand .sidetoggle:hover { color: var(--fg); border-color: var(--line-strong); }

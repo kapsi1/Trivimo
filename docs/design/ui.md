@@ -38,7 +38,7 @@ Wybór dnia strzałkami, polem daty, „Dziś”, a z klawiatury ←/→ i `t`. 
 
 ### Tabela dni
 
-- Zakres: 7 / 30 / 90 dni / rok; filtr „Tylko dni z uwagami”; przełączanie grup kolumn (zapamiętywane w przeglądarce); eksport CSV nieaktywny do czasu realizacji.
+- Zakres: 7 / 30 / 90 dni / rok albo własny „od – do” (pola daty zsynchronizowane z przyciskami: przycisk wypełnia pola, a zakres kończący się dziś o długości przycisku go zaznacza; do 366 dni, zapamiętywany w przeglądarce); filtr „Tylko dni z uwagami”; przełączanie grup kolumn (zapamiętywane w przeglądarce); eksport CSV nieaktywny do czasu realizacji.
 - Grupy kolumn z kolorem grupy: Ciało, Aktywność, Energia, Jedzenie (jedna kolumna-placeholder „Spożyte kcal”, M3), Kontekst (opaska z paskiem udziału, źródła), Opis dnia (uwagi, notatka).
 - Zamrożony nagłówek i kolumna daty. Przy sortowaniu po dacie wiersz tygodnia ze średnią dzienną z dób potwierdzonych i liczbą dób z wartością („5/7”), zamiast pozornej średniej z braków.
 - Kliknięcie komórki otwiera boczny panel szczegółów zamiast sekcji pod tabelą, więc tabela zostaje na miejscu.

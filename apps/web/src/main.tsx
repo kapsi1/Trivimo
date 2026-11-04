@@ -8,7 +8,7 @@ import { addDays, warsawToday, whenOf } from './format.ts';
 import { FoodView, WorkoutsView } from './placeholders.tsx';
 import { SettingsView } from './settings.tsx';
 import { SourcesView, type SourcesTab } from './sources.tsx';
-import { TableView, tableRanges, useTablePrefs } from './table.tsx';
+import { TableRange, TableView, tableBounds, useTablePrefs } from './table.tsx';
 import { aggregations, trendRanges, TrendsView, type TrendLength } from './trends-view.tsx';
 import { DateControl, Segmented } from './zoom.tsx';
 import './fonts.css';
@@ -108,12 +108,12 @@ function Shell() {
 
   let context: ReactNode = null;
   if (route.view === 'dzien') context = <DateControl date={date} onDate={setDay} />;
-  if (route.view === 'tabela') context = <Segmented label="Zakres" items={tableRanges} value={prefs.range} onChange={(range) => setPrefs({ range })} />;
+  if (route.view === 'tabela') context = <TableRange prefs={prefs} onChange={setPrefs} />;
   if (route.view === 'trendy') context = <><Segmented label="Okres" items={trendRanges} value={trendLength} onChange={setTrendLength} /><Segmented className="hide-sm" label="Agregacja" items={aggregations} value={trendAgg} onChange={setTrendAgg} /></>;
 
   let content: ReactNode;
   if (route.view === 'dzien') content = <DayView date={date} tab={dayTab} onTab={setDayTab} onDate={setDay} sync={syncData} onDirty={(value) => { dirty.current = value; }} onDrawer={setDrawer} />;
-  else if (route.view === 'tabela') content = <TableView range={prefs.range} cols={prefs.cols} onCols={(cols) => setPrefs({ cols: { ...prefs.cols, ...cols } })} onDrawer={setDrawer} onOpenDay={(next) => openDay(next)} />;
+  else if (route.view === 'tabela') content = <TableView {...tableBounds(prefs)} cols={prefs.cols} onCols={(cols) => setPrefs({ cols: { ...prefs.cols, ...cols } })} onDrawer={setDrawer} onOpenDay={(next) => openDay(next)} />;
   else if (route.view === 'trendy') content = <TrendsView length={trendLength} agg={trendAgg} onLength={setTrendLength} onAgg={setTrendAgg} onDrawer={setDrawer} />;
   else if (route.view === 'treningi') content = <WorkoutsView />;
   else if (route.view === 'jedzenie') content = <FoodView key={route.param} initial={(['dziennik', 'produkty', 'planer', 'importy'] as const).find((tab) => tab === route.param)} />;

@@ -4,19 +4,64 @@ import { meanValid } from './derive.ts';
 import { StatusChip, type DrawerState } from './details.tsx';
 import { addDays, dow, fmtD, formatRational, isoWeek, maxDate, mondayOf, nf, warsawToday, WDS } from './format.ts';
 import { compareDailyRows } from './sort-days.ts';
+import { Segmented } from './zoom.tsx';
 
 type Columns = Record<Group | 'food' | 'ctx', boolean>;
 const storeKey = 'trivimo-table';
-function loadPrefs(): { range: number; cols: Columns } {
-  const fallback = { range: 30, cols: { body: true, activity: true, energy: true, food: true, ctx: true } };
-  try { const saved = JSON.parse(localStorage.getItem(storeKey) ?? '{}') as Partial<typeof fallback>; return { range: [7, 30, 90, 365].includes(Number(saved.range)) ? Number(saved.range) : 30, cols: { ...fallback.cols, ...saved.cols } }; } catch { return fallback; }
+/** A preset (days back to today, follows the date) or, with range 0, explicit bounds chosen in the date fields. */
+interface TablePrefs { range: number; from: string; to: string; cols: Columns }
+const isDate = (value: unknown): value is string => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value));
+function loadPrefs(): TablePrefs {
+  const fallback: TablePrefs = { range: 30, from: '', to: '', cols: { body: true, activity: true, energy: true, food: true, ctx: true } };
+  try {
+    const saved = JSON.parse(localStorage.getItem(storeKey) ?? '{}') as Partial<TablePrefs>;
+    const custom = Number(saved.range) === 0 && isDate(saved.from) && isDate(saved.to) && saved.from <= saved.to && saved.to <= warsawToday();
+    return { range: custom ? 0 : [7, 30, 90, 365].includes(Number(saved.range)) ? Number(saved.range) : 30, from: custom ? saved.from! : '', to: custom ? saved.to! : '', cols: { ...fallback.cols, ...saved.cols } };
+  } catch { return fallback; }
 }
-function savePrefs(prefs: { range: number; cols: Columns }) { try { localStorage.setItem(storeKey, JSON.stringify(prefs)); } catch { /* per-browser convenience only */ } }
+function savePrefs(prefs: TablePrefs) { try { localStorage.setItem(storeKey, JSON.stringify(prefs)); } catch { /* per-browser convenience only */ } }
 export const tableRanges: [number, string][] = [[7, '7 dni'], [30, '30 dni'], [90, '90 dni'], [365, 'Rok']];
+/** Bounds of the table: a preset ends today; custom bounds are kept as chosen. */
+export function tableBounds(prefs: Pick<TablePrefs, 'range' | 'from' | 'to'>): { from: string; to: string } {
+  const today = warsawToday();
+  return prefs.range > 0 ? { from: addDays(today, -(prefs.range - 1)), to: today } : { from: prefs.from, to: prefs.to };
+}
 export function useTablePrefs() {
   const [prefs, setPrefs] = useState(loadPrefs);
-  const update = (next: Partial<typeof prefs>) => setPrefs((current) => { const value = { ...current, ...next, cols: { ...current.cols, ...next.cols } }; savePrefs(value); return value; });
+  const update = (next: Partial<TablePrefs>) => setPrefs((current) => { const value = { ...current, ...next, cols: { ...current.cols, ...next.cols } }; savePrefs(value); return value; });
   return [prefs, update] as const;
+}
+const maxSpan = 366;
+/**
+ * Preset buttons and "od – do" date fields kept in sync: a preset fills the fields, and fields that match a preset
+ * (ending today with its length) select that button. A range is at most 366 days; moving one bound past the other or
+ * beyond the limit moves the other bound with it.
+ */
+export function TableRange({ prefs, onChange }: { prefs: TablePrefs; onChange: (next: Partial<TablePrefs>) => void }) {
+  const today = warsawToday(), { from, to } = tableBounds(prefs);
+  const set = (nextFrom: string, nextTo: string) => {
+    const preset = nextTo === today ? tableRanges.find(([days]) => addDays(today, -(days - 1)) === nextFrom)?.[0] : undefined;
+    onChange(preset ? { range: preset, from: '', to: '' } : { range: 0, from: nextFrom, to: nextTo });
+  };
+  const changeFrom = (value: string) => {
+    if (!isDate(value)) return;
+    const start = value > today ? today : value;
+    let end = to < start ? start : to;
+    if (Math.round((Date.parse(end) - Date.parse(start)) / 86400000) + 1 > maxSpan) end = addDays(start, maxSpan - 1) > today ? today : addDays(start, maxSpan - 1);
+    set(start, end);
+  };
+  const changeTo = (value: string) => {
+    if (!isDate(value)) return;
+    const end = value > today ? today : value;
+    let start = from > end ? end : from;
+    if (Math.round((Date.parse(end) - Date.parse(start)) / 86400000) + 1 > maxSpan) start = addDays(end, -(maxSpan - 1));
+    set(start, end);
+  };
+  return <div className="rangectl">
+    <Segmented label="Zakres" items={tableRanges} value={prefs.range} onChange={(range) => onChange({ range, from: '', to: '' })} />
+    <label className="check">od <input type="date" value={from} max={today} aria-label="Początek zakresu" onChange={(event) => changeFrom(event.target.value)} /></label>
+    <label className="check">do <input type="date" value={to} max={today} aria-label="Koniec zakresu" onChange={(event) => changeTo(event.target.value)} /></label>
+  </div>;
 }
 
 /** Notes of a row: the snapshot's notes, or for a past 2026 day with no read at all a gap in the Google reads. */
@@ -33,13 +78,13 @@ function sourcesText(day: DaySources | undefined): { short: string; detail: stri
 }
 
 const columnGroups: [Group, MetricKey[]][] = [['body', ['weight', 'body_fat']], ['activity', ['steps', 'distance']], ['energy', ['total_energy', 'active_energy']]];
-export function TableView({ range, cols, onCols, onDrawer, onOpenDay }: { range: number; cols: Columns; onCols: (cols: Partial<Columns>) => void; onDrawer: (state: DrawerState) => void; onOpenDay: (date: string) => void }) {
-  const today = warsawToday(), from = addDays(today, -(range - 1)), read = maxDate('2026-01-01', from);
+export function TableView({ from, to, cols, onCols, onDrawer, onOpenDay }: { from: string; to: string; cols: Columns; onCols: (cols: Partial<Columns>) => void; onDrawer: (state: DrawerState) => void; onOpenDay: (date: string) => void }) {
+  const today = warsawToday(), read = maxDate('2026-01-01', from), readable = to >= '2026-01-01';
   const [onlyNotes, setOnlyNotes] = useState(false);
   const [sort, setSort] = useState<{ key: 'date' | MetricKey; desc: boolean }>({ key: 'date', desc: true });
-  const result = useJson(`/api/day-range?from=${from}&to=${today}`, rangeSchema);
-  const band = useJson(today >= '2026-01-01' ? `/api/google/band-share-range?from=${read}&to=${today}` : null, bandRangeSchema);
-  const sources = useJson(today >= '2026-01-01' ? `/api/google/day-sources?from=${read}&to=${today}` : null, daySourcesSchema);
+  const result = useJson(`/api/day-range?from=${from}&to=${to}`, rangeSchema);
+  const band = useJson(readable ? `/api/google/band-share-range?from=${read}&to=${to}` : null, bandRangeSchema);
+  const sources = useJson(readable ? `/api/google/day-sources?from=${read}&to=${to}` : null, daySourcesSchema);
   const bandBy = useMemo(() => new Map((band.data ?? []).map((item) => [item.date, item])), [band.data]);
   const sourcesBy = useMemo(() => new Map((sources.data ?? []).map((item) => [item.date, item])), [sources.data]);
   if (result.error) return <p role="alert">Nie udało się odczytać tabeli. Sprawdź, czy serwer działa.</p>;
@@ -58,16 +103,16 @@ export function TableView({ range, cols, onCols, onDrawer, onOpenDay }: { range:
   const body: React.ReactNode[] = []; let week: string | null = null;
   for (const row of rows) {
     if (byWeek && mondayOf(row.date) !== week) {
-      week = mondayOf(row.date); const monday = week, sunday = addDays(monday, 6), to = sunday > today ? today : sunday;
+      week = mondayOf(row.date); const monday = week, sunday = addDays(monday, 6), last = sunday > to ? to : sunday;
       body.push(<tr className="week" key={`w${monday}`}><td className="date">Tydz. {isoWeek(monday)} · {fmtD(monday)}–{fmtD(sunday)}</td>
-        {shown.flatMap(([, keys]) => keys.map((key) => { const avg = meanValid(all, key, monday < from ? from : monday, to); return <td key={key} className="num" title="średnia dzienna z dób potwierdzonych · liczba dób z wartością / w zakresie">{avg.mean === null ? '—' : nf(avg.mean, metricOf(key).decimals)} <span className="faint">{avg.n}/{avg.total}</span></td>; }))}
+        {shown.flatMap(([, keys]) => keys.map((key) => { const avg = meanValid(all, key, monday < from ? from : monday, last); return <td key={key} className="num" title="średnia dzienna z dób potwierdzonych · liczba dób z wartością / w zakresie">{avg.mean === null ? '—' : nf(avg.mean, metricOf(key).decimals)} <span className="faint">{avg.n}/{avg.total}</span></td>; }))}
         <td colSpan={colCount - 1 - metricCount} className="l">śr. dzienna z dób potwierdzonych · doby z wartością / w zakresie</td></tr>);
     }
     const notes = rowNotes(row, today), share = bandBy.get(row.date), src = sourcesText(sourcesBy.get(row.date)), weekend = dow(row.date) === 0 || dow(row.date) === 6;
     body.push(<tr key={row.date} className={weekend ? 'we' : ''}>
       <td className="date"><span className="wd">{WDS[dow(row.date)]}</span>{row.date}{row.date === today && <> <span className="chip prov">w toku</span></>}</td>
       {shown.flatMap(([, keys]) => keys.map((key) => { const metric = metricOf(key), value = row.snapshot?.metrics[key];
-        return <td key={key}><button type="button" className={`cellbtn ${value?.value ? value.status === 'provisional' ? 'v-prov' : '' : 'v-none'}`} aria-label={`${metric.label}, ${row.date}: ${value ? quality[value.status] : 'brak obliczonego wyniku'}`} onClick={() => onDrawer({ type: 'cell', date: row.date, key })}><StatusChip value={value} compact />{value?.value ? formatRational(value.value, metric.decimals) : '—'}</button></td>; }))}
+        return <td key={key}><button type="button" className={`cellbtn ${value?.value ? value.status === 'provisional' ? 'v-prov' : '' : 'v-none'}`} aria-label={`${metric.label}, ${row.date}: ${value ? quality[value.status] : 'brak obliczonego wyniku'}`} onClick={() => onDrawer({ type: 'cell', date: row.date, key })}>{value?.status !== 'provisional' && <StatusChip value={value} compact />}{value?.value ? formatRational(value.value, metric.decimals) : '—'}</button></td>; }))}
       {cols.food && <td className="food-c" aria-label="M3">·</td>}
       {cols.ctx && <><td>{share?.heartRate ? <span className="bandbar" title={`${share.heartRate.windows} z ${share.totalWindows} okien 10-minutowych z tętnem`}>{nf(share.heartRate.windows / share.totalWindows * 100)} %<i><b style={{ width: `${share.heartRate.windows / share.totalWindows * 100}%` }} /></i></span> : <span className="v-none">—</span>}</td>
         <td className="l src-c" title={src.detail}>{src.short}</td></>}
