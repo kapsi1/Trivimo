@@ -12,6 +12,8 @@ export const fmtD = (date: string) => `${Number(date.slice(8))} ${MON[Number(dat
 export const fmtDL = (date: string) => `${WD[dow(date)]}, ${Number(date.slice(8))} ${MONG[Number(date.slice(5, 7)) - 1]} ${date.slice(0, 4)}`;
 export const fmtRange = (from: string, to: string) => from.slice(0, 4) === to.slice(0, 4) ? `${fmtD(from)} – ${fmtD(to)} ${to.slice(0, 4)}` : `${fmtD(from)} ${from.slice(0, 4)} – ${fmtD(to)} ${to.slice(0, 4)}`;
 export const maxDate = (a: string, b: string) => a > b ? a : b;
+/** First day the views and Google reads accept (same bound as the server); history before 2026 is read on request. */
+export { firstSupportedDay as firstDay } from '../../../packages/domain/warsaw-day.ts';
 export function isoWeek(date: string): number {
   const d = new Date(`${date}T00:00:00Z`); const day = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - day + 3);
   const first = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));

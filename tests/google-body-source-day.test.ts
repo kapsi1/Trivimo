@@ -76,6 +76,6 @@ test('REST nie ujawnia identyfikatorów konta ani źródłowego rekordu', async 
     assert.equal(response.status, 200); const body = await response.text();
     assert.doesNotMatch(body, /record-private|account-private|job-private/);
     assert.equal((JSON.parse(body) as { matched: number }).matched, 1);
-    assert.equal((await fetch(`${base}/api/google/body-candidates?kind=weight&date=2025-12-31`, { headers: { Cookie: cookie } })).status, 400);
+    assert.equal((await fetch(`${base}/api/google/body-candidates?kind=weight&date=1999-12-31`, { headers: { Cookie: cookie } })).status, 400);
   } finally { await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())); db.close(); demo.close(); }
 });

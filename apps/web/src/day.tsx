@@ -3,7 +3,7 @@ import { bandShareSchema, dailyReviewSchema, dayResponseSchema, daySourcesSchema
 import { EnergyLegend, HourChart, HR_LEGEND, HrDayChart, HrSpark, HrTrendChart, InfoButton, Sparkline, TrendChart, Zoomable, type HourKey } from './charts.tsx';
 import { axisEvents, dayHours, dayTip, dayTotal, heartTrend, hrOf, lastMeasured, meanValid, metricTrend, valueOf, type DayHours } from './derive.ts';
 import { StatusChip, hourMetricLabel, type DrawerState } from './details.tsx';
-import { addDays, fmtD, fmtDL, formatRational, maxDate, nf, timeOf, warsawToday, whenOf } from './format.ts';
+import { addDays, fmtD, fmtDL, formatRational, maxDate, nf, timeOf, warsawToday, whenOf , firstDay } from './format.ts';
 import { Placeholder } from './placeholders.tsx';
 import { DateControl, Segmented, ZoomDialog, zoomSize } from './zoom.tsx';
 import type { z } from 'zod';
@@ -13,12 +13,12 @@ type Zoom = { type: 'day'; key: MetricKey; len: number } | { type: 'hrdays'; len
 const lengths: [number, string][] = [[7, '7 dni'], [14, '14 dni'], [30, '30 dni'], [90, '90 dni']];
 
 export function DayView({ date, tab, onTab, onDate, sync, onDirty, onDrawer }: { date: string; tab: DayTab; onTab: (tab: DayTab) => void; onDate: (date: string) => void; sync: SyncStatus | undefined; onDirty: (dirty: boolean) => void; onDrawer: (state: DrawerState) => void }) {
-  const today = warsawToday(), isToday = date === today, read = date >= '2026-01-01';
+  const today = warsawToday(), isToday = date === today, read = date >= firstDay;
   const [zoom, setZoom] = useState<Zoom | null>(null);
   const [refresh, setRefresh] = useState(0);
   const day = useJson(`/api/day?date=${date}`, dayResponseSchema, refresh);
   const range = useJson(`/api/day-range?from=${addDays(date, -89)}&to=${date}`, rangeSchema, refresh);
-  const hrRange = useJson(read ? `/api/google/heart-rate-range?from=${maxDate('2026-01-01', addDays(date, -89))}&to=${date}` : null, heartRateRangeSchema, refresh);
+  const hrRange = useJson(read ? `/api/google/heart-rate-range?from=${maxDate(firstDay, addDays(date, -89))}&to=${date}` : null, heartRateRangeSchema, refresh);
   const heart = useJson(read ? `/api/google/heart-rate?date=${date}` : null, heartRateDaySchema, refresh);
   const total = useJson(read ? `/api/google/day-series?metric=total-calories&date=${date}` : null, seriesSchema, refresh);
   const active = useJson(read ? `/api/google/day-series?metric=active-energy-burned&date=${date}` : null, seriesSchema, refresh);
@@ -155,12 +155,12 @@ function DayHourly({ date, hours, snapshot, legacy, seriesRead, loading, forecas
     </section>
     <section className="panel"><header><h3 className="num">Tętno{hrToday ? `: śr. ${nf(hrToday.avg)} · ${nf(hrToday.min)}–${nf(hrToday.max)} bpm` : ''} <span className="sub">okna 10-min</span></h3><div className="hdr-r"><span className="sub num">{hrToday ? `${hrToday.n} z ${hours.slots} okien z pomiarem` : ''}</span><InfoButton label="Tętno" onClick={onHrInfo} /></div></header>
       {hours.hr.length ? <><div className="legend" style={{ marginBottom: 6 }}>{HR_LEGEND}</div><Zoomable label="tętno" onZoom={() => onZoom({ type: 'hrday' })}><HrDayChart windows={hours.hr} slots={hours.slots} hours={hours.hours} height={170} /></Zoomable></>
-        : <p className="sub" style={{ margin: 0 }}>{date < '2026-01-01' ? 'Doba sprzed zakresu odczytów.' : 'Brak pomiarów tętna tej doby albo brak odczytu okien tętna.'}</p>}</section>
+        : <p className="sub" style={{ margin: 0 }}>{date < firstDay ? 'Doba sprzed zakresu odczytów.' : 'Brak pomiarów tętna tej doby albo brak odczytu okien tętna.'}</p>}</section>
   </>;
 }
 
 function DayProvenance({ date, snapshot, slots }: { date: string; snapshot: Snapshot | null; slots: number }) {
-  const read = date >= '2026-01-01';
+  const read = date >= firstDay;
   const sources = useJson(read ? `/api/google/day-sources?from=${date}&to=${date}` : null, daySourcesSchema);
   const band = useJson(read ? `/api/google/band-share?date=${date}` : null, bandShareSchema);
   const reads = useJson(read ? `/api/google/daily-candidates?kind=total-calories&date=${date}` : null, dailyReviewSchema);
@@ -208,7 +208,7 @@ function DayZoom({ zoom, setZoom, date, onDate, rows, snapshot, hours, legacy, s
   const from = addDays(date, -(zoom.len - 1)), sub = `${fmtD(from)} – ${fmtD(date)} · wyróżniony wybrany dzień`;
   const controls = <>{dates}<Segmented label="Zakres" items={lengths} value={zoom.len} onChange={(len) => setZoom({ ...zoom, len })} /></>;
   if (zoom.type === 'hrdays') {
-    const start = maxDate('2026-01-01', from);
+    const start = maxDate(firstDay, from);
     return <ZoomDialog title="Tętno" sub={sub} controls={controls} legend={HR_LEGEND} onClose={close} onInfo={onInfo}><HrTrendChart points={heartTrend(hrSummaries, start, date, 'day')} highlight={date} width={W} height={H} /></ZoomDialog>;
   }
   const metric = metricOf(zoom.key), slice = rows.filter((row) => row.date >= from && row.date <= date);

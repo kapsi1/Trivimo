@@ -1,6 +1,9 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { parseDailyRollup, type DailyRollupType } from '../adapters/google-health/daily-rollup.ts';
-import type { DaySnapshotInput } from '../contracts/day-snapshot.ts';
+import { snapshotInputSchema, type DaySnapshotInput } from '../contracts/day-snapshot.ts';
+import { csvMetrics, type CsvMetric } from '../contracts/csv-import.ts';
+import { toText } from '../domain/rational.ts';
+import { csvDayValues } from './csv-imports.ts';
 import type { ActivityEvidence } from '../domain/activity-qualification.ts';
 import { classifyEnergyModel, type EnergyEvidence } from '../domain/energy-qualification.ts';
 import { mergeReplicas, type SourceMeasurement } from '../domain/measurement-replicas.ts';
@@ -41,7 +44,9 @@ function savedMeasurements(db: DatabaseSync, kind: 'weight' | 'body-fat', days: 
   const claimed = new Map<string, { records: SourceMeasurement[]; invalid: string[]; readAt: number }>();
   const field = kind === 'weight' ? 'weight' : 'bodyFat', valueKey = kind === 'weight' ? 'weightGrams' : 'percentage';
   const pages = db.prepare('SELECT raw_json FROM google_read_pages WHERE job_id = ? ORDER BY page_number LIMIT 50');
-  for (const job of db.prepare("SELECT id, range_start, range_end, created_at FROM google_read_jobs WHERE kind = ? AND state = 'complete' ORDER BY created_at DESC, id LIMIT 500").all(kind)) {
+  if (days.length === 0) return claimed;
+  // only jobs that can cover one of the days, so reads of other years never push relevant ones past the limit
+  for (const job of db.prepare("SELECT id, range_start, range_end, created_at FROM google_read_jobs WHERE kind = ? AND state = 'complete' AND julianday(range_start) <= julianday(?) AND julianday(range_end) >= julianday(?) ORDER BY created_at DESC, id LIMIT 500").all(kind, new Date(days.at(-1)!.start).toISOString(), new Date(days[0]!.end).toISOString())) {
     const from = Date.parse(String(job.range_start)), to = Date.parse(String(job.range_end));
     const needed = days.filter((day) => !claimed.has(day.date) && from <= day.start && to >= day.end);
     if (needed.length === 0) continue;
@@ -139,18 +144,61 @@ export function projectGoogleDays(db: DatabaseSync, from: string, to: string, no
   return snapshots;
 }
 
-/** What a day's snapshot says (everything except its revision and the notes derived from issues). */
-const content = (day: DaySnapshotInput) => JSON.stringify({ metrics: day.metrics, issues: day.issues, energy: day.energy, activity: day.activity, body: day.body });
+const missing = { status: 'missing' as const, value: null };
+/**
+ * Google projection with CSV imports filling only metrics the Google data left missing (rule csv-fill-v1): a Google
+ * value, also an incomparable or conflicting one, is never replaced or added to. A CSV conflict is a conflict of the day.
+ */
+export function projectDays(db: DatabaseSync, from: string, to: string, nowMs: number): DaySnapshotInput[] {
+  const google = projectGoogleDays(db, from, to, nowMs), csv = csvDayValues(db, from, to);
+  if (csv.size === 0) return google;
+  const byDate = new Map(google.map((day) => [day.date, day]));
+  for (const date of csv.keys()) if (!byDate.has(date)) byDate.set(date, { date, metrics: { weight: missing, body_fat: missing, steps: missing, distance: missing, total_energy: missing, active_energy: missing }, issues: [] });
+  return [...byDate.values()].sort((a, b) => a.date < b.date ? -1 : 1).map((day) => {
+    const values = csv.get(day.date);
+    if (!values) return day;
+    const metrics = { ...day.metrics }, issues = [...day.issues], filled: CsvMetric[] = [], imports = new Set<string>();
+    for (const metric of csvMetrics) {
+      const value = values[metric];
+      if (!value || metrics[metric].status !== 'missing') continue;
+      metrics[metric] = value.status === 'valid' ? { status: 'valid', value: toText(value.value) } : { status: 'conflict', value: null };
+      if (value.status === 'conflict') issues.push({ metric, code: 'identity_conflict', state: 'active' });
+      filled.push(metric); value.imports.forEach((id) => imports.add(id));
+    }
+    return filled.length ? snapshotInputSchema.parse({ ...day, metrics, issues, csv: { rule: 'csv-fill-v1', metrics: filled, imports: [...imports].sort() } }) : day;
+  });
+}
 
-/** Publish a new revision only for days whose projection changed; values, issues and evidence move together. */
+/** What a day's snapshot says (everything except its revision and the notes derived from issues). */
+const content = (day: DaySnapshotInput) => JSON.stringify({ metrics: day.metrics, issues: day.issues, energy: day.energy, activity: day.activity, body: day.body, csv: day.csv });
+
+/**
+ * Publish a new revision only for days whose projection changed; values, issues and evidence move together. A day
+ * whose published values came only from CSV imports that are no longer included gets an empty revision (history kept).
+ */
 export function publishGoogleDays(db: DatabaseSync, from: string, to: string, nowMs: number): { published: number; unchanged: number } {
   let published = 0, unchanged = 0;
-  for (const snapshot of projectGoogleDays(db, from, to, nowMs)) {
+  const projected = projectDays(db, from, to, nowMs), dates = new Set(projected.map((day) => day.date));
+  const cleared = db.prepare("SELECT day FROM daily_snapshots s WHERE day >= ? AND day <= ? AND revision = (SELECT MAX(revision) FROM daily_snapshots t WHERE t.day = s.day) AND json_extract(payload, '$.csv') IS NOT NULL").all(from, to)
+    .map((row) => String(row.day)).filter((day) => !dates.has(day))
+    .map((date): DaySnapshotInput => ({ date, metrics: { weight: missing, body_fat: missing, steps: missing, distance: missing, total_energy: missing, active_energy: missing }, issues: [] }));
+  for (const snapshot of [...projected, ...cleared]) {
     const current = readCanonicalDay(db, snapshot.date);
     if (current && content(current) === content(snapshot)) { unchanged++; continue; }
     publishCanonicalDay(db, snapshot, current?.revision ?? null); published++;
   }
   return { published, unchanged };
+}
+
+/** `publishGoogleDays` over a range of any length, one year at a time (history before the refresh window). */
+export function publishDayRange(db: DatabaseSync, from: string, to: string, nowMs: number): { published: number; unchanged: number } {
+  const total = { published: 0, unchanged: 0 };
+  for (let first = from; first <= to; first = addDays(first, 365)) {
+    const last = addDays(first, 364) < to ? addDays(first, 364) : to;
+    const part = publishGoogleDays(db, first, last, nowMs);
+    total.published += part.published; total.unchanged += part.unchanged;
+  }
+  return total;
 }
 
 /**
@@ -159,7 +207,7 @@ export function publishGoogleDays(db: DatabaseSync, from: string, to: string, no
  */
 export function compareGoogleDays(db: DatabaseSync, from: string, to: string, nowMs: number): { matched: number; differing: string[]; unpublished: string[] } {
   const result = { matched: 0, differing: [] as string[], unpublished: [] as string[] };
-  for (const snapshot of projectGoogleDays(db, from, to, nowMs)) {
+  for (const snapshot of projectDays(db, from, to, nowMs)) {
     const current = readCanonicalDay(db, snapshot.date);
     if (!current) result.unpublished.push(snapshot.date);
     else if (content(current) === content(snapshot)) result.matched++;

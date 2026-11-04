@@ -4,7 +4,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { listDays } from '../../packages/storage/days.ts';
 import { sourceKindSchema } from '../../packages/contracts/source-records.ts';
 import { listSourceRecords } from '../../packages/storage/source-records.ts';
-import { readCanonicalDay } from '../../packages/storage/canonical-days.ts';
+import { currentStoreVersion, readCanonicalDay } from '../../packages/storage/canonical-days.ts';
 import { readDaySourcesRange } from '../../packages/storage/google-day-sources.ts';
 import { readUserNote } from '../../packages/storage/user-notes.ts';
 import { readBodySourceDay } from '../../packages/storage/body-source-day.ts';
@@ -16,7 +16,7 @@ import { readBandShareDay, readBandShareRange } from '../../packages/storage/goo
 import { readGoogleDailySourceDay } from '../../packages/storage/google-daily-source-day.ts';
 import { readHeartRateDay, readHeartRateRange } from '../../packages/storage/google-heart-rate.ts';
 import { readEnergyForecast } from '../../packages/storage/google-energy-forecast.ts';
-import { warsawDay } from '../../packages/domain/warsaw-day.ts';
+import { firstSupportedYear, warsawDay } from '../../packages/domain/warsaw-day.ts';
 import { unassignedSessions } from '../../packages/storage/source-accounts.ts';
 import { userNoteInputSchema } from '../../packages/contracts/day-snapshot.ts';
 import { z } from 'zod';
@@ -24,20 +24,21 @@ import type { TakeoutService } from './takeout-service.ts';
 import type { GoogleAuth } from './google-auth.ts';
 import type { GoogleReadService } from './google-read-service.ts';
 import type { GoogleSyncService } from './google-sync.ts';
+import type { CsvImportService } from './csv-import-service.ts';
 
-async function readJson(request: IncomingMessage): Promise<unknown> {
+async function readJson(request: IncomingMessage, limit = 8192): Promise<unknown> {
   const chunks: Buffer[] = [];
   let length = 0;
   for await (const chunk of request) {
     const bytes = Buffer.from(chunk);
     length += bytes.length;
-    if (length > 8192) throw new Error('body_too_large');
+    if (length > limit) throw new Error('body_too_large');
     chunks.push(bytes);
   }
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
 }
 
-export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => DatabaseSync | undefined), takeout?: TakeoutService, extraLocalOrigins: readonly string[] = [], googleAuth?: GoogleAuth, googleRead?: GoogleReadService, googleSync?: GoogleSyncService): Server {
+export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => DatabaseSync | undefined), takeout?: TakeoutService, extraLocalOrigins: readonly string[] = [], googleAuth?: GoogleAuth, googleRead?: GoogleReadService, googleSync?: GoogleSyncService, csvImport?: CsvImportService): Server {
   if (extraLocalOrigins.some((origin) => !/^http:\/\/(?:127\.0\.0\.1|localhost):\d+$/.test(origin))) throw new Error('Nieprawidłowy lokalny Origin');
   const session = randomBytes(32).toString('hex');
   const server = createServer((request, response) => {
@@ -117,8 +118,8 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
       try {
         const source = typeof sourceDb === 'function' ? sourceDb() : sourceDb;
         const version = source?.prepare('PRAGMA user_version').get()?.user_version;
-        const accounts = (version === 4 || version === 5 || version === 6 || version === 7 || version === 8 || version === 9 || version === 10) ? source!.prepare('SELECT COUNT(*) AS count FROM source_accounts').get()?.count : 0;
-        const unassignedImports = (version === 4 || version === 5 || version === 6 || version === 7 || version === 8 || version === 9 || version === 10) ? unassignedSessions(source!).length : 0;
+        const accounts = (version === 4 || version === 5 || version === 6 || version === 7 || version === 8 || version === 9 || version === 10 || version === 11) ? source!.prepare('SELECT COUNT(*) AS count FROM source_accounts').get()?.count : 0;
+        const unassignedImports = (version === 4 || version === 5 || version === 6 || version === 7 || version === 8 || version === 9 || version === 10 || version === 11) ? unassignedSessions(source!).length : 0;
         response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
         response.end(JSON.stringify({ singleExistingAccount: accounts === 1, unassignedImports }));
       } catch { response.writeHead(500, { 'Cache-Control': 'no-store' }).end(); }
@@ -139,9 +140,10 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
       if (!origin || !allowedOrigins.includes(origin) || request.headers['x-trivimo-request'] !== '1' || request.headers['content-type'] !== 'application/json') { response.writeHead(403, { 'Cache-Control': 'no-store' }).end(); return; }
       if (!googleSync) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
       void readJson(request).then((body) => {
-        const parsed = z.object({ action: z.enum(['start', 'stop']) }).strict().safeParse(body);
-        if (!parsed.success) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
-        const status = parsed.data.action === 'start' ? googleSync.startBackfill() : googleSync.stopBackfill();
+        const parsed = z.object({ action: z.enum(['start', 'stop']), from: z.iso.date().optional() }).strict().safeParse(body);
+        if (!parsed.success || (parsed.data.action === 'stop' && parsed.data.from)) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
+        let status;
+        try { status = parsed.data.action === 'start' ? googleSync.startBackfill(parsed.data.from) : googleSync.stopBackfill(); } catch { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
         response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify(status));
       }, () => response.writeHead(400, { 'Cache-Control': 'no-store' }).end());
       return;
@@ -149,9 +151,9 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
     if (request.method === 'GET' && url.pathname === '/api/google/day-series') {
       const date = z.iso.date().safeParse(url.searchParams.get('date'));
       const metric = z.enum(Object.keys(seriesMetrics) as [keyof typeof seriesMetrics, ...(keyof typeof seriesMetrics)[]]).safeParse(url.searchParams.get('metric'));
-      if (!date.success || !metric.success || Number(date.data.slice(0, 4)) < 2026 || Number(date.data.slice(0, 4)) > 9998) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
+      if (!date.success || !metric.success || Number(date.data.slice(0, 4)) < firstSupportedYear || Number(date.data.slice(0, 4)) > 9998) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
       const source = typeof sourceDb === 'function' ? sourceDb() : sourceDb;
-      if (!source || source.prepare('PRAGMA user_version').get()?.user_version !== 10) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
+      if (!source || source.prepare('PRAGMA user_version').get()?.user_version !== currentStoreVersion) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
       try {
         response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }).end(JSON.stringify(readDaySeries(source, metric.data, date.data)));
       } catch { response.writeHead(500, { 'Cache-Control': 'no-store' }).end(); }
@@ -159,9 +161,9 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
     }
     if (request.method === 'GET' && url.pathname === '/api/google/day-sources') {
       const from = z.iso.date().safeParse(url.searchParams.get('from')), to = z.iso.date().safeParse(url.searchParams.get('to'));
-      if (!from.success || !to.success || from.data > to.data || (Date.parse(to.data) - Date.parse(from.data)) / 86400000 > 365 || Number(from.data.slice(0, 4)) < 2026 || Number(to.data.slice(0, 4)) > 9998) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
+      if (!from.success || !to.success || from.data > to.data || (Date.parse(to.data) - Date.parse(from.data)) / 86400000 > 365 || Number(from.data.slice(0, 4)) < firstSupportedYear || Number(to.data.slice(0, 4)) > 9998) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
       const source = typeof sourceDb === 'function' ? sourceDb() : sourceDb;
-      if (!source || source.prepare('PRAGMA user_version').get()?.user_version !== 10) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
+      if (!source || source.prepare('PRAGMA user_version').get()?.user_version !== currentStoreVersion) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
       try {
         response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }).end(JSON.stringify(readDaySourcesRange(source, from.data, to.data)));
       } catch { response.writeHead(500, { 'Cache-Control': 'no-store' }).end(); }
@@ -169,9 +171,9 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
     }
     if (request.method === 'GET' && url.pathname === '/api/google/band-share-range') {
       const from = z.iso.date().safeParse(url.searchParams.get('from')), to = z.iso.date().safeParse(url.searchParams.get('to'));
-      if (!from.success || !to.success || from.data > to.data || (Date.parse(to.data) - Date.parse(from.data)) / 86400000 > 365 || Number(from.data.slice(0, 4)) < 2026 || Number(to.data.slice(0, 4)) > 9998) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
+      if (!from.success || !to.success || from.data > to.data || (Date.parse(to.data) - Date.parse(from.data)) / 86400000 > 365 || Number(from.data.slice(0, 4)) < firstSupportedYear || Number(to.data.slice(0, 4)) > 9998) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
       const source = typeof sourceDb === 'function' ? sourceDb() : sourceDb;
-      if (!source || source.prepare('PRAGMA user_version').get()?.user_version !== 10) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
+      if (!source || source.prepare('PRAGMA user_version').get()?.user_version !== currentStoreVersion) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
       try {
         response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }).end(JSON.stringify(readBandShareRange(source, from.data, to.data)));
       } catch { response.writeHead(500, { 'Cache-Control': 'no-store' }).end(); }
@@ -179,16 +181,18 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
     }
     if (request.method === 'GET' && url.pathname === '/api/google/coverage') {
       if (!googleSync) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
-      const coverage = googleSync.coverage();
+      const yearText = url.searchParams.get('year');
+      if (yearText !== null && (!/^\d{4}$/.test(yearText) || Number(yearText) < firstSupportedYear || Number(yearText) > 9998)) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
+      const coverage = yearText === null ? googleSync.coverage() : googleSync.coverage(Number(yearText));
       if (!coverage) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
       response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }).end(JSON.stringify(coverage));
       return;
     }
     if (request.method === 'GET' && (url.pathname === '/api/google/heart-rate' || url.pathname === '/api/google/energy-forecast')) {
       const date = z.iso.date().safeParse(url.searchParams.get('date'));
-      if (!date.success || Number(date.data.slice(0, 4)) < 2026 || Number(date.data.slice(0, 4)) > 9998) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
+      if (!date.success || Number(date.data.slice(0, 4)) < firstSupportedYear || Number(date.data.slice(0, 4)) > 9998) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
       const source = typeof sourceDb === 'function' ? sourceDb() : sourceDb;
-      if (!source || source.prepare('PRAGMA user_version').get()?.user_version !== 10) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
+      if (!source || source.prepare('PRAGMA user_version').get()?.user_version !== currentStoreVersion) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
       try {
         const result = url.pathname.endsWith('/heart-rate') ? readHeartRateDay(source, date.data) : readEnergyForecast(source, date.data, Date.now());
         response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }).end(JSON.stringify(result));
@@ -197,9 +201,9 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
     }
     if (request.method === 'GET' && url.pathname === '/api/google/heart-rate-range') {
       const from = z.iso.date().safeParse(url.searchParams.get('from')), to = z.iso.date().safeParse(url.searchParams.get('to'));
-      if (!from.success || !to.success || from.data > to.data || (Date.parse(to.data) - Date.parse(from.data)) / 86400000 > 365 || Number(from.data.slice(0, 4)) < 2026 || Number(to.data.slice(0, 4)) > 9998) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
+      if (!from.success || !to.success || from.data > to.data || (Date.parse(to.data) - Date.parse(from.data)) / 86400000 > 365 || Number(from.data.slice(0, 4)) < firstSupportedYear || Number(to.data.slice(0, 4)) > 9998) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
       const source = typeof sourceDb === 'function' ? sourceDb() : sourceDb;
-      if (!source || source.prepare('PRAGMA user_version').get()?.user_version !== 10) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
+      if (!source || source.prepare('PRAGMA user_version').get()?.user_version !== currentStoreVersion) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
       try {
         response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }).end(JSON.stringify(readHeartRateRange(source, from.data, to.data)));
       } catch { response.writeHead(500, { 'Cache-Control': 'no-store' }).end(); }
@@ -207,9 +211,9 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
     }
     if (request.method === 'GET' && url.pathname === '/api/google/band-share') {
       const date = z.iso.date().safeParse(url.searchParams.get('date'));
-      if (!date.success || Number(date.data.slice(0, 4)) < 2026 || Number(date.data.slice(0, 4)) > 9998) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
+      if (!date.success || Number(date.data.slice(0, 4)) < firstSupportedYear || Number(date.data.slice(0, 4)) > 9998) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
       const source = typeof sourceDb === 'function' ? sourceDb() : sourceDb;
-      if (!source || source.prepare('PRAGMA user_version').get()?.user_version !== 10) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
+      if (!source || source.prepare('PRAGMA user_version').get()?.user_version !== currentStoreVersion) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
       try {
         response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }).end(JSON.stringify(readBandShareDay(source, date.data)));
       } catch { response.writeHead(500, { 'Cache-Control': 'no-store' }).end(); }
@@ -218,9 +222,9 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
     if (request.method === 'GET' && url.pathname === '/api/google/daily-candidates') {
       const date = z.iso.date().safeParse(url.searchParams.get('date'));
       const kind = z.enum(dailyRollupTypes).safeParse(url.searchParams.get('kind'));
-      if (!date.success || !kind.success || Number(date.data.slice(0, 4)) < 2026 || Number(date.data.slice(0, 4)) > 9998) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
+      if (!date.success || !kind.success || Number(date.data.slice(0, 4)) < firstSupportedYear || Number(date.data.slice(0, 4)) > 9998) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
       const source = typeof sourceDb === 'function' ? sourceDb() : sourceDb;
-      if (!source || source.prepare('PRAGMA user_version').get()?.user_version !== 10) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
+      if (!source || source.prepare('PRAGMA user_version').get()?.user_version !== currentStoreVersion) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
       try {
         response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }).end(JSON.stringify(readGoogleDailySourceDay(source, kind.data, date.data)));
       } catch { response.writeHead(500, { 'Cache-Control': 'no-store' }).end(); }
@@ -229,9 +233,9 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
     if (request.method === 'GET' && url.pathname === '/api/google/body-candidates') {
       const date = z.iso.date().safeParse(url.searchParams.get('date'));
       const kind = z.enum(['weight', 'body_fat']).safeParse(url.searchParams.get('kind'));
-      if (!date.success || !kind.success || Number(date.data.slice(0, 4)) < 2026 || Number(date.data.slice(0, 4)) > 9998) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
+      if (!date.success || !kind.success || Number(date.data.slice(0, 4)) < firstSupportedYear || Number(date.data.slice(0, 4)) > 9998) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
       const source = typeof sourceDb === 'function' ? sourceDb() : sourceDb;
-      if (!source || source.prepare('PRAGMA user_version').get()?.user_version !== 5 && source.prepare('PRAGMA user_version').get()?.user_version !== 6 && source.prepare('PRAGMA user_version').get()?.user_version !== 7 && source.prepare('PRAGMA user_version').get()?.user_version !== 8 && source.prepare('PRAGMA user_version').get()?.user_version !== 9 && source.prepare('PRAGMA user_version').get()?.user_version !== 10) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
+      if (!source || source.prepare('PRAGMA user_version').get()?.user_version !== 5 && source.prepare('PRAGMA user_version').get()?.user_version !== 6 && source.prepare('PRAGMA user_version').get()?.user_version !== 7 && source.prepare('PRAGMA user_version').get()?.user_version !== 8 && source.prepare('PRAGMA user_version').get()?.user_version !== 9 && source.prepare('PRAGMA user_version').get()?.user_version !== currentStoreVersion) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
       try {
         const review = readGoogleBodySourceDay(source, kind.data, date.data);
         response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }).end(JSON.stringify(review));
@@ -261,10 +265,10 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
       try {
         const source = typeof sourceDb === 'function' ? sourceDb() : sourceDb;
         const version = source?.prepare('PRAGMA user_version').get()?.user_version;
-        const result = !source || (version !== 2 && version !== 3 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8 && version !== 9 && version !== 10) ? { state: 'not_ready' } : {
+        const result = !source || (version !== 2 && version !== 3 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8 && version !== 9 && version !== 10 && version !== 11) ? { state: 'not_ready' } : {
           state: 'ready', days: Array.from({ length: (Date.parse(to.data) - Date.parse(from.data)) / 86400000 + 1 }, (_, index) => {
             const date = new Date(Date.parse(from.data) + index * 86400000).toISOString().slice(0, 10);
-            return { date, snapshot: readCanonicalDay(source, date), userNote: version === 3 || version === 4 || version === 5 || version === 6 || version === 7 || version === 8 || version === 9 || version === 10 ? readUserNote(source, date) : null };
+            return { date, snapshot: readCanonicalDay(source, date), userNote: version === 3 || version === 4 || version === 5 || version === 6 || version === 7 || version === 8 || version === 9 || version === 10 || version === 11 ? readUserNote(source, date) : null };
           }),
         };
         response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
@@ -278,8 +282,8 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
       try {
         const source = typeof sourceDb === 'function' ? sourceDb() : sourceDb;
         const version = source?.prepare('PRAGMA user_version').get()?.user_version;
-        const result = !source || (version !== 2 && version !== 3 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8 && version !== 9 && version !== 10)
-          ? { state: 'not_ready' } : { state: 'ready', snapshot: readCanonicalDay(source, date.data), notesAvailable: version === 3 || version === 4 || version === 5 || version === 6 || version === 7 || version === 8 || version === 9 || version === 10, userNote: version === 3 || version === 4 || version === 5 || version === 6 || version === 7 || version === 8 || version === 9 || version === 10 ? readUserNote(source, date.data) : null };
+        const result = !source || (version !== 2 && version !== 3 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8 && version !== 9 && version !== 10 && version !== 11)
+          ? { state: 'not_ready' } : { state: 'ready', snapshot: readCanonicalDay(source, date.data), notesAvailable: version === 3 || version === 4 || version === 5 || version === 6 || version === 7 || version === 8 || version === 9 || version === 10 || version === 11, userNote: version === 3 || version === 4 || version === 5 || version === 6 || version === 7 || version === 8 || version === 9 || version === 10 || version === 11 ? readUserNote(source, date.data) : null };
         response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
         response.end(JSON.stringify(result));
       } catch { response.writeHead(500, { 'Cache-Control': 'no-store' }).end(); }
@@ -312,6 +316,31 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
                 : message.startsWith('Nieprawidłowy plik CSV') ? 'invalid_csv' : 'import_failed';
           response.writeHead(code === 'note_conflict' ? 409 : 400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
           response.end(JSON.stringify({ error: code }));
+        }
+      })();
+      return;
+    }
+    if ((request.method === 'GET' && url.pathname === '/api/csv/imports') || (request.method === 'POST' && ['/api/csv/inspect', '/api/csv/preview', '/api/csv/import', '/api/csv/decision'].includes(url.pathname))) {
+      if (request.method === 'POST' && (!origin || !allowedOrigins.includes(origin) || request.headers['x-trivimo-request'] !== '1' || request.headers['content-type'] !== 'application/json')) { response.writeHead(403, { 'Cache-Control': 'no-store' }).end(); return; }
+      if (!csvImport) { response.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify({ error: 'service_unavailable' })); return; }
+      void (async () => {
+        try {
+          let result: unknown;
+          if (request.method === 'GET') result = csvImport.list();
+          else {
+            // the file text travels in the body (at most 8 MiB of text, JSON-escaped)
+            const body = await readJson(request, 20 * 1024 * 1024);
+            const file = z.object({ name: z.string().min(1).max(255), content: z.string().min(1).max(8 * 1024 * 1024) });
+            if (url.pathname === '/api/csv/inspect') result = csvImport.inspect(file.strict().parse(body).content);
+            else if (url.pathname === '/api/csv/preview') { const input = file.extend({ mapping: z.unknown() }).strict().parse(body); result = csvImport.preview(input.name, input.content, input.mapping); }
+            else if (url.pathname === '/api/csv/import') { const input = file.extend({ mapping: z.unknown(), token: z.string().regex(/^[0-9a-f]{64}$/) }).strict().parse(body); result = csvImport.commit(input.name, input.content, input.mapping, input.token); }
+            else { const input = z.object({ id: z.uuid(), state: z.enum(['included', 'excluded']) }).strict().parse(body); result = csvImport.decide(input.id, input.state); }
+          }
+          response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }).end(JSON.stringify(result));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : '';
+          const code = error instanceof z.ZodError ? 'invalid_request' : ['invalid_csv', 'empty_csv', 'too_many_rows', 'too_many_columns', 'plan_changed', 'migration_required', 'store_unavailable', 'not_found', 'body_too_large'].includes(message) ? message : 'csv_import_failed';
+          response.writeHead(code === 'not_found' ? 404 : 400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify({ error: code }));
         }
       })();
       return;

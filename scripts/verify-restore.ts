@@ -42,7 +42,7 @@ async function main() {
     stage = 'przebudowa projekcji';
     const db = new DatabaseSync(restoredPath, { readOnly: true });
     try {
-      if (db.prepare('PRAGMA user_version').get()?.user_version === 10) {
+      if (db.prepare('PRAGMA user_version').get()?.user_version === 11) {
         // the moment of the copy is the newest saved page; days are judged as they were then
         const newest = db.prepare('SELECT MAX(received_at) AS at FROM google_read_pages').get()?.at;
         if (typeof newest === 'string') {

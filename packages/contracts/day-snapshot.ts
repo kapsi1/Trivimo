@@ -32,6 +32,11 @@ export const snapshotInputSchema = z.object({
     rule: z.literal('google-body-v1'), weightRecords: z.number().int().nonnegative().nullable(), weightReplicas: z.number().int().nonnegative().nullable(),
     bodyFatRecords: z.number().int().nonnegative().nullable(), bodyFatReplicas: z.number().int().nonnegative().nullable(),
   }).strict().optional(),
+  /** Metrics filled from CSV imports (rule csv-fill-v1) because the Google data of the day had no value for them. */
+  csv: z.object({
+    rule: z.literal('csv-fill-v1'), metrics: z.array(z.enum(['weight', 'body_fat', 'steps', 'distance', 'total_energy', 'active_energy'])).min(1).max(6),
+    imports: z.array(z.uuid()).min(1).max(100),
+  }).strict().optional(),
 }).strict();
 export type DaySnapshotInput = z.infer<typeof snapshotInputSchema>;
 export type DayMetricValue = DaySnapshotInput['metrics']['weight'];

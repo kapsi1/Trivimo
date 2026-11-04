@@ -2,12 +2,13 @@ import { lstatSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
+import { currentStoreVersion } from '../../packages/storage/canonical-days.ts';
 import { maxRollupDays } from '../../packages/adapters/google-health/daily-rollup.ts';
 import { defaultRetryPolicy, RateLimitedError, withRateLimitRetry, type RetryPolicy } from '../../packages/adapters/google-health/rate-limit.ts';
 import { sourceDay } from '../../packages/domain/source-day.ts';
-import { warsawDay } from '../../packages/domain/warsaw-day.ts';
+import { firstSupportedDay, warsawDay } from '../../packages/domain/warsaw-day.ts';
 import type { GoogleJobKind } from '../../packages/storage/google-pages.ts';
-import { publishGoogleDays } from '../../packages/storage/google-day-snapshots.ts';
+import { publishGoogleDays, publishDayRange } from '../../packages/storage/google-day-snapshots.ts';
 import { applyReadPolicy, registerAutomaticJob } from '../../packages/storage/google-read-policy.ts';
 import type { GoogleAuth } from './google-auth.ts';
 import { readGoogleJobPage, startGoogleReadJob } from './google-read-service.ts';
@@ -59,7 +60,10 @@ export function planSync(db: DatabaseSync, today: string, nowMs: number, refresh
   return plan;
 }
 
-/** History is read from the start of 2026 (plan M1); earlier years wait for their own audit. */
+/**
+ * Default start of the history read automatically (plan M1). Earlier days (from `firstSupportedDay`) are read only
+ * when the user starts the backfill from an earlier date (decision 2026-11-04); the automatic gap check stays at 2026.
+ */
 export const backfillFrom = '2026-01-01';
 // source lists hold every record (about 200 bytes each), so a week keeps a page well under the 1 MB response limit
 // measurements are a few records a day, so a month fits in one page; the read service allows ranges up to 31 days
@@ -141,7 +145,7 @@ export class GoogleSyncService {
   private open(): DatabaseSync {
     let db: DatabaseSync;
     try { const stat = lstatSync(this.path); if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('invalid_store'); db = new DatabaseSync(this.path, { timeout: 5000 }); } catch { throw new Error('store_unavailable'); }
-    if (db.prepare('PRAGMA application_id').get()?.application_id !== 1414682185 || db.prepare('PRAGMA user_version').get()?.user_version !== 10) { db.close(); throw new Error('migration_required'); }
+    if (db.prepare('PRAGMA application_id').get()?.application_id !== 1414682185 || db.prepare('PRAGMA user_version').get()?.user_version !== currentStoreVersion) { db.close(); throw new Error('migration_required'); }
     return db;
   }
   private execute: Execute = async (db, read) => {
@@ -202,8 +206,12 @@ export class GoogleSyncService {
   /** Local recompute of day snapshots (steps, distance, calories) from saved pages (no requests); a failure leaves earlier snapshots and reads intact. */
   private projectEnergy(db: DatabaseSync): { published: number; unchanged: number } | 'failed' {
     const today = sourceDay(new Date(this.now()).toISOString());
-    const from = addDays(today, -365) > backfillFrom ? addDays(today, -365) : backfillFrom;
-    try { return publishGoogleDays(db, from, today, this.now()); } catch { return 'failed'; }
+    try { return publishGoogleDays(db, this.projectionFrom(), today, this.now()); } catch { return 'failed'; }
+  }
+  /** First day the refresh re-projects: a year back, not before the automatic history start. */
+  private projectionFrom(): string {
+    const yearBack = addDays(sourceDay(new Date(this.now()).toISOString()), -365);
+    return yearBack > backfillFrom ? yearBack : backfillFrom;
   }
   /** Finish pages of jobs left running (by an interrupted run, backfill or restart); returns how many were completed. */
   private async resumeRunning(db: DatabaseSync): Promise<number> {
@@ -229,11 +237,12 @@ export class GoogleSyncService {
    * Read the uncovered completed days since `backfillFrom` in the background, one chunk at a time, sharing the lock,
    * retry and 429 pause with the refresh. Starting again continues from what the store already covers.
    */
-  startBackfill(): BackfillStatus {
+  startBackfill(from: string = backfillFrom): BackfillStatus {
     if (this.backfill?.state !== 'running' && this.backfill?.state !== 'stopping') {
-      const now = new Date(this.now()).toISOString();
+      const now = new Date(this.now()).toISOString(), through = addDays(sourceDay(now), -1);
+      if (!z.iso.date().safeParse(from).success || from < firstSupportedDay || from > through) throw new Error('invalid_range');
       this.stopRequested = false;
-      this.backfill = { state: 'running', from: backfillFrom, through: addDays(sourceDay(now), -1), startedAt: now, finishedAt: null, current: null, readsThisRun: 0 };
+      this.backfill = { state: 'running', from, through, startedAt: now, finishedAt: null, current: null, readsThisRun: 0 };
       this.backfillDone = this.backfillLoop();
     }
     return this.backfillStatus();
@@ -248,9 +257,14 @@ export class GoogleSyncService {
   private async backfillLoop(): Promise<void> {
     const run = this.backfill!;
     const end = (state: BackfillStatus['state'], code?: string) => { run.state = state; run.current = null; run.finishedAt = new Date(this.now()).toISOString(); if (code) run.code = code; };
+    // days before the refresh's projection window (the last year, from 2026) get their snapshots from the run's own range
+    const projectRun = (db: DatabaseSync) => {
+      const window = this.projectionFrom(), last = addDays(window, -1) < run.through ? addDays(window, -1) : run.through;
+      if (run.from <= last) { try { publishDayRange(db, run.from, last, this.now()); } catch { /* reads stay saved; the next run projects again */ } }
+    };
     let previous = '';
     while (true) {
-      if (this.stopRequested) return end('stopped');
+      if (this.stopRequested) { this.withStore(projectRun); return end('stopped'); }
       if (this.pausedUntil !== null && this.now() < this.pausedUntil) { run.code = 'rate_limited'; run.retryAt = new Date(this.pausedUntil).toISOString(); await this.sleep(Math.min(this.pausedUntil - this.now(), 60000)); continue; }
       if (this.running) { await this.sleep(1000); continue; }
       this.running = true; let db: DatabaseSync | undefined;
@@ -259,7 +273,7 @@ export class GoogleSyncService {
         db = this.open();
         run.readsThisRun += await this.resumeRunning(db);
         const next = planBackfill(db, run.from, run.through)[0];
-        if (!next) { this.projectEnergy(db); return end('done'); }
+        if (!next) { this.projectEnergy(db); projectRun(db); return end('done'); }
         const key = `${next.kind}:${next.first}:${next.last}`;
         // a chunk planned again right after its complete read would repeat forever; stop and report instead
         if (key === previous) return end('error', 'no_progress');
@@ -272,6 +286,10 @@ export class GoogleSyncService {
       } finally { db?.close(); this.running = false; }
     }
   }
+  private withStore(action: (db: DatabaseSync) => void): void {
+    if (this.running) return;
+    try { const db = this.open(); try { action(db); } finally { db.close(); } } catch { /* store unavailable: nothing to project now */ }
+  }
   backfillStatus(): BackfillStatus {
     const through = this.backfill?.through ?? addDays(sourceDay(new Date(this.now()).toISOString()), -1);
     const from = this.backfill?.from ?? backfillFrom;
@@ -283,12 +301,14 @@ export class GoogleSyncService {
     } catch { /* store unavailable: progress unknown, not zero */ }
     return { ...(this.backfill ?? { state: 'idle', from, through, startedAt: null, finishedAt: null, current: null, readsThisRun: 0 }), kinds };
   }
-  /** Coverage calendar of the backfill range; null when the store is unavailable (unknown, not uncovered). */
-  coverage(): { from: string; through: string; kinds: number; days: { date: string; covered: number }[] } | null {
-    const through = addDays(sourceDay(new Date(this.now()).toISOString()), -1);
+  /** Coverage calendar of one year (default: the year of the automatic history start) up to yesterday; null when the store is unavailable (unknown, not uncovered). */
+  coverage(year: number = Number(backfillFrom.slice(0, 4))): { from: string; through: string; kinds: number; days: { date: string; covered: number }[] } | null {
+    const yesterday = addDays(sourceDay(new Date(this.now()).toISOString()), -1);
+    const from = `${String(year).padStart(4, '0')}-01-01`, through = `${String(year).padStart(4, '0')}-12-31` < yesterday ? `${String(year).padStart(4, '0')}-12-31` : yesterday;
+    if (from < firstSupportedDay) return null;
     try {
       const db = this.open();
-      try { return { from: backfillFrom, through, kinds: syncKinds.length, days: through < backfillFrom ? [] : coverageCalendar(db, backfillFrom, through) }; } finally { db.close(); }
+      try { return { from, through, kinds: syncKinds.length, days: through < from ? [] : coverageCalendar(db, from, through) }; } finally { db.close(); }
     } catch { return null; }
   }
   status() {

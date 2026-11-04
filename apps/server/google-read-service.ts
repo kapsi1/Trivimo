@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { lstatSync } from 'node:fs';
 import { z } from 'zod';
+import { currentStoreVersion } from '../../packages/storage/canonical-days.ts';
 import { createHash } from 'node:crypto';
 import { listBodyPage } from '../../packages/adapters/google-health/body-read.ts';
 import { googleHttpError } from '../../packages/adapters/google-health/rate-limit.ts';
@@ -54,7 +55,7 @@ export class GoogleReadService {
       if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('invalid_store');
       db = new DatabaseSync(this.path);
     } catch { throw new Error('store_unavailable'); }
-    if (db.prepare('PRAGMA application_id').get()?.application_id !== 1414682185 || db.prepare('PRAGMA user_version').get()?.user_version !== 10) { db.close(); throw new Error('migration_required'); }
+    if (db.prepare('PRAGMA application_id').get()?.application_id !== 1414682185 || db.prepare('PRAGMA user_version').get()?.user_version !== currentStoreVersion) { db.close(); throw new Error('migration_required'); }
     return db;
   }
   list() {

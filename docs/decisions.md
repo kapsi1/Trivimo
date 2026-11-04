@@ -42,6 +42,11 @@
 
 Nowe wymaganie pełnego katalogu API zastępuje dla tej aplikacji dawne ograniczenie projektu Health Sync do wybranych pól. Nie przenosimy automatycznie zakazu szczegółowych serii HR ani historycznego wyłączenia sleep score/Profile; ich rzeczywista dostępność wymaga sprawdzenia, bez tworzenia fikcyjnych zamienników.
 
+## Historia sprzed 2026 i import CSV (2026-11-04)
+
+- Użytkownik zlecił import danych sprzed 2026 z API. Wybrał kwalifikację tych dób do tabeli tymi samymi regułami co 2026 (zamiast samych oryginałów); osobny audyt wcześniejszych lat pozostaje otwarty. Odczyt starszych lat uruchamia się ręcznie datą początkową; automatyczne nadrabianie luk nadal zaczyna się od 2026-01-01.
+- Import dowolnego CSV z mapowaniem kolumn na metryki aplikacji. Użytkownik wybrał wariant „uzupełniają braki”: CSV nie nadpisuje i nie sumuje się z wartościami Google (reguła `csv-fill-v1` w [kontraktach](data-contracts.md)).
+
 ## Proponowane domyślne decyzje techniczne
 
 Na potrzeby pierwszej próby P0 wybrano TypeScript, React, SQLite i lokalny serwis Node z REST; szczegóły i ograniczenia są w [środowisku developerskim](development.md). Próbę parserów Kotlin należy jeszcze wykonać przed ostateczną oceną stosu. MCP pozostaje przyszłym adapterem tych samych komend.

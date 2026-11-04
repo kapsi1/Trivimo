@@ -2,7 +2,7 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { bodyReviewSchema } from '../../../packages/contracts/source-records.ts';
 import { bandShareSchema, dailyReviewSchema, dayResponseSchema, energyModels, energySource, forecastSchema, metricOf, quality, reasonsOf, ruleOf, useJson, type Forecast, type MetricKey, type MetricValue } from './api.ts';
 import type { AxisEvent, HourKey } from './charts.tsx';
-import { fmtD, fmtDL, fmtRange, formatRational, nf, plural, warsawToday, whenOf } from './format.ts';
+import { fmtD, fmtDL, fmtRange, formatRational, nf, plural, warsawToday, whenOf , firstDay } from './format.ts';
 
 export type DrawerState =
   | { type: 'cell'; date: string; key: MetricKey }
@@ -48,11 +48,11 @@ function CellBody({ date, metricKey, onOpenDay }: { date: string; metricKey: Met
   const day = useJson(`/api/day?date=${date}`, dayResponseSchema);
   const today = date === warsawToday();
   const forecast = useJson(metricKey === 'total_energy' && today ? `/api/google/energy-forecast?date=${date}` : null, forecastSchema);
-  const band = useJson(group === 'energy' && date >= '2026-01-01' ? `/api/google/band-share?date=${date}` : null, bandShareSchema);
+  const band = useJson(group === 'energy' && date >= firstDay ? `/api/google/band-share?date=${date}` : null, bandShareSchema);
   const kind = dailyKind[metricKey];
-  const reads = useJson(kind && date >= '2026-01-01' ? `/api/google/daily-candidates?kind=${kind}&date=${date}` : null, dailyReviewSchema);
+  const reads = useJson(kind && date >= firstDay ? `/api/google/daily-candidates?kind=${kind}&date=${date}` : null, dailyReviewSchema);
   const bodyKind = metricKey === 'weight' || metricKey === 'body_fat' ? metricKey : null;
-  const googleBody = useJson(bodyKind && date >= '2026-01-01' ? `/api/google/body-candidates?kind=${bodyKind}&date=${date}` : null, bodyReviewSchema);
+  const googleBody = useJson(bodyKind && date >= firstDay ? `/api/google/body-candidates?kind=${bodyKind}&date=${date}` : null, bodyReviewSchema);
   const takeoutBody = useJson(bodyKind ? `/api/body-candidates?kind=${bodyKind}&date=${date}` : null, bodyReviewSchema);
   if (day.error) return <p role="alert">Nie udało się odczytać wyniku dnia.</p>;
   if (!day.data) return <p>Ładowanie…</p>;
@@ -76,14 +76,16 @@ function CellBody({ date, metricKey, onOpenDay }: { date: string; metricKey: Met
     specific = <div className="dsec"><h4>Pomiary dnia</h4><p>{records === null ? 'Doby nie odczytano.' : records === 0 ? 'Brak pomiaru tego dnia. Ostatni znany pomiar nie jest przenoszony na ten dzień.' : `${records} ${plural(records, 'wpis', 'wpisy', 'wpisów')} · średnia unikalnych${replicas ? ` · ${replicas} ${plural(replicas, 'kopia', 'kopie', 'kopii')} tego samego pomiaru z innej aplikacji liczona raz` : ''}`}</p>
       {googleBody.data && googleBody.data.rows.length > 0 && <div className="tw"><table className="simple"><thead><tr><th>Czas źródła</th><th>Wartość</th><th>Źródło</th></tr></thead><tbody>{googleBody.data.rows.map((row, index) => <tr key={index}><td className="mono">{row.timestamp}</td><td>{row.converted.status === 'parsed' ? `${row.converted.value.replace('.', ',')} ${row.converted.unit}` : '—'}</td><td>{row.origin || 'nieznane'}</td></tr>)}</tbody></table></div>}</div>;
   }
-  const readsLoading = (kind && date >= '2026-01-01' && !reads.data && !reads.error) || (bodyKind && date >= '2026-01-01' && !googleBody.data && !googleBody.error);
+  const readsLoading = (kind && date >= firstDay && !reads.data && !reads.error) || (bodyKind && date >= firstDay && !googleBody.data && !googleBody.error);
   const readList = reads.data ? reads.data.rows.map((row, index) => <li key={index}><span>{whenOf(row.receivedAt)}</span><span>{row.converted ? `${nf(Number(row.converted.value), metric.decimals)} ${row.converted.unit}` : row.originalValue}{index === 0 ? ' · najnowszy' : ''}</span></li>)
     : googleBody.data?.jobs ? googleBody.data.jobs.map((job, index) => <li key={index}><span>{job.state === 'complete' ? 'zakończony' : 'w toku'}</span><span className="mono">{job.start} – {job.end}</span></li>) : [];
   return <>
     <div><div className={`bigval ${value?.value == null ? 'v-none' : ''}`}>{value?.value ? formatRational(value.value, metric.decimals) : '—'}{value?.value && metric.unit ? <small>{metric.unit}</small> : null}</div>
       <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}><span className={`chip ${chip}`}>{value ? quality[value.status] : 'Brak obliczonego wyniku'}</span>{reasons.length > 0 && <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>{reasons.join('; ')}</span>}{today && <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>Doba w toku: wartość rośnie po kolejnych odczytach.</span>}</div></div>
     {forecast.data && <ForecastSection forecast={forecast.data} intro={forecastText(forecast.data)} />}
-    <div className="dsec"><h4>Skąd ta wartość</h4><p>{group === 'body' ? 'Średnia unikalnych pomiarów doby warszawskiej z Google Health API.' : 'Suma dobowa producenta z Google Health API, wszystkie źródła.'} Reguła <span className="mono">{ruleOf(snapshot, group)}</span>.</p></div>
+    <div className="dsec"><h4>Skąd ta wartość</h4>{snapshot?.csv?.metrics.includes(metricKey)
+      ? <p>Z importu CSV ({snapshot.csv.imports.length} {plural(snapshot.csv.imports.length, 'plik', 'pliki', 'plików')}), bo dane Google tej doby nie mają wartości tej metryki. {group === 'body' ? 'Średnia unikalnych pomiarów doby z pliku.' : 'Wartość dobowa z pliku według wybranego mapowania.'} Reguła <span className="mono">{snapshot.csv.rule}</span>; import można wykluczyć w „Źródła danych” → „Importy plików”.</p>
+      : <p>{group === 'body' ? 'Średnia unikalnych pomiarów doby warszawskiej z Google Health API.' : 'Suma dobowa producenta z Google Health API, wszystkie źródła.'} Reguła <span className="mono">{ruleOf(snapshot, group)}</span>.</p>}</div>
     {specific}
     <div className="dsec"><h4>Odczyty</h4>{reads.error || googleBody.error ? <p>Nie udało się odczytać historii odczytów.</p> : readsLoading ? <p>Ładowanie…</p> : readList.length ? <ul className="timeline">{readList}</ul> : <p>Brak zapisanego odczytu tej doby.</p>}
       {reads.data && reads.data.rows.length > 1 && <p style={{ marginTop: 6 }}>Każde pobranie zachowuje swój oryginał; odczyty nie są sumowane, najnowszy jest pierwszy.</p>}</div>

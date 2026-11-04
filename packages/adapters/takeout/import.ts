@@ -115,7 +115,7 @@ export function initializeTakeoutStore(db: DatabaseSync): void {
   db.exec('PRAGMA foreign_keys = ON');
   const version = db.prepare('PRAGMA user_version').get()?.user_version;
   const appId = db.prepare('PRAGMA application_id').get()?.application_id;
-  if ((version === 1 || version === 2 || version === 3 || (version === 4 || version === 5 || version === 6 || version === 7 || version === 8 || version === 9 || version === 10)) && appId === 1414682185) return;
+  if ((version === 1 || version === 2 || version === 3 || (version === 4 || version === 5 || version === 6 || version === 7 || version === 8 || version === 9 || version === 10 || version === 11)) && appId === 1414682185) return;
   if (version !== 0 || appId !== 0 || Number(db.prepare("SELECT COUNT(*) AS count FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").get()?.count) !== 0) {
     throw new Error('Nieobsługiwana baza importu');
   }

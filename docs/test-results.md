@@ -1,5 +1,13 @@
 # Raport weryfikacji
 
+## 2026-11-04 — historia sprzed 2026 z API i import CSV z mapowaniem
+
+- Odczyt próbny API (tylko liczby dób z wartością, nic nie zapisano): kroki i dystans od ok. 2023-07, kalorie total i masa w 2023–2025, brak kalorii aktywnych; lata 2018–2022 puste.
+- `npm test`: 125 testów zaliczonych (nowe: formaty daty i doba warszawska czasu ISO; separator, BOM, przecinek dziesiętny, dokładne lb/mile/kJ/ułamek, puste komórki jako brak, odrzucenia z powodem; idempotentny zapis, średnia unikalnych ważeń między plikami, konflikt sum, suma z wyboru, wykluczenie; CSV uzupełnia tylko braki Google, doba tylko z CSV, pusta rewizja po wykluczeniu, zgodność z kontrolą odtworzenia; REST z tokenem podglądu i 403 bez nagłówka; uzupełnianie od 2025-12-28 z kalendarzem roku 2025 i snapshotami starszych dób). `npm run typecheck`, `npm run build`: poprawne.
+- Przeglądarka aplikacji na syntetycznym magazynie v11 (osobny serwer na porcie 3100, zbudowany interfejs): wczytanie pliku ze średnikiem i przecinkiem dziesiętnym, zaproponowane mapowanie daty, masy, tkanki i kroków, podgląd (7 wartości, 1 odrzucenie), zapis i tabela dni z oznaczeniem „csv” (średnia dwóch ważeń, kopie kroków liczone raz). Panel uzupełniania historii z datą początkową sprawdzony tylko testem (harness bez Google).
+- Migracja magazynu użytkownika 10→11 (2026-11-04, przy zatrzymanym serwerze): `npm run migrate:canonical -- D:\Trivimo-bak\przed-v11-20261104.sqlite` — kopia zweryfikowana, migracja zakończona; potem `npm run verify:takeout` poprawne, `user_version` = 11, 3 tabele importu CSV, 308 dób ze snapshotem bez zmian.
+- Ograniczenia: rzeczywistej historii sprzed 2026 nie odczytano do bazy; nie importowano rzeczywistego pliku CSV; serwera aplikacji po migracji nie uruchamiano.
+
 ## 2026-11-04 — przebieg doby: sumy w tytułach, data w powiększeniu, oś tętna
 
 - `npm test`: 119 testów zaliczonych (nowy: dopasowanie osi — 171 → górna linia 175, 212 → linia 200 z zakresem do ok. 218, wartości zawsze w zakresie). `npx tsc --noEmit` i `npx vite build`: poprawne.

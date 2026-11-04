@@ -3,7 +3,7 @@ import { forecastSchema, groups, heartRateRangeSchema, metricOf, metrics, rangeS
 import { HR_LEGEND, HrTrendChart, InfoButton, TrendChart, Zoomable } from './charts.tsx';
 import { axisEvents, heartTrend, lastMeasured, meanValid, metricTrend, valueOf } from './derive.ts';
 import type { DrawerState } from './details.tsx';
-import { addDays, fmtD, fmtRange, maxDate, nf, warsawToday } from './format.ts';
+import { addDays, fmtD, fmtRange, maxDate, nf, warsawToday , firstDay } from './format.ts';
 import { Segmented, ZoomDialog, zoomSize } from './zoom.tsx';
 
 export type TrendLength = 30 | 90 | 365 | 0;
@@ -18,7 +18,7 @@ export function TrendsView({ length, agg, onLength, onAgg, onDrawer }: { length:
   const [zoom, setZoom] = useState<MetricKey | 'hr' | null>(null);
   // one request covers every period, so events like "first weighing" are found in the whole history, not the slice
   const result = useJson(`/api/day-range?from=${history}&to=${today}`, rangeSchema);
-  const hr = useJson(today >= '2026-01-01' ? `/api/google/heart-rate-range?from=${maxDate('2026-01-01', history)}&to=${today}` : null, heartRateRangeSchema);
+  const hr = useJson(today >= firstDay ? `/api/google/heart-rate-range?from=${maxDate(firstDay, history)}&to=${today}` : null, heartRateRangeSchema);
   const forecast = useJson(`/api/google/energy-forecast?date=${today}`, forecastSchema);
   if (result.error) return <p role="alert">Nie udało się odczytać trendów.</p>;
   if (!result.data) return <p>Ładowanie…</p>;

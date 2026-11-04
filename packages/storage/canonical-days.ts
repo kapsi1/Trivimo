@@ -162,6 +162,34 @@ export async function migrateSourceLists(db: DatabaseSync, backupPath: string): 
   }, () => { before = count(); });
 }
 
+/**
+ * Version 11: CSV files imported with a user-chosen column mapping. The file text, its digest, the mapping and the
+ * parser version are kept with every converted value; including or excluding an import is a versioned decision.
+ */
+export async function migrateCsvImports(db: DatabaseSync, backupPath: string): Promise<void> {
+  await migrateWithBackup(db, backupPath, 10, `CREATE TABLE csv_imports (
+      id TEXT PRIMARY KEY, file_name TEXT NOT NULL, content_digest TEXT NOT NULL CHECK(length(content_digest) = 64), content TEXT NOT NULL,
+      mapping TEXT NOT NULL, mapping_digest TEXT NOT NULL CHECK(length(mapping_digest) = 64), parser TEXT NOT NULL,
+      data_rows INTEGER NOT NULL CHECK(data_rows >= 0), rejected INTEGER NOT NULL CHECK(rejected >= 0), created_at TEXT NOT NULL,
+      UNIQUE(content_digest, mapping_digest, parser)
+    ) STRICT;
+    CREATE TABLE csv_import_values (
+      import_id TEXT NOT NULL REFERENCES csv_imports(id), row_number INTEGER NOT NULL CHECK(row_number > 0),
+      metric TEXT NOT NULL CHECK(metric IN ('weight','body_fat','steps','distance','total_energy','active_energy')),
+      day TEXT NOT NULL, time TEXT, source_text TEXT NOT NULL, source_unit TEXT NOT NULL, numerator TEXT NOT NULL, denominator TEXT NOT NULL,
+      PRIMARY KEY(import_id, row_number, metric)
+    ) STRICT;
+    CREATE INDEX csv_import_values_day ON csv_import_values(day);
+    CREATE TABLE csv_import_decisions (
+      import_id TEXT NOT NULL REFERENCES csv_imports(id), revision INTEGER NOT NULL CHECK(revision > 0),
+      state TEXT NOT NULL CHECK(state IN ('included','excluded')), created_at TEXT NOT NULL, PRIMARY KEY(import_id, revision)
+    ) STRICT;
+    PRAGMA user_version = 11;`);
+}
+
+/** Store version the server, services and CLI expect. */
+export const currentStoreVersion = 11;
+
 export function publishCanonicalDay(db: DatabaseSync, input: DaySnapshotInput, expectedRevision: number | null) {
   const parsed = snapshotInputSchema.parse(input);
   const notes = projectIssueNotes(parsed.issues);

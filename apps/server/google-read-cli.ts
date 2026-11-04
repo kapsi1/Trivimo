@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
+import { currentStoreVersion } from '../../packages/storage/canonical-days.ts';
 import { dailyRollupTypes } from '../../packages/adapters/google-health/daily-rollup.ts';
 import { warsawDay } from '../../packages/domain/warsaw-day.ts';
 import { windowJobKinds, type WindowJobKind } from '../../packages/storage/google-pages.ts';
@@ -26,7 +27,7 @@ async function main() {
   await auth.restore();
   const db = new DatabaseSync(sourcePath);
   try {
-    if (db.prepare('PRAGMA user_version').get()?.user_version !== 10) throw new Error('migration_required');
+    if (db.prepare('PRAGMA user_version').get()?.user_version !== currentStoreVersion) throw new Error('migration_required');
     if (flag !== '--again' && db.prepare("SELECT 1 FROM google_read_jobs WHERE kind = ? AND range_start = ? AND range_end = ? AND state = 'complete'").get(parsedKind.data, begin, end)) { console.log(`skipped: ${parsedKind.data} ${first}..${last} already read (use --again to repeat)`); return; }
     const id = await startGoogleReadJob(db, auth, parsedKind.data, begin, end);
     let pages = 0;

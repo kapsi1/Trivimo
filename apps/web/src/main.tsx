@@ -4,7 +4,7 @@ import { syncStatusSchema, useJson } from './api.ts';
 import { Tooltip } from './charts.tsx';
 import { DayView, type DayTab } from './day.tsx';
 import { Drawer, type DrawerState } from './details.tsx';
-import { addDays, warsawToday, whenOf } from './format.ts';
+import { addDays, warsawToday, whenOf , firstDay } from './format.ts';
 import { FoodView, WorkoutsView } from './placeholders.tsx';
 import { SettingsView } from './settings.tsx';
 import { SourcesView, type SourcesTab } from './sources.tsx';
@@ -23,7 +23,7 @@ function parseHash(hash: string): Route {
   const [view = '', param = ''] = hash.replace(/^#/, '').split('/');
   return { view: (views as readonly string[]).includes(view) ? view as View : 'dzien', param };
 }
-const validDay = (param: string, today: string) => /^\d{4}-\d{2}-\d{2}$/.test(param) && param >= '2026-01-01' && param <= today && !Number.isNaN(Date.parse(param)) ? param : today;
+const validDay = (param: string, today: string) => /^\d{4}-\d{2}-\d{2}$/.test(param) && param >= firstDay && param <= today && !Number.isNaN(Date.parse(param)) ? param : today;
 
 const icon = (path: ReactNode) => <svg viewBox="0 0 24 24" aria-hidden="true">{path}</svg>;
 const I = {
@@ -83,7 +83,7 @@ function Shell() {
     return () => { window.removeEventListener('hashchange', change); window.removeEventListener('beforeunload', unload); };
   }, []);
   const go = useCallback((hash: string) => { if (location.hash === `#${hash}`) return; location.hash = hash; }, []);
-  const setDay = (next: string) => { if (next < '2026-01-01' || next > warsawToday()) return; go(next === warsawToday() ? 'dzien' : `dzien/${next}`); };
+  const setDay = (next: string) => { if (next < firstDay || next > warsawToday()) return; go(next === warsawToday() ? 'dzien' : `dzien/${next}`); };
   const openDay = (next: string, tab: DayTab = 'przebieg') => { setDayTab(tab); setDrawer(null); setDay(next); if (route.view === 'dzien' && next === date) setRoute({ ...route }); };
 
   useEffect(() => {

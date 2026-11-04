@@ -1,6 +1,6 @@
 # Kontrakty danych nowej aplikacji
 
-Reguły docelowe, do implementacji i weryfikacji. Jedna wersjonowana definicja obowiązuje historię 2026 i kolejne dni. Źródłowe dane pozostają dostępne także wtedy, gdy nie kwalifikują się do porównywalnej tabeli.
+Reguły docelowe, do implementacji i weryfikacji. Jedna wersjonowana definicja obowiązuje historię 2026 i kolejne dni; od 2026-11-04 (decyzja użytkownika) także doby sprzed 2026 odczytane z API na żądanie, bez osobnego audytu tych lat. Źródłowe dane pozostają dostępne także wtedy, gdy nie kwalifikują się do porównywalnej tabeli.
 
 ## Oryginał, kopia, wynik i korekta
 
@@ -96,6 +96,19 @@ Kroki i dystans to wartość dobowa producenta (`dailyRollUp`, `all-sources`; dy
 Kroki i kalorie aktywne są dodatkowo czytane metodą `list` z `fields=dataPoints(dataSource,<pole>(interval(civilStartTime(date)))),nextPageToken` i `prettyPrint=false` (sprawdzono 2026-11-03 na koncie): odpowiedź zawiera tylko źródło i dzień cywilny każdego wpisu, ok. 200–250 bajtów na wpis, bez wartości. Źródło to `platform` (`FITBIT`, `HEALTH_CONNECT`), `application.packageName`, urządzenie i `recordingMethod`. Kolumna „Źródła” zlicza wpisy z najnowszego pełnego odczytu doby; dzień bez odczytu to „—”, odczyt bez wpisów to „brak wpisów”. Nazwy: `FITBIT` + urządzenie opaski to „Opaska …”, `FITBIT` + `MobileTrack` to telefon liczony przez aplikację Health, `HEALTH_CONNECT` + `com.google.android.apps.fitness` to Google Fit, `HEALTH_CONNECT` + `android` albo `com.android.healthconnect.phone` to krokomierz Androida. Źródło mówi, kto policzył wpis, nie tylko czym zmierzono; ten sam ruch bywa zapisany przez kilka źródeł, a agregaty producenta te repliki uzgadniają. Kalorii total nie da się listować, więc ich źródło dla starszego modelu (styczeń–kwiecień, prawdopodobnie Google Fit) pozostaje wnioskiem.
 
 Obserwacje 2026 (tylko liczby dób): do 2026-04 kroki tylko z Google Fit i Androida przez Health Connect; od 2026-05-07 opaska Charge 6 i MobileTrack, kalorie aktywne z obu; Google Fit znika w połowie maja i wraca we wrześniu–październiku; w październiku pojawiają się kalorie aktywne z Health Connect telefonu (24 doby), co dotyczy otwartej roli „Phone Health Connect”.
+
+### Historia sprzed 2026 (2026-11-04)
+
+Odczyt API wcześniejszych lat uruchamia użytkownik, wybierając datę początkową uzupełniania (najwcześniej 2000-01-01); automatyczne wykrywanie luk dotyczy nadal tylko dób od 2026-01-01. Sprawdzono 2026-11-04 tylko odczytem (liczby dób, bez wartości): dla konta użytkownika API zwraca kroki i dystans od ok. połowy 2023, kalorie total i masę od 2023–2024, bez kalorii aktywnych przed 2026; zapytania o wcześniejsze lata zwracają puste odpowiedzi. Pusta odpowiedź pokrywa dobę jako „odczytana, brak danych”, nie zero. Doby są kwalifikowane tymi samymi regułami (`google-energy-v1`, `google-activity-v1`, `google-body-v1`) na podstawie dowodów doby, więc brak aktywnych kcal i okien daje starszy lub nieustalony model, a nie wartość porównywalną z 2026. Progi tych reguł wyznaczono na danych 2026; ich trafność dla wcześniejszych urządzeń i modeli producenta jest niesprawdzona (audyt lat pozostaje w planie).
+
+### Reguła `csv-fill-v1` — import CSV z mapowaniem (2026-11-04)
+
+- Plik CSV (UTF-8, do 8 MiB, 200 000 wierszy, 256 kolumn) jest zachowany w bazie jako tekst ze skrótem SHA-256, razem z mapowaniem kolumn i wersją parsera `csv-mapped-v1`. Ten sam plik z tym samym mapowaniem nie jest zapisywany ponownie. Treść pliku jest daną niezaufaną.
+- Mapowanie wybiera użytkownik: kolumna i format daty (`RRRR-MM-DD`, `DD.MM.RRRR`, `DD/MM/RRRR`, `MM/DD/RRRR`, ISO 8601 z godziną), opcjonalna kolumna godziny, separator pola i dziesiętny oraz kolumna i jednostka każdej metryki. Data bez strefy jest dobą zapisaną w pliku; czas ISO ze strefą trafia do swojej doby warszawskiej. Doby przed 2000-01-01 i w przyszłości są odrzucane.
+- Jednostki są przeliczane dokładnie, na liczbach wymiernych: lb × 0,45359237, g ÷ 1000, mile × 1,609344, m ÷ 1000, kJ ÷ 4,184, ułamek × 100. Kroki muszą być liczbą całkowitą, tkanka tłuszczowa ≤ 100 %. Pusta komórka to brak wartości (nie zero); jawne 0 jest wartością. Nieczytelna komórka odrzuca tylko tę wartość, z numerem wiersza i powodem w podglądzie.
+- Masa i tkanka tłuszczowa: średnia unikalnych pomiarów doby, gdzie ta sama doba, godzina i dokładna wartość to jeden pomiar (także w różnych plikach). Kroki, dystans i kalorie: kilka wierszy jednej doby to domyślnie kopie (różne wartości = konflikt); sumowanie wymaga jawnego wyboru „części doby” w mapowaniu. Pliki, które podają różne sumy tej samej doby, dają konflikt, nie sumę ani wartość nowszego pliku.
+- CSV **uzupełnia tylko braki**: wartość trafia do snapshotu doby wyłącznie dla metryki, której projekcja Google ma stan `missing`. Wartość Google, także nieporównywalna, częściowa lub konfliktowa, nie jest zastępowana ani sumowana z CSV. Konflikt CSV daje stan `conflict` z uwagą „niejednoznaczne pomiary”. Snapshot zapisuje, które metryki i które importy go uzupełniły (`csv`), a widok oznacza takie komórki.
+- Wykluczenie i przywrócenie importu to wersjonowana decyzja; po niej doby importu są przeliczane. Doba, której wartości pochodziły wyłącznie z wykluczonego CSV, dostaje nową pustą rewizję (historia zachowana). Oryginał i wartości importu nie są usuwane.
 
 ### Pochodne prezentacyjne UI (2026-11-04)
 

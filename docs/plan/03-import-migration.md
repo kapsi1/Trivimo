@@ -32,7 +32,8 @@ Dotychczasowe sesje przypisano do jednego lokalnego konta zgodnie z potwierdzeni
 - [ ] Jeśli potrzebne, zaprojektować minimalny adapter Connect według [planu Android](08-sync-android.md). Zachować oryginalny `dataOrigin`, device/recordingMethod, czas/offset i rozróżnienie własnych importowanych kopii Health Sync. Nie traktować wszystkiego z pakietu Health Sync jako oryginału Fitbit.
 - [ ] Nie wyłączać integracji Google Health↔Connect tylko dlatego, że nowa aplikacja nie czyta Connect. Część danych telefonu może docierać do chmury właśnie tą drogą. Zmiana uprawnień dostawców jest osobną świadomą operacją.
 - [ ] Korekta 2026 najpierw mała próbka porównawcza, potem pełny backfill i raport luk. Starsze arkuszowe wyniki zdrowia nie są lepszym źródłem pomiaru niż udokumentowane oryginały.
-- [ ] **TODO:** audyt poprzednich lat po M1, z oceną zmian urządzeń, schematów i modeli. Nie rozszerzać automatycznie kwalifikacji 2026 na całą historię.
+- [ ] **TODO:** audyt poprzednich lat po M1, z oceną zmian urządzeń, schematów i modeli. Od 2026-11-04 odczyt API sprzed 2026 działa na żądanie i doby są kwalifikowane regułami 2026 (decyzja użytkownika, [kontrakty](../data-contracts.md#historia-sprzed-2026-2026-11-04)); audyt ma ocenić, czy progi tych reguł są trafne dla starszych lat. Nie odczytano jeszcze rzeczywistej historii do magazynu.
+- [ ] Import CSV z mapowaniem (`csv-fill-v1`) jest wdrożony i sprawdzony syntetycznie; brakuje próby na rzeczywistym pliku użytkownika, podglądu wartości przed zapisem (dziś tylko liczby i odrzucenia) i strumieniowania plików większych niż 8 MiB.
 
 ## Arkusze i zakończenie migracji
 

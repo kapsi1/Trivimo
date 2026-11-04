@@ -120,14 +120,15 @@ export function heartTrend(summaries: readonly HeartRateSummary[], from: string,
 }
 
 /**
- * Events on the time axis derived from the data, not hard-coded: days before 2026 are unimported history, runs of
+ * Events on the time axis derived from the data, not hard-coded: days before the first result are unimported history, runs of
  * basal-only calories are incomparable periods, and (with `firsts`, only when the rows cover the history since 2026)
  * the first day of the full calorie model and the first weighing.
  */
 export function axisEvents(rows: readonly DayRow[], key: MetricKey | 'hr', firsts: boolean): AxisEvent[] {
   const events: AxisEvent[] = [];
-  const first = rows[0]?.date, last = rows.at(-1)?.date;
-  if (first && first < '2026-01-01') events.push({ from: first, to: last && last < '2025-12-31' ? last : '2025-12-31', label: 'przed 2026: historia niezaimportowana' });
+  // days before the first day with any result: history not imported (or the producer has none)
+  const first = rows[0]?.date, firstData = rows.find((row) => row.snapshot)?.date;
+  if (first && firstData && first < firstData) events.push({ from: first, to: addDays(firstData, -1), label: 'przed pierwszymi danymi: historia niezaimportowana' });
   const energy = key === 'total_energy' || key === 'active_energy';
   if (energy) {
     let run: string[] = [];

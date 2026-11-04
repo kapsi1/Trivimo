@@ -37,7 +37,9 @@ export function savedWindows(db: DatabaseSync, kind: WindowJobKind, type: Window
 export function savedWindowsWith<T extends { start: number }>(db: DatabaseSync, kind: WindowJobKind, days: Day[], parse: (rawJson: string) => T[]): Map<string, T[]> {
   const claimed = new Map<string, T[]>();
   const pages = db.prepare('SELECT raw_json FROM google_read_pages WHERE job_id = ? ORDER BY page_number LIMIT 50');
-  for (const job of db.prepare("SELECT id, range_start, range_end FROM google_read_jobs WHERE kind = ? AND state = 'complete' ORDER BY created_at DESC, id LIMIT 500").all(kind)) {
+  if (days.length === 0) return claimed;
+  // only jobs that can cover one of the days, so reads of other years never push relevant ones past the limit
+  for (const job of db.prepare("SELECT id, range_start, range_end FROM google_read_jobs WHERE kind = ? AND state = 'complete' AND julianday(range_start) <= julianday(?) AND julianday(range_end) >= julianday(?) ORDER BY created_at DESC, id LIMIT 500").all(kind, new Date(days.at(-1)!.start).toISOString(), new Date(days[0]!.end).toISOString())) {
     const from = Date.parse(String(job.range_start)), to = Date.parse(String(job.range_end));
     const needed = days.filter((day) => !claimed.has(day.date) && from <= day.start && to >= day.end);
     if (needed.length === 0) continue;

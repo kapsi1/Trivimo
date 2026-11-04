@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { sourcePageSchema, type SourceKind, type SourcePage } from '../../../packages/contracts/source-records.ts';
 import { coverageSchema, post, useJson, type SyncStatus } from './api.ts';
-import { addDays, diffDays, MON, mondayOf, warsawToday, whenOf } from './format.ts';
+import { addDays, diffDays, firstDay, MON, mondayOf, warsawToday, whenOf } from './format.ts';
+import { Segmented } from './zoom.tsx';
+import { CsvImport } from './csv-import.tsx';
 
 export type SourcesTab = 'polaczenia' | 'pokrycie' | 'importy' | 'diagnostyka';
 const googleStatusSchema = z.discriminatedUnion('configured', [
@@ -24,8 +26,8 @@ export function syncText(status: SyncStatus | undefined): string {
 export function SourcesView({ tab, onTab, sync, onSyncChanged }: { tab: SourcesTab; onTab: (tab: SourcesTab) => void; sync: SyncStatus | undefined; onSyncChanged: () => void }) {
   const tabs: [SourcesTab, string][] = [['polaczenia', 'Połączenia'], ['pokrycie', 'Pokrycie historii'], ['importy', 'Importy plików'], ['diagnostyka', 'Diagnostyka']];
   const head = <div className="tabs" role="tablist" aria-label="Źródła danych">{tabs.map(([key, label]) => <button type="button" role="tab" key={key} aria-selected={tab === key} onClick={() => onTab(key)}>{label}</button>)}</div>;
-  if (tab === 'pokrycie') return <>{head}<Coverage /><section className="panel legacy"><GoogleBackfill /></section></>;
-  if (tab === 'importy') return <>{head}<section className="panel legacy"><TakeoutImport onComplete={() => undefined} /></section><section className="panel legacy"><SourceRecords /></section></>;
+  if (tab === 'pokrycie') return <>{head}<CoverageYears /><section className="panel legacy"><GoogleBackfill /></section></>;
+  if (tab === 'importy') return <>{head}<section className="panel legacy"><CsvImport /></section><section className="panel legacy"><TakeoutImport onComplete={() => undefined} /></section><section className="panel legacy"><SourceRecords /></section></>;
   if (tab === 'diagnostyka') return <>{head}<SyncKinds sync={sync} /><section className="panel legacy"><GoogleReadJobs /></section></>;
   return <>{head}<Connections sync={sync} onSyncChanged={onSyncChanged} onImports={() => onTab('importy')} /></>;
 }
@@ -74,9 +76,19 @@ function Connections({ sync, onSyncChanged, onImports }: { sync: SyncStatus | un
   </div>;
 }
 
+/** Year picker over the coverage calendar: the current year by default, earlier years after a history read. */
+function CoverageYears() {
+  const current = Number(warsawToday().slice(0, 4));
+  const [year, setYear] = useState(current);
+  const years: [number, string][] = Array.from({ length: Math.min(current - Number(firstDay.slice(0, 4)) + 1, 8) }, (_, index) => current - index).reverse().map((value) => [value, String(value)]);
+  return <><div className="toolbar"><Segmented label="Rok" items={years} value={year} onChange={setYear} />
+    <label className="check">inny rok <input type="number" min={Number(firstDay.slice(0, 4))} max={current} value={year} aria-label="Rok kalendarza pokrycia" style={{ width: '6em' }} onChange={(event) => { const value = Number(event.target.value); if (Number.isInteger(value) && value >= Number(firstDay.slice(0, 4)) && value <= current) setYear(value); }} /></label></div>
+    <Coverage year={year} /></>;
+}
+
 /** Calendar of the year's days covered by a complete read after the day ended, for every refreshed kind. */
-function Coverage() {
-  const coverage = useJson('/api/google/coverage', coverageSchema);
+function Coverage({ year: selected }: { year: number }) {
+  const coverage = useJson(`/api/google/coverage?year=${selected}`, coverageSchema);
   if (coverage.error) return <section className="panel"><p role="alert">Nie udało się odczytać pokrycia historii (magazyn niedostępny lub Google nie jest skonfigurowany).</p></section>;
   if (!coverage.data) return <section className="panel"><p>Ładowanie…</p></section>;
   const { days, kinds } = coverage.data, today = warsawToday(), year = coverage.data.from.slice(0, 4);
@@ -90,12 +102,12 @@ function Coverage() {
     const label = date === today ? 'w toku' : date > today ? 'przyszłość' : covered === undefined ? 'poza zakresem' : covered === kinds ? 'pokryte' : covered === 0 ? 'brak odczytu' : `pokryte ${covered} z ${kinds} rodzajów`;
     cells.push(<rect key={date} x={24 + week * (cs + gp)} y={14 + row * (cs + gp)} width={cs} height={cs} rx={2} fill={fill} stroke={date > today ? 'var(--line)' : 'none'}><title>{`${date} · ${label}`}</title></rect>);
   }
-  const gaps = days.filter((day) => day.covered < kinds).length;
+  const gaps = days.filter((day) => day.covered < kinds).length, covered = days.some((day) => day.covered > 0);
   return <section className="panel"><header><h3>Doby {year} pokryte odczytem po końcu doby</h3><div className="legend"><span><i style={{ background: 'color-mix(in srgb, var(--accent) 70%, transparent)' }} />wszystkie rodzaje</span><span><i style={{ background: 'var(--warn)' }} />część rodzajów</span><span><i style={{ background: 'var(--bad)' }} />brak odczytu</span><span><i style={{ border: '1px solid var(--line)' }} />przyszłość</span></div></header>
     <div className="heat"><svg viewBox={`0 0 ${W} ${14 + 7 * (cs + gp)}`} width={W} style={{ maxWidth: 'none', display: 'block' }}>
       {MON.map((month, index) => { const first = `${year}-${String(index + 1).padStart(2, '0')}-01`; return <text key={month} x={24 + Math.floor(diffDays(start, first) / 7) * (cs + gp)} y={9}>{month}</text>; })}
       {['pn', '', 'śr', '', 'pt', '', 'nd'].map((label, row) => <text key={row} x={0} y={14 + row * (cs + gp) + 10}>{label}</text>)}{cells}</svg></div>
-    <p className="sub" style={{ margin: '10px 0 0' }}>{gaps === 0 ? 'Wszystkie zakończone doby są pokryte.' : `Doby z luką: ${gaps}. Uzupełnianie poniżej działa w serwerze i przetrwa zamknięcie karty.`}</p></section>;
+    <p className="sub" style={{ margin: '10px 0 0' }}>{days.length === 0 ? 'Ten rok nie ma jeszcze zakończonych dób.' : gaps === 0 ? 'Wszystkie zakończone doby są pokryte.' : `Doby z luką: ${gaps}.${!covered && year < '2026' ? ' Lata przed 2026 nie są czytane automatycznie: wybierz w uzupełnianiu poniżej datę początkową z tego roku.' : ' Uzupełnianie poniżej działa w serwerze i przetrwa zamknięcie karty.'}`} Doba odczytana bez danych producenta też jest pokryta (brak, nie zero).</p></section>;
 }
 
 function SyncKinds({ sync }: { sync: SyncStatus | undefined }) {
@@ -126,6 +138,7 @@ const backfillStateText: Record<z.infer<typeof backfillSchema>['state'], string>
 function GoogleBackfill() {
   const [status, setStatus] = useState<z.infer<typeof backfillSchema> | null>(null);
   const [busy, setBusy] = useState(false); const [error, setError] = useState(false);
+  const [from, setFrom] = useState('2026-01-01');
   async function load() {
     const response = await fetch('/api/google/sync-status');
     if (!response.ok) throw new Error('Status');
@@ -141,22 +154,25 @@ function GoogleBackfill() {
   async function send(action: 'start' | 'stop') {
     setBusy(true); setError(false);
     try {
-      const response = await fetch('/api/google/backfill', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Trivimo-Request': '1' }, body: JSON.stringify({ action }) });
+      const response = await fetch('/api/google/backfill', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Trivimo-Request': '1' }, body: JSON.stringify(action === 'start' ? { action, from } : { action }) });
       if (!response.ok) throw new Error('Uzupełnianie');
       setStatus(backfillSchema.parse(await response.json()));
     } catch { setError(true); } finally { setBusy(false); }
   }
   const covered = status?.kinds.reduce((sum, item) => sum + item.covered, 0) ?? 0;
   const total = status?.kinds.reduce((sum, item) => sum + item.total, 0) ?? 0;
+  const yesterday = addDays(warsawToday(), -1);
   return <section><h3>Uzupełnianie historii</h3>
-    <p>Odczytuje z API zakończone doby od {status?.from ?? '2026-01-01'} do {status?.through ?? 'wczoraj'}, których nie pokrył jeszcze żaden pełny odczyt wykonany po końcu doby, w paczkach (okna 10 min po 13 dób, kalorie total po 14, listy źródeł po 7, masa i tkanka tłuszczowa po 30, pozostałe sumy po 90). Działa w serwerze, więc zamknięcie karty go nie przerywa; przy włączonym odświeżaniu automatycznym startuje samo, gdy zostają luki (także po restarcie serwera), a pokryte doby nie są czytane ponownie.</p>
+    <p>Odczytuje z API zakończone doby od wybranej daty (domyślnie {status?.from ?? '2026-01-01'}) do {status?.through ?? 'wczoraj'}, których nie pokrył jeszcze żaden pełny odczyt wykonany po końcu doby, w paczkach (okna 10 min po 13 dób, kalorie total po 14, listy źródeł po 7, masa i tkanka tłuszczowa po 30, pozostałe sumy po 90). Działa w serwerze, więc zamknięcie karty go nie przerywa; przy włączonym odświeżaniu automatycznym startuje samo, gdy zostają luki (także po restarcie serwera), a pokryte doby nie są czytane ponownie.</p>
     {error && <p role="alert">Nie udało się odczytać stanu lub zmienić uzupełniania.</p>}
     {status && <>
       <p role="status">{backfillStateText[status.state]}{status.code ? ` Kod: ${status.code}.` : ''}{status.retryAt ? ` Wstrzymane przez limit Google do ${status.retryAt}.` : ''}{status.current ? ` Bieżąca paczka: ${syncLabels[status.current.kind] ?? status.current.kind}, ${status.current.first} – ${status.current.last}.` : ''}{status.startedAt ? ` Odczyty w tym przebiegu: ${status.readsThisRun}.` : ''}</p>
       <p>Pokryte doby razem: {covered} z {total}{total > 0 ? ` (${Math.floor((covered / total) * 100)} %)` : ''}.</p>
       <ul>{status.kinds.map((item) => <li key={item.kind}>{syncLabels[item.kind] ?? item.kind}: <progress max={item.total} value={item.covered} aria-label={`${syncLabels[item.kind] ?? item.kind}: pokryte doby`} /> {item.covered} z {item.total}</li>)}</ul>
       {active ? <button type="button" disabled={busy || status.state === 'stopping'} onClick={() => void send('stop')}>Zatrzymaj po bieżącej paczce</button>
-        : <button type="button" disabled={busy || covered === total} onClick={() => void send('start')}>{status.startedAt || covered > 0 ? 'Wznów uzupełnianie' : 'Uzupełnij historię'}</button>}
+        : <><label>Od dnia <input type="date" min={firstDay} max={yesterday} value={from} disabled={busy} onChange={(event) => { if (event.target.value) setFrom(event.target.value); }} /></label>{' '}
+          <button type="button" disabled={busy || !from || from < firstDay || from > yesterday} onClick={() => void send('start')}>{status.from === from && (status.startedAt || covered > 0) ? 'Wznów uzupełnianie' : 'Uzupełnij historię'}</button>
+          <p className="sub">Starsze lata: wybierz wcześniejszą datę. Doby, dla których producent nie ma danych, zostaną odczytane jako puste i nie będą czytane ponownie; tabela pokaże je jako brak, nie zero. Doby sprzed 2026 są kwalifikowane tymi samymi regułami (wersja reguły w szczegółach dnia), bez osobnego audytu tych lat.</p></>}
     </>}
   </section>;
 }
@@ -194,7 +210,7 @@ function GoogleReadJobs() {
   }
   return <section><h3>Odczyt próbny</h3><p>Jedno zadanie obejmuje wybrany dzień i rodzaj pomiaru; masa i tłuszcz używają dnia warszawskiego, kroki, dystans i kalorie doby cywilnej producenta. Przygotowanie zapisuje zadanie; pobranie strony odczytuje jedną porcję danych Google. Odczyt próbny nie zmienia tabeli dni poza tym, że jego oryginały są brane pod uwagę przy kolejnym przeliczeniu; nie jest łączony z Takeout.</p>
     <label>Rodzaj <select value={kind} disabled={busy} onChange={(event) => setKind(event.target.value as typeof kind)}><optgroup label="Pomiary (doba warszawska)"><option value="weight">Masa ciała</option><option value="body-fat">Tkanka tłuszczowa</option></optgroup><optgroup label="Sumy dobowe (doba producenta)"><option value="steps">Kroki — suma doby</option><option value="distance">Dystans — suma doby</option><option value="total-calories">Kalorie total — suma doby (zawiera BMR)</option><option value="active-energy-burned">Kalorie aktywne — suma doby</option></optgroup><optgroup label="Okna 10 min (doba warszawska)"><option value="heart-rate-10m">Tętno — okna 10 min</option><option value="active-energy-10m">Kalorie aktywne — okna 10 min</option><option value="total-calories-10m">Kalorie total — okna 10 min</option><option value="steps-10m">Kroki — okna 10 min</option><option value="distance-10m">Dystans — okna 10 min</option></optgroup></select></label>{' '}
-    <label>Data w Warszawie <input type="date" min="2026-01-01" max="9998-12-31" value={date} disabled={busy} onChange={(event) => setDate(event.target.value)} /></label>{' '}
+    <label>Data w Warszawie <input type="date" min={firstDay} max="9998-12-31" value={date} disabled={busy} onChange={(event) => setDate(event.target.value)} /></label>{' '}
     {daily && <><label>Do dnia (włącznie, opcjonalnie; do {kind === 'total-calories' ? 14 : 90} dób) <input type="date" min={date} max="9998-12-31" value={lastDate} disabled={busy} onChange={(event) => setLastDate(event.target.value)} /></label>{' '}</>}
     <button type="button" disabled={busy || !date || !jobs || rangeInvalid} onClick={() => void run('/api/google/jobs', daily && lastDate ? { kind, start: date, end: nextCivilDay(lastDate) } : { kind, date })}>Przygotuj zadanie</button>
     {message && <p role="status">{message}</p>}

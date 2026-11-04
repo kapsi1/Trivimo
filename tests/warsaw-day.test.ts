@@ -11,7 +11,8 @@ test('dzień warszawski respektuje przejścia DST i przedział półotwarty', ()
 
 test('sprawdza datę i zakres przed użyciem bazy stref', () => {
   assert.throws(() => warsawDay('2026-02-29'));
-  assert.throws(() => warsawDay('2025-12-31'));
+  assert.throws(() => warsawDay('1999-12-31'));
+  assert.deepEqual(warsawDay('2025-12-31'), { start: '2025-12-30T23:00:00.000Z', end: '2025-12-31T23:00:00.000Z' });
   assert.throws(() => warsawDay('2026-13-01'));
   assert.equal(warsawDay('2028-02-29').end, warsawDay('2028-03-01').start);
 });

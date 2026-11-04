@@ -18,7 +18,7 @@ test('REST tworzy zadanie dla doby warszawskiej i zachowuje wcześniejszy format
     assert.equal((await post({ kind: 'weight', date: '2026-03-29' })).status, 200);
     assert.equal((await post({ kind: 'body-fat', date: '2026-10-25' })).status, 200);
     assert.equal((await post({ kind: 'weight', start: '2026-01-01T00:00:00Z', end: '2026-01-02T00:00:00Z' })).status, 200);
-    assert.equal((await post({ kind: 'weight', date: '2025-12-31' })).status, 400);
+    assert.equal((await post({ kind: 'weight', date: '1999-12-31' })).status, 400);
     assert.deepEqual(calls, [
       ['weight', '2026-03-28T23:00:00.000Z', '2026-03-29T22:00:00.000Z'],
       ['body-fat', '2026-10-24T22:00:00.000Z', '2026-10-25T23:00:00.000Z'],

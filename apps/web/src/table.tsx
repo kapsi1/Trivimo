@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { bandRangeSchema, daySourcesSchema, groups, metricOf, quality, rangeSchema, sourceName, useJson, type DayRow, type DaySources, type Group, type MetricKey } from './api.ts';
 import { meanValid } from './derive.ts';
 import { StatusChip, type DrawerState } from './details.tsx';
-import { addDays, dow, fmtD, formatRational, isoWeek, maxDate, mondayOf, nf, warsawToday, WDS } from './format.ts';
+import { addDays, dow, fmtD, formatRational, isoWeek, maxDate, mondayOf, nf, warsawToday, WDS , firstDay } from './format.ts';
 import { compareDailyRows } from './sort-days.ts';
 import { Segmented } from './zoom.tsx';
 
@@ -79,7 +79,7 @@ function sourcesText(day: DaySources | undefined): { short: string; detail: stri
 
 const columnGroups: [Group, MetricKey[]][] = [['body', ['weight', 'body_fat']], ['activity', ['steps', 'distance']], ['energy', ['total_energy', 'active_energy']]];
 export function TableView({ from, to, cols, onCols, onDrawer, onOpenDay }: { from: string; to: string; cols: Columns; onCols: (cols: Partial<Columns>) => void; onDrawer: (state: DrawerState) => void; onOpenDay: (date: string) => void }) {
-  const today = warsawToday(), read = maxDate('2026-01-01', from), readable = to >= '2026-01-01';
+  const today = warsawToday(), read = maxDate(firstDay, from), readable = to >= firstDay;
   const [onlyNotes, setOnlyNotes] = useState(false);
   const [sort, setSort] = useState<{ key: 'date' | MetricKey; desc: boolean }>({ key: 'date', desc: true });
   const result = useJson(`/api/day-range?from=${from}&to=${to}`, rangeSchema);
@@ -112,7 +112,7 @@ export function TableView({ from, to, cols, onCols, onDrawer, onOpenDay }: { fro
     body.push(<tr key={row.date} className={weekend ? 'we' : ''}>
       <td className="date"><span className="wd">{WDS[dow(row.date)]}</span>{row.date}{row.date === today && <> <span className="chip prov">w toku</span></>}</td>
       {shown.flatMap(([, keys]) => keys.map((key) => { const metric = metricOf(key), value = row.snapshot?.metrics[key];
-        return <td key={key}><button type="button" className={`cellbtn ${value?.value ? value.status === 'provisional' ? 'v-prov' : '' : 'v-none'}`} aria-label={`${metric.label}, ${row.date}: ${value ? quality[value.status] : 'brak obliczonego wyniku'}`} onClick={() => onDrawer({ type: 'cell', date: row.date, key })}>{value?.status !== 'provisional' && <StatusChip value={value} compact />}{value?.value ? formatRational(value.value, metric.decimals) : '—'}</button></td>; }))}
+        return <td key={key}><button type="button" className={`cellbtn ${value?.value ? value.status === 'provisional' ? 'v-prov' : '' : 'v-none'}`} aria-label={`${metric.label}, ${row.date}: ${value ? quality[value.status] : 'brak obliczonego wyniku'}`} onClick={() => onDrawer({ type: 'cell', date: row.date, key })}>{value?.status !== 'provisional' && <StatusChip value={value} compact />}{value?.value ? formatRational(value.value, metric.decimals) : '—'}{row.snapshot?.csv?.metrics.includes(key) && <sup className="faint" title="Wartość z importu CSV (brak wartości Google tej doby)"> csv</sup>}</button></td>; }))}
       {cols.food && <td className="food-c" aria-label="M3">·</td>}
       {cols.ctx && <><td>{share?.heartRate ? <span className="bandbar" title={`${share.heartRate.windows} z ${share.totalWindows} okien 10-minutowych z tętnem`}>{nf(share.heartRate.windows / share.totalWindows * 100)} %<i><b style={{ width: `${share.heartRate.windows / share.totalWindows * 100}%` }} /></i></span> : <span className="v-none">—</span>}</td>
         <td className="l src-c" title={src.detail}>{src.short}</td></>}
