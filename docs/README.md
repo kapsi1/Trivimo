@@ -1,11 +1,11 @@
 # Indeks dokumentacji
 
-Stan: rozpoczęte P0/M1; działa przykład syntetyczny i lokalny import oryginałów Google Health, z podglądem surowych wierszy sześciu typów, bez połączenia z kontem i wyników dziennych.
+Stan (2026-11-04): M1 w końcowej fazie — sześć metryk z Google Health API zakwalifikowanych od 2026-01-01, tabela dni, trendy, źródła, odświeżanie z uzupełnianiem historii, kopia i odtworzenie; otwarte punkty w [MVP](plan/01-foundation-mvp.md).
 
 | Potrzeba | Dokument |
 | --- | --- |
 | Uruchomienie i wykonane kontrole | [Środowisko](development.md), [Raport testów](test-results.md) |
-| Ukończone próby P0 | [P0 — wykonane](completed/01-p0-probes.md) |
+| Ukończone próby P0 i zakres M1 | [P0 — wykonane](completed/01-p0-probes.md), [M1 — wykonane](completed/02-m1.md) |
 | Cel, pierwszy zakres i start agenta | [README](../README.md), [AGENTS](../AGENTS.md) |
 | Moduły, baza, proponowany stos i umiejscowienie serwera | [Architektura](architecture.md) |
 | Definicje metryk, pochodzenie, kalorie i uwagi | [Kontrakty danych](data-contracts.md) |

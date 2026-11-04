@@ -20,6 +20,8 @@
 
 2026-11-03 (zlecone przez użytkownika, wdrożone jako reguła `google-activity-v1`): kroki i dystans w tabeli to wartość dobowa producenta (`dailyRollUp`, `all-sources`). Polityka źródeł opaska/telefon to „uzgodnienie producenta”: na danych 2026 wartość równa się opasce w dobach z opaską, a w pozostałych jednemu źródłu telefonu, i nigdy nie jest sumą kopii (zob. kontrakty). Telefon nie jest wykluczany. Masa i tkanka tłuszczowa pozostają „Nieobsługiwane”.
 
+2026-11-04: porównanie wyników z aplikacją Health (kryterium odbioru M1 i porównanie kształtu wykresów) jest na razie pominięte; agent nie podejmuje go sam, tylko na wyraźną prośbę użytkownika. Do tego czasu nie deklarujemy zgodności z UI Health.
+
 2026-11-04 (zlecone przez użytkownika, wdrożone jako reguła `google-body-v1`): masa i tkanka tłuszczowa w tabeli to średnia unikalnych pomiarów doby warszawskiej z Google Health API. Takeout nie jest łączony z API: oba mają te same pomiary 2026 (od kwietnia), więc API wystarcza, a Takeout służy do porównania. Kopie tego samego ważenia z różnych aplikacji (Fitbit i Google Fit przez Health Connect) są liczone raz. Wszystkie sześć metryk M1 ma teraz kwalifikację z danych Google.
 
 2026-11-03: BMR nie jest dostępny dla tego konta. W API typ `basal-metabolic-rate` nie istnieje (400), a `basal-energy-burned` obsługuje tylko list/reconcile i zwraca pustą odpowiedź; Takeout nie ma pliku BMR. Różnica total − aktywne nie jest BMR (zmienia się między dobami o kilkadziesiąt procent). Ewentualne wyświetlanie BMR wymaga osobnej, nazwanej i wersjonowanej metryki wyliczanej (np. ze stawki okien bez kroków i bez aktywnych kcal) i decyzji użytkownika.
