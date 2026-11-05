@@ -278,3 +278,14 @@ export function readCanonicalDay(db: DatabaseSync, date: string) {
   return result;
 }
 
+
+const earliestKeys = ['weight', 'body_fat', 'steps', 'distance', 'total_energy', 'active_energy'] as const;
+/**
+ * Earliest day with a stored value (any status, including a confirmed zero; never a missing one) per metric, from the
+ * newest revision of each day. One pass over the snapshots in SQL; null when the metric has no value at all.
+ */
+export function readEarliestMetricDays(db: DatabaseSync): Record<(typeof earliestKeys)[number], string | null> {
+  const columns = earliestKeys.map((key) => `MIN(CASE WHEN json_extract(payload, '$.metrics.${key}.value') IS NOT NULL THEN day END) AS ${key}`).join(', ');
+  const row = db.prepare(`SELECT ${columns} FROM daily_snapshots s WHERE revision = (SELECT MAX(revision) FROM daily_snapshots t WHERE t.day = s.day)`).get() ?? {};
+  return Object.fromEntries(earliestKeys.map((key) => [key, typeof row[key] === 'string' ? row[key] : null])) as Record<(typeof earliestKeys)[number], string | null>;
+}

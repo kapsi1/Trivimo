@@ -141,7 +141,7 @@ textarea { width: 100%; min-height: 84px; resize: vertical; line-height: 1.45; }
 .rowend { display: flex; justify-content: flex-end; gap: 8px; align-items: center; margin-top: 8px; color: var(--muted); font-size: 12px; }
 
 svg.chart { display: block; width: 100%; height: auto; overflow: visible; }
-svg text { font: 10.5px var(--font-data); fill: var(--faint); }
+svg text { font: 12px var(--font-data); fill: var(--muted); }
 svg .grid { stroke: var(--line); stroke-width: 1; }
 svg .axis { stroke: var(--line-strong); stroke-width: 1; }
 

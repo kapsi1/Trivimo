@@ -122,7 +122,7 @@ export function heartTrend(summaries: readonly HeartRateSummary[], from: string,
 /**
  * Events on the time axis derived from the data, not hard-coded: days before the first result are unimported history, runs of
  * basal-only calories are incomparable periods, and (with `firsts`, only when the rows cover the history since 2026)
- * the first day of the full calorie model and the first weighing.
+ * the first day of the full calorie model.
  */
 export function axisEvents(rows: readonly DayRow[], key: MetricKey | 'hr', firsts: boolean): AxisEvent[] {
   const events: AxisEvent[] = [];
@@ -137,13 +137,9 @@ export function axisEvents(rows: readonly DayRow[], key: MetricKey | 'hr', first
     flush();
   }
   if (firsts) {
-    if (energy || key === 'steps' || key === 'distance') {
+    if (energy) {
       const index = rows.findIndex((row) => row.snapshot?.energy?.model === 'current');
       if (index > 0 && rows.slice(0, index).some((row) => row.snapshot?.energy && row.snapshot.energy.model !== 'current')) events.push({ at: rows[index]!.date, label: 'pełny model kalorii' });
-    }
-    if (key === 'weight' || key === 'body_fat') {
-      const index = rows.findIndex((row) => row.snapshot?.metrics[key].value);
-      if (index > 0 && rows.slice(0, index).some((row) => row.snapshot)) events.push({ at: rows[index]!.date, label: 'pierwsze ważenie' });
     }
   }
   return events;

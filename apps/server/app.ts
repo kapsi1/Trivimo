@@ -4,7 +4,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { listDays } from '../../packages/storage/days.ts';
 import { sourceKindSchema } from '../../packages/contracts/source-records.ts';
 import { listSourceRecords } from '../../packages/storage/source-records.ts';
-import { currentStoreVersion, readCanonicalDay, storeHas } from '../../packages/storage/canonical-days.ts';
+import { currentStoreVersion, readCanonicalDay, readEarliestMetricDays, storeHas } from '../../packages/storage/canonical-days.ts';
 import { readDaySourcesRange } from '../../packages/storage/google-day-sources.ts';
 import { readUserNote } from '../../packages/storage/user-notes.ts';
 import { readBodySourceDay } from '../../packages/storage/body-source-day.ts';
@@ -20,6 +20,8 @@ import { firstSupportedYear, warsawDay } from '../../packages/domain/warsaw-day.
 import { unassignedSessions } from '../../packages/storage/source-accounts.ts';
 import { userNoteInputSchema } from '../../packages/contracts/day-snapshot.ts';
 import { z } from 'zod';
+const warsawDayFormat = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Warsaw', year: 'numeric', month: '2-digit', day: '2-digit' });
+const warsawDayOf = (iso: string) => warsawDayFormat.format(new Date(iso));
 import type { TakeoutService } from './takeout-service.ts';
 import type { GoogleAuth } from './google-auth.ts';
 import type { GoogleReadService } from './google-read-service.ts';
@@ -273,6 +275,20 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
         };
         response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
         response.end(JSON.stringify(result));
+      } catch { response.writeHead(500, { 'Cache-Control': 'no-store' }).end(); }
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/api/earliest-days') {
+      try {
+        const source = typeof sourceDb === 'function' ? sourceDb() : sourceDb;
+        const version = source?.prepare('PRAGMA user_version').get()?.user_version;
+        let result: object = { state: 'not_ready' };
+        if (source && storeHas(version, 2)) {
+          // heart rate has no daily snapshot: the earliest completed read of its windows (when reads began, not the first measurement)
+          const read = storeHas(version, 4) ? source.prepare("SELECT MIN(range_start) AS start FROM google_read_jobs WHERE kind = 'heart-rate-10m' AND state = 'complete'").get()?.start : null;
+          result = { state: 'ready', metrics: readEarliestMetricDays(source), heartRateRead: typeof read === 'string' ? warsawDayOf(read) : null };
+        }
+        response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }).end(JSON.stringify(result));
       } catch { response.writeHead(500, { 'Cache-Control': 'no-store' }).end(); }
       return;
     }

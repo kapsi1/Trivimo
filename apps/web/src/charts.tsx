@@ -173,18 +173,27 @@ function frame(points: { date: string }[], agg: 'day' | 'week', W: number, H: nu
 function AxisDecor({ f, points, events, highlight }: { f: Frame; points: { date: string }[]; events: AxisEvent[]; highlight?: string }) {
   const { L, T, H, B, step, n, W } = f;
   const every = n <= 31 ? Math.max(1, Math.ceil(n * 48 / W)) : 0;
+  // Month labels: keep at least `gap` units between them. Thin out to every 2nd/3rd/4th/6th month, then to January only, then to every k-th year.
+  const gap = 54, months = Math.max(1, (f.agg === 'week' ? n * 7 : n) / 30.4), need = Math.ceil(gap * months / Math.max(1, W - L));
+  const monthStep = [1, 2, 3, 4, 6, 12].find((candidate) => candidate >= need) ?? 12, yearStep = need > 12 ? Math.ceil(need / 12) : 1;
+  const monthShown = (date: string) => { const year = Number(date.slice(0, 4)), month = Number(date.slice(5, 7)); return monthStep < 12 ? (month - 1) % monthStep === 0 : month === 1 && year % yearStep === 0; };
+  // Event labels sit on one line above the plot (a period's label is right-aligned to the end of its band): each is cut at the start of the next one so they never overlap.
+  const glyph = 7.2;
+  const placed = events.flatMap((event, k) => {
+    if (event.from && event.to && event.to >= f.first && event.from <= f.last) {
+      const a = Math.max(0, f.idx(event.from < f.first ? f.first : event.from)), b = Math.min(n - 1, f.idx(event.to > f.last ? f.last : event.to));
+      if (b < a) return [];
+      const right = L + (b + 1) * step - 4; return [{ key: k, x: Math.max(L + 4, right - event.label.length * glyph), text: event.label, node: <rect x={L + a * step} y={T} width={(b - a + 1) * step} height={H - B - T} fill="url(#hatch)" opacity={0.7} /> }];
+    }
+    if (event.at && event.at >= f.first && event.at <= f.last) { const xi = L + f.idx(event.at) * step; return [{ key: k, x: xi + 4, text: event.label, node: <line x1={xi} x2={xi} y1={T} y2={H - B} stroke="var(--muted)" strokeDasharray="3 3" /> }]; }
+    return [];
+  }).sort((a, b) => a.x - b.x);
+  const labelled = placed.map((item, i) => ({ ...item, room: (placed[i + 1]?.x ?? W) - item.x - 8 }));
   return <>
     {highlight && f.idx(highlight) >= 0 && f.idx(highlight) < n && <rect x={L + f.idx(highlight) * step} y={T} width={step} height={H - B - T} fill="color-mix(in srgb, var(--accent) 16%, transparent)" />}
-    {events.map((event, k) => {
-      if (event.from && event.to && event.to >= f.first && event.from <= f.last) {
-        const a = Math.max(0, f.idx(event.from < f.first ? f.first : event.from)), b = Math.min(n - 1, f.idx(event.to > f.last ? f.last : event.to));
-        if (b < a) return null;
-        return <g key={k}><rect x={L + a * step} y={T} width={(b - a + 1) * step} height={H - B - T} fill="url(#hatch)" opacity={0.7} /><text x={L + a * step + 4} y={T - 3}>{event.label}</text></g>;
-      }
-      if (event.at && event.at >= f.first && event.at <= f.last) { const xi = L + f.idx(event.at) * step; return <g key={k}><line x1={xi} x2={xi} y1={T} y2={H - B} stroke="var(--muted)" strokeDasharray="3 3" /><text x={xi + 4} y={T - 3}>{event.label}</text></g>; }
-      return null;
-    })}
+    {labelled.map(({ key, node, text, x, room }) => <g key={key}>{node}{room >= 4 * glyph && <text x={x} y={T - 3}>{text.length * glyph <= room ? text : `${text.slice(0, Math.max(1, Math.floor(room / glyph) - 1))}…`}</text>}</g>)}
     {points.map((point, i) => {
+      if (!every && !monthShown(point.date)) return null;
       const show = every ? i % every === (n - 1) % every : f.agg === 'week' ? Number(point.date.slice(8)) <= 7 : point.date.slice(8) === '01';
       return show ? <text key={point.date} x={f.x(i)} y={H - 5} textAnchor="middle">{every ? fmtD(point.date) : point.date.slice(5, 7) === '01' ? point.date.slice(0, 4) : MON[Number(point.date.slice(5, 7)) - 1]}</text> : null;
     })}

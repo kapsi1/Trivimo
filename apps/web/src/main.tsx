@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { syncStatusSchema, useJson } from './api.ts';
+import { earliestOf, earliestSchema, metrics, syncStatusSchema, useJson } from './api.ts';
 import { Tooltip } from './charts.tsx';
 import { DayView, type DayTab } from './day.tsx';
 import { Drawer, type DrawerState } from './details.tsx';
@@ -10,8 +10,8 @@ import { BackfillNotice } from './notice.tsx';
 import { FoodView, WorkoutsView, type FoodTab } from './placeholders.tsx';
 import { SettingsView } from './settings.tsx';
 import { SourcesView, type SourcesTab } from './sources.tsx';
-import { TableRange, TableView, tableBounds, useTablePrefs } from './table.tsx';
-import { aggregations, trendRanges, TrendsView, type TrendLength } from './trends-view.tsx';
+import { TableRange, TableView, tableBounds, tableMetricKeys, useTablePrefs } from './table.tsx';
+import { aggregations, TrendsView } from './trends-view.tsx';
 import { DateControl, Segmented } from './zoom.tsx';
 import './fonts.css';
 import './style.css';
@@ -62,9 +62,12 @@ function App() {
 
 function Shell() {
   const [route, setRoute] = useState(() => parseHash(location.hash));
-  const [trendLength, setTrendLength] = useState<TrendLength>(90);
   const [trendAgg, setTrendAgg] = useState<'day' | 'week'>('day');
+  // one period shared by the table and the trends
   const [prefs, setPrefs] = useTablePrefs();
+  const trendPrefs = prefs, setTrendPrefs = setPrefs;
+  const earliestAll = useJson(prefs.range < 0 || trendPrefs.range < 0 ? '/api/earliest-days' : null, earliestSchema);
+  const tableEarliest = earliestOf(earliestAll, tableMetricKeys(prefs.cols)), trendEarliest = earliestOf(earliestAll, [...metrics.map((metric) => metric.key), 'hr']);
   const [drawer, setDrawer] = useState<DrawerState | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [syncTick, setSyncTick] = useState(0);
@@ -119,13 +122,13 @@ function Shell() {
 
   let context: ReactNode = null;
   if (route.view === 'dzien') context = <DateControl date={date} onDate={setDay} />;
-  if (route.view === 'tabela') context = <TableRange prefs={prefs} onChange={setPrefs} />;
-  if (route.view === 'trendy') context = <><Segmented label="Okres" items={trendRanges} value={trendLength} onChange={setTrendLength} /><Segmented className="hide-sm" label="Agregacja" items={aggregations} value={trendAgg} onChange={setTrendAgg} /></>;
+  if (route.view === 'tabela') context = <TableRange prefs={prefs} earliest={tableEarliest} onChange={setPrefs} />;
+  if (route.view === 'trendy') context = <><TableRange prefs={trendPrefs} earliest={trendEarliest} onChange={setTrendPrefs} /><Segmented className="hide-sm" label="Agregacja" items={aggregations} value={trendAgg} onChange={setTrendAgg} /></>;
 
   let content: ReactNode;
   if (route.view === 'dzien') content = <DayView date={date} tab={dayTab} onTab={(tab) => setDay(date, tab)} onDate={(next) => setDay(next)} sync={syncData} onDirty={(value) => { dirty.current = value; }} onDrawer={setDrawer} />;
-  else if (route.view === 'tabela') content = <TableView {...tableBounds(prefs)} cols={prefs.cols} onCols={(cols) => setPrefs({ cols: { ...prefs.cols, ...cols } })} onDrawer={setDrawer} onOpenDay={(next) => openDay(next)} />;
-  else if (route.view === 'trendy') content = <TrendsView length={trendLength} agg={trendAgg} onLength={setTrendLength} onAgg={setTrendAgg} onDrawer={setDrawer} />;
+  else if (route.view === 'tabela') content = <TableView {...tableBounds(prefs, tableEarliest)} cols={prefs.cols} onCols={(cols) => setPrefs({ cols: { ...prefs.cols, ...cols } })} onDrawer={setDrawer} onOpenDay={(next) => openDay(next)} />;
+  else if (route.view === 'trendy') content = <TrendsView earliest={earliestAll} prefs={trendPrefs} agg={trendAgg} onPrefs={setTrendPrefs} onAgg={setTrendAgg} onDrawer={setDrawer} />;
   else if (route.view === 'treningi') content = <WorkoutsView />;
   else if (route.view === 'jedzenie') content = <FoodView tab={foodTab} onTab={(tab) => go(tabHash('jedzenie', tab, foodTabs))} />;
   else if (route.view === 'zrodla') content = <SourcesView tab={srcTab} onTab={(tab) => go(tabHash('zrodla', tab, srcTabs))} sync={syncData} onSyncChanged={() => setSyncTick((value) => value + 1)} />;
