@@ -79,6 +79,7 @@ export function dayHours(date: string, series: Partial<Record<HourKey, Series>>,
       total: byKey('total', index), active: byKey('active', index), steps: byKey('steps', index), distance: byKey('distance', index),
       fc: rate !== null && futureMs > 0 ? rate * futureMs / 3600000 : null, future: start >= asOf, now: start < asOf && asOf < end,
       hrWindows: heart ? inHour.length : null, hrAvg: inHour.length ? inHour.reduce((sum, window) => sum + window.avg, 0) / inHour.length : null,
+      hrMin: inHour.length ? Math.min(...inHour.map((window) => window.min)) : null, hrMax: inHour.length ? Math.max(...inHour.map((window) => window.max)) : null,
     });
   }
   // the same day in ten-minute windows (the resolution of the saved series), for the charts

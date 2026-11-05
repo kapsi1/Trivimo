@@ -42,44 +42,8 @@ export function Zoomable({ label, onZoom, children, style }: { label: string; on
   return <div className="zoomable" role="button" tabIndex={0} aria-label={`Powiększ wykres: ${label}`} style={style} onClick={onZoom} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onZoom(); } }}>{children}</div>;
 }
 
-export interface SparkPoint { value: number | null; provisional: boolean; tip: string[] }
-/** 14 days: bars for totals, a line joining measured days for measurements; the last bar can carry a dashed forecast. */
-export function Sparkline({ points, form, color, forecast }: { points: SparkPoint[]; form: 'bar' | 'line'; color: string; forecast?: { now: number; total: number } | null }) {
-  const W = 140, H = 34, n = points.length, step = (W - 8) / Math.max(1, n - 1), x = (i: number) => 4 + i * step;
-  const hits = points.map((point, i) => <rect key={`h${i}`} className="hit" x={x(i) - step / 2} y={0} width={step} height={H} {...tip(point.tip)} />);
-  const values = points.flatMap((point) => point.value === null ? [] : [point.value]); if (forecast) values.push(forecast.total);
-  if (!values.length) return <svg viewBox={`0 0 ${W} ${H}`} aria-hidden="true"><line x1={0} x2={W} y1={30} y2={30} className="axis" strokeDasharray="2 3" />{hits}</svg>;
-  const max = Math.max(...values), min = form === 'bar' ? 0 : Math.min(...values), span = max - min || 1, y = (v: number) => 30 - ((v - min) / span) * 26;
-  let marks: ReactNode;
-  if (form === 'bar') {
-    marks = <>{points.map((point, i) => point.value !== null ? <rect key={i} x={x(i) - 3.5} y={y(point.value)} width={7} height={Math.max(1, 30 - y(point.value))} rx={1.5} fill={color} opacity={point.provisional ? 0.45 : i === n - 1 ? 1 : 0.55} /> : <rect key={i} x={x(i) - 3.5} y={29} width={7} height={1} fill="var(--faint)" />)}
-      {forecast && <rect x={x(n - 1) - 3} y={y(forecast.total)} width={6} height={Math.max(0, y(forecast.now) - y(forecast.total))} fill="none" stroke={color} strokeWidth={1} strokeDasharray="2 1.5" />}</>;
-  } else {
-    const path = points.reduce((acc, point, i) => point.value === null ? acc : `${acc}${acc ? 'L' : 'M'}${x(i).toFixed(1)},${y(point.value).toFixed(1)}`, '');
-    const last = points.map((point, i) => point.value !== null ? i : -1).filter((i) => i >= 0).pop();
-    marks = <><path d={path} fill="none" stroke={color} strokeWidth={1.6} strokeLinejoin="round" />{points.map((point, i) => point.value === null ? null : <circle key={i} cx={x(i)} cy={y(point.value)} r={i === last ? 2.8 : 1.6} fill={color} />)}</>;
-  }
-  return <svg viewBox={`0 0 ${W} ${H}`} aria-hidden="true">{marks}{hits}</svg>;
-}
-
-export interface HrPoint { avg: number | null; min: number | null; max: number | null; tip: string[] }
-/** 14 days of heart rate: a min–max stroke per day and a line of the day's window mean. */
-export function HrSpark({ points }: { points: HrPoint[] }) {
-  const W = 140, H = 34, n = points.length, step = (W - 8) / Math.max(1, n - 1), x = (i: number) => 4 + i * step;
-  const hits = points.map((point, i) => <rect key={`h${i}`} className="hit" x={x(i) - step / 2} y={0} width={step} height={H} {...tip(point.tip)} />);
-  const ok = points.filter((point) => point.avg !== null);
-  if (!ok.length) return <svg viewBox={`0 0 ${W} ${H}`} aria-hidden="true"><line x1={0} x2={W} y1={30} y2={30} className="axis" strokeDasharray="2 3" />{hits}</svg>;
-  const lo = Math.min(...ok.map((point) => point.min!)), hi = Math.max(...ok.map((point) => point.max!)), y = (v: number) => 31 - ((v - lo) / (hi - lo || 1)) * 28;
-  const path = points.reduce((acc, point, i) => point.avg === null ? acc : `${acc}${acc ? 'L' : 'M'}${x(i).toFixed(1)},${y(point.avg).toFixed(1)}`, '');
-  const last = points.map((point, i) => point.avg !== null ? i : -1).filter((i) => i >= 0).pop();
-  return <svg viewBox={`0 0 ${W} ${H}`} aria-hidden="true">
-    {points.map((point, i) => point.avg === null ? null : <line key={i} x1={x(i)} x2={x(i)} y1={y(point.max!)} y2={y(point.min!)} stroke="color-mix(in srgb, var(--c-band) 35%, transparent)" strokeWidth={3} strokeLinecap="round" />)}
-    <path d={path} fill="none" stroke="var(--c-band)" strokeWidth={1.6} strokeLinejoin="round" />
-    {points.map((point, i) => point.avg === null ? null : <circle key={`c${i}`} cx={x(i)} cy={y(point.avg)} r={i === last ? 2.8 : 1.6} fill="var(--c-band)" />)}{hits}</svg>;
-}
-
 export type HourKey = 'total' | 'active' | 'steps' | 'distance';
-export interface HourPoint { start: number; label: string; range: string; total: number | null; active: number | null; steps: number | null; distance: number | null; fc: number | null; now: boolean; future: boolean; hrWindows: number | null; hrAvg: number | null }
+export interface HourPoint { start: number; label: string; range: string; total: number | null; active: number | null; steps: number | null; distance: number | null; fc: number | null; now: boolean; future: boolean; hrWindows: number | null; hrAvg: number | null; hrMin: number | null; hrMax: number | null }
 export interface HrWindow { index: number; label: string; avg: number; min: number; max: number }
 const hourUnits: Record<HourKey, string> = { total: 'kcal', active: 'kcal', steps: 'kroków', distance: 'km' };
 /** Tooltip lines about whose estimate the calories are: phone, band or mixed, from the share of windows with heart rate. */

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { earliestOf, earliestSchema, metrics, syncStatusSchema, useJson, type MetricKey } from './api.ts';
+import { earliestOf, earliestSchema, metrics, syncStatusSchema, useJson } from './api.ts';
 import { Tooltip } from './charts.tsx';
 import { DayView, type DayTab } from './day.tsx';
 import { addDays, fmtDL, timeOf, warsawToday, whenOf , firstDay } from './format.ts';
@@ -18,7 +18,7 @@ import './style.css';
 const views = ['dzien', 'tabela', 'trendy', 'treningi', 'jedzenie', 'zrodla', 'ustawienia'] as const;
 type View = (typeof views)[number];
 const titles: Record<View, string> = { dzien: 'Dzień', tabela: 'Tabela dni', trendy: 'Trendy', treningi: 'Treningi', jedzenie: 'Jedzenie', zrodla: 'Źródła danych', ustawienia: 'Ustawienia' };
-const dayTabs = ['przebieg', 'podsumowanie', 'pochodzenie', 'jedzenie', 'treningi'] as const satisfies readonly DayTab[];
+const dayTabs = ['przebieg', 'godzinowe', 'jedzenie', 'treningi'] as const satisfies readonly DayTab[];
 const srcTabs = ['polaczenia', 'pokrycie', 'importy', 'diagnostyka'] as const satisfies readonly SourcesTab[];
 const foodTabs = ['dziennik', 'produkty', 'planer', 'importy'] as const satisfies readonly FoodTab[];
 interface Route { view: View; day: string; tab: string }
@@ -67,7 +67,6 @@ function Shell() {
   const trendPrefs = prefs, setTrendPrefs = setPrefs;
   const earliestAll = useJson(prefs.range < 0 || trendPrefs.range < 0 ? '/api/earliest-days' : null, earliestSchema);
   const tableEarliest = earliestOf(earliestAll, tableMetricKeys(prefs.cols)), trendEarliest = earliestOf(earliestAll, [...metrics.map((metric) => metric.key), 'hr']);
-  const [originMetric, setOriginMetric] = useState<MetricKey | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [syncTick, setSyncTick] = useState(0);
   const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem('trivimo-side') === 'collapsed'; } catch { return false; } });
@@ -125,8 +124,8 @@ function Shell() {
   if (route.view === 'trendy') context = <><TableRange prefs={trendPrefs} earliest={trendEarliest} onChange={setTrendPrefs} /><Segmented className="hide-sm" label="Agregacja" items={aggregations} value={trendAgg} onChange={setTrendAgg} /></>;
 
   let content: ReactNode;
-  if (route.view === 'dzien') content = <DayView metric={originMetric} date={date} tab={dayTab} onTab={(tab) => setDay(date, tab)} onDate={(next) => setDay(next)} sync={syncData} onDirty={(value) => { dirty.current = value; }} />;
-  else if (route.view === 'tabela') content = <TableView {...tableBounds(prefs, tableEarliest)} cols={prefs.cols} onCols={(cols) => setPrefs({ cols: { ...prefs.cols, ...cols } })} onOpenDay={(next) => { setOriginMetric(null); openDay(next); }} onOpenMetric={(next, key) => { setOriginMetric(key); openDay(next, 'pochodzenie'); }} />;
+  if (route.view === 'dzien') content = <DayView date={date} tab={dayTab} onTab={(tab) => setDay(date, tab)} onDate={(next) => setDay(next)} sync={syncData} onDirty={(value) => { dirty.current = value; }} />;
+  else if (route.view === 'tabela') content = <TableView {...tableBounds(prefs, tableEarliest)} cols={prefs.cols} onCols={(cols) => setPrefs({ cols: { ...prefs.cols, ...cols } })} onOpenDay={(next) => openDay(next)} onOpenMetric={(next) => openDay(next)} />;
   else if (route.view === 'trendy') content = <TrendsView earliest={earliestAll} prefs={trendPrefs} agg={trendAgg} onPrefs={setTrendPrefs} onAgg={setTrendAgg} />;
   else if (route.view === 'treningi') content = <WorkoutsView />;
   else if (route.view === 'jedzenie') content = <FoodView tab={foodTab} onTab={(tab) => go(tabHash('jedzenie', tab, foodTabs))} />;
@@ -137,7 +136,7 @@ function Shell() {
     <BackfillNotice backfill={syncData?.backfill} onCoverage={route.view === 'zrodla' && srcTab === 'pokrycie'} go={go} />
     <aside className="side" aria-label="Nawigacja główna">
       <div className="brand"><LogoMark className="brand-mark" /><b>Trivimo</b><span>lokalnie</span><button type="button" className="sidetoggle" aria-expanded={!collapsed} aria-label={collapsed ? 'Rozwiń panel nawigacji' : 'Zwiń panel do ikon'} title={collapsed ? 'Rozwiń panel' : 'Zwiń panel'} onClick={toggleSide}>{collapsed ? I.right : I.left}</button></div>
-      <nav className="navgroup" aria-label="Dane"><h4>Dane</h4>{nav('dzien', I.day, 'Dzień')}{nav('tabela', I.table, 'Tabela dni')}{nav('trendy', I.trend, 'Trendy')}{nav('treningi', I.run, 'Treningi', <span className="tag soon">M2</span>, 'treningi', true)}</nav>
+      <nav className="navgroup" aria-label="Dane"><h4>Dane</h4>{nav('dzien', I.day, 'Dzień')}{nav('trendy', I.trend, 'Trendy')}{nav('tabela', I.table, 'Tabela dni')}{nav('treningi', I.run, 'Treningi', <span className="tag soon">M2</span>, 'treningi', true)}</nav>
       <nav className="navgroup" aria-label="Jedzenie"><h4>Jedzenie</h4>{nav('jedzenie', I.book, 'Dziennik', <span className="tag soon food">M3</span>, 'jedzenie/dziennik', true)}{nav('jedzenie', I.food, 'Produkty i przepisy', <span className="tag soon food">M3</span>, 'jedzenie/produkty', true)}{nav('jedzenie', I.plan, 'Planer', <span className="tag soon food">M4</span>, 'jedzenie/planer', true)}</nav>
       <nav className="navgroup" aria-label="System"><h4>System</h4>{nav('zrodla', I.src, 'Źródła danych')}{nav('ustawienia', I.gear, 'Ustawienia')}</nav>
       <div className="side-foot"><button type="button" className="sync" title={collapsed ? `Google Health · ${lastOk ? `odświeżono ${whenOf(lastOk)}` : 'brak odczytu'}` : undefined} onClick={() => go('zrodla')}><span className={`dot ${syncBad ? 'warn' : ''}`} /><span>{sync.error ? 'Google Health · stan niedostępny' : `Google Health · ${lastOk ? `odświeżono ${whenOf(lastOk)}` : 'brak odczytu'}`}{syncBad && syncData?.last ? ' · błąd ostatniego odświeżenia' : ''}<br /><span className="faint">{syncData?.automatic ? `automatycznie co ${syncData.automatic} min` : sync.error ? 'zobacz Źródła danych' : 'odświeżanie ręczne'}</span></span></button></div>
@@ -145,11 +144,11 @@ function Shell() {
     <div className="main">
       <header className="topbar"><h1>{route.view === 'dzien' ? fmtDL(date) : titles[route.view]}</h1>{route.view === 'dzien' && date === warsawToday() && <span className="live">w toku{lastOk ? ` · stan na ${timeOf(lastOk)}` : ''}</span>}{context}
         <div className="menuwrap"><button type="button" className="btn primary" aria-haspopup="menu" aria-expanded={addOpen} onClick={() => setAddOpen(!addOpen)}>{I.plus}<span className="hide-sm">Dodaj</span></button>
-          {addOpen && <div className="menu" role="menu"><button type="button" role="menuitem" onClick={() => { setAddOpen(false); setDay(route.view === 'dzien' ? date : warsawToday(), 'podsumowanie'); setTimeout(() => document.getElementById('usernote')?.focus(), 150); }}>Notatka do dnia</button>
+          {addOpen && <div className="menu" role="menu"><button type="button" role="menuitem" onClick={() => { setAddOpen(false); setDay(route.view === 'dzien' ? date : warsawToday(), 'przebieg'); setTimeout(() => document.getElementById('usernote')?.focus(), 150); }}>Notatka do dnia</button>
             <button type="button" role="menuitem" disabled>Posiłek <span className="tag food">M3</span></button><button type="button" role="menuitem" disabled>Pomiar wagi <span className="tag">M7</span></button></div>}</div></header>
       <main className="content">{content}</main>
     </div>
-    <nav className="bottomnav" aria-label="Nawigacja">{bottom('dzien', I.day, 'Dzień')}{bottom('tabela', I.table, 'Dni')}{bottom('trendy', I.trend, 'Trendy')}{bottom('jedzenie', I.food, 'Jedzenie')}{bottom('zrodla', I.more, 'Więcej')}</nav>
+    <nav className="bottomnav" aria-label="Nawigacja">{bottom('dzien', I.day, 'Dzień')}{bottom('trendy', I.trend, 'Trendy')}{bottom('tabela', I.table, 'Dni')}{bottom('jedzenie', I.food, 'Jedzenie')}{bottom('zrodla', I.more, 'Więcej')}</nav>
     <Tooltip />
   </div>;
 }
