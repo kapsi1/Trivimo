@@ -150,6 +150,9 @@ export function backfillEta(status: { state: string; startedAt: string | null; r
   return elapsed > 0 ? elapsed / status.readsThisRun * status.remainingReads : null;
 }
 const backfillStateText: Record<z.infer<typeof backfillSchema>['state'], string> = { idle: 'Nie uruchomiono w tej sesji serwera', running: 'Trwa uzupełnianie', stopping: 'Zatrzymywanie po bieżącej paczce…', stopped: 'Zatrzymano; odczytane paczki zostają', done: 'Zakończono', error: 'Przerwano z powodu błędu; zapisane paczki zostają.' };
+/** Short cause of a stopped run for its message line and the global notice. */
+export const backfillReason = (code: string | undefined) => !code ? 'błąd' : code === 'authorization_required' || code === 'scope_missing' ? 'wymagana ponowna autoryzacja Google' : code === 'rate_limited' || /429$/.test(code) ? 'limit zapytań Google'
+  : /^google_(identity_)?http_5\d\d$/.test(code) || code === 'google_read_failed' ? 'błąd serwera' : code === 'migration_required' || code === 'store_unavailable' ? 'magazyn niedostępny' : 'błąd';
 const fromKey = 'trivimo-backfill-from';
 /** Progress lives on the server and in the store, so it survives a page reload, a closed tab and a server restart. */
 function GoogleBackfill() {
@@ -186,8 +189,7 @@ function GoogleBackfill() {
   const yesterday = addDays(warsawToday(), -1);
   const failed = error !== '' || status?.state === 'error';
   // one line above the bar: progress, or the error in its place ("Przerwano - błąd serwera (kod: …). Spróbuj ponownie")
-  const reason = (code: string | undefined) => !code ? 'błąd' : code === 'authorization_required' || code === 'scope_missing' ? 'wymagana ponowna autoryzacja Google' : code === 'rate_limited' || /429$/.test(code) ? 'limit zapytań Google'
-    : /^google_(identity_)?http_5\d\d$/.test(code) || code === 'google_read_failed' ? 'błąd serwera' : code === 'migration_required' || code === 'store_unavailable' ? 'magazyn niedostępny' : 'błąd';
+  const reason = backfillReason;
   const line = error === 'load' ? <>Nie udało się odczytać stanu uzupełniania. Spróbuj ponownie</>
     : error ? <>Nie udało się {error === 'stop' ? 'zatrzymać' : 'uruchomić'} uzupełniania. Spróbuj ponownie</>
       : !status ? <Loading size="inline" />

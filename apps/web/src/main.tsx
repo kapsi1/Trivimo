@@ -6,6 +6,7 @@ import { DayView, type DayTab } from './day.tsx';
 import { Drawer, type DrawerState } from './details.tsx';
 import { addDays, warsawToday, whenOf , firstDay } from './format.ts';
 import { Loading, LogoMark } from './logo.tsx';
+import { BackfillNotice } from './notice.tsx';
 import { FoodView, WorkoutsView, type FoodTab } from './placeholders.tsx';
 import { SettingsView } from './settings.tsx';
 import { SourcesView, type SourcesTab } from './sources.tsx';
@@ -76,7 +77,7 @@ function Shell() {
   const dayTab = pick(dayTabs, route.tab), srcTab = pick(srcTabs, route.tab), foodTab = pick(foodTabs, route.tab);
   const sync = useJson('/api/google/sync-status', syncStatusSchema, syncTick);
   // poll often while a refresh runs, so the day in progress updates as soon as its new snapshot is published
-  const running = sync.data?.running ?? false;
+  const running = (sync.data?.running ?? false) || sync.data?.backfill?.state === 'running' || sync.data?.backfill?.state === 'stopping';
   useEffect(() => { const timer = setInterval(() => setSyncTick((value) => value + 1), running ? 5000 : 60000); return () => clearInterval(timer); }, [running]);
 
   // Leaving the day with an unsaved note asks first; a cancelled change restores the address without a new entry.
@@ -131,6 +132,7 @@ function Shell() {
   else content = <SettingsView />;
 
   return <div className={`app ${collapsed ? 'collapsed' : ''}`}>
+    <BackfillNotice backfill={syncData?.backfill} onCoverage={route.view === 'zrodla' && srcTab === 'pokrycie'} go={go} />
     <aside className="side" aria-label="Nawigacja główna">
       <div className="brand"><LogoMark className="brand-mark" /><b>Trivimo</b><span>lokalnie</span><button type="button" className="sidetoggle" aria-expanded={!collapsed} aria-label={collapsed ? 'Rozwiń panel nawigacji' : 'Zwiń panel do ikon'} title={collapsed ? 'Rozwiń panel' : 'Zwiń panel'} onClick={toggleSide}>{collapsed ? I.right : I.left}</button></div>
       <nav className="navgroup" aria-label="Dane"><h4>Dane</h4>{nav('dzien', I.day, 'Dzień')}{nav('tabela', I.table, 'Tabela dni')}{nav('trendy', I.trend, 'Trendy')}{nav('treningi', I.run, 'Treningi', <span className="tag soon">M2</span>, 'treningi', true)}</nav>

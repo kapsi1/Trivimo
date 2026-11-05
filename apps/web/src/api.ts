@@ -61,6 +61,8 @@ export const syncStatusSchema = z.object({
   automatic: z.number().nullable(), running: z.boolean(), unfinishedJobs: z.number(), pausedUntil: z.string().nullable(),
   last: z.object({ at: z.string(), result: z.enum(['ok', 'authorization_required', 'scope_missing', 'migration_required', 'error']), code: z.string().optional(), reads: z.number(), retryAt: z.string().optional() }).nullable(),
   kinds: z.array(z.object({ kind: z.string(), lastReadAt: z.string().nullable(), coveredThrough: z.string().nullable() })),
+  // only the fields the global notice needs; the Coverage view reads the full backfill status itself
+  backfill: z.object({ state: z.enum(['idle', 'running', 'stopping', 'stopped', 'done', 'error']), from: z.string(), finishedAt: z.string().nullable(), code: z.string().optional() }).optional(),
 });
 export type SyncStatus = z.infer<typeof syncStatusSchema>;
 export const coverageSchema = z.object({ from: z.iso.date(), through: z.iso.date(), kinds: z.number().int().positive(), days: z.array(z.object({ date: z.iso.date(), covered: z.number().int().nonnegative() })) });
