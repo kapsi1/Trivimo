@@ -89,9 +89,12 @@ export function coveredDays(db: DatabaseSync, kind: SyncKind, from: string, thro
   return covered;
 }
 
+/** Source of `coveredDays` results; the service passes a cached one (the sets are read, never changed). */
+export type CoveredDays = (db: DatabaseSync, kind: SyncKind, from: string, through: string) => ReadonlySet<string>;
+
 /** Per day of [from, through] how many of `syncKinds` a complete read covered after the day ended (calendar of history coverage). */
-export function coverageCalendar(db: DatabaseSync, from: string, through: string): { date: string; covered: number }[] {
-  const sets = syncKinds.map((kind) => coveredDays(db, kind, from, through));
+export function coverageCalendar(db: DatabaseSync, from: string, through: string, covered: CoveredDays = coveredDays): { date: string; covered: number }[] {
+  const sets = syncKinds.map((kind) => covered(db, kind, from, through));
   const days: { date: string; covered: number }[] = [];
   for (let day = from; day <= through; day = addDays(day, 1)) days.push({ date: day, covered: sets.filter((set) => set.has(day)).length });
   return days;
@@ -102,10 +105,10 @@ export function coverageCalendar(db: DatabaseSync, from: string, through: string
  * period first (all kinds of a period before an older one, `syncKinds` order within it). A run stopped part-way
  * then leaves recent days with every kind read, so their snapshots are qualified, instead of all days half read.
  */
-export function planBackfill(db: DatabaseSync, from: string, through: string): SyncRead[] {
+export function planBackfill(db: DatabaseSync, from: string, through: string, coveredBy: CoveredDays = coveredDays): SyncRead[] {
   const plan: SyncRead[] = [];
   for (const kind of syncKinds) {
-    const covered = coveredDays(db, kind, from, through);
+    const covered = coveredBy(db, kind, from, through);
     let first: string | null = null; let size = 0;
     const flush = (last: string) => { if (first) plan.push({ kind, first, last, ...boundsFor(kind, first, last) }); first = null; size = 0; };
     for (let day = from, previous = from; day <= through; previous = day, day = addDays(day, 1)) {
@@ -148,6 +151,29 @@ export class GoogleSyncService {
   /** The backfill run of this server process; its progress itself is derived from the store, so it survives restarts. */
   private backfill: Omit<BackfillStatus, 'kinds' | 'remainingReads'> | null = null;
   private stopRequested = false;
+  /**
+   * Coverage is derived from complete jobs only and costs seconds for long ranges, while the UI polls the status every
+   * few seconds. Results are kept per kind and range under a fingerprint of that kind's complete jobs (count, newest
+   * and summed creation time, summed rowid), so any added, completed or removed job of the kind recomputes it.
+   */
+  private coverageCache = new Map<string, { fingerprint: string; days: ReadonlySet<string> }>();
+  private progressCache?: { key: string; kinds: BackfillStatus['kinds']; remainingReads: number };
+  private fingerprints(db: DatabaseSync): Map<string, string> {
+    const rows = db.prepare("SELECT kind, COUNT(*) AS n, MAX(created_at) AS newest, TOTAL(julianday(created_at)) AS created, TOTAL(rowid) AS rows FROM google_read_jobs WHERE state = 'complete' GROUP BY kind").all();
+    return new Map(rows.map((row) => [String(row.kind), `${String(row.n)}|${String(row.newest)}|${String(row.created)}|${String(row.rows)}`]));
+  }
+  private cachedCoverage(fingerprints: Map<string, string>): CoveredDays {
+    return (db, kind, from, through) => {
+      const key = `${kind}|${from}|${through}`, fingerprint = fingerprints.get(kind) ?? 'none', hit = this.coverageCache.get(key);
+      if (hit && hit.fingerprint === fingerprint) return hit.days;
+      const days = coveredDays(db, kind, from, through);
+      if (this.coverageCache.size >= 128) this.coverageCache.clear();
+      this.coverageCache.set(key, { fingerprint, days });
+      return days;
+    };
+  }
+  /** `planBackfill` with the cached coverage of the store's current jobs. */
+  private plan(db: DatabaseSync, from: string, through: string): SyncRead[] { return planBackfill(db, from, through, this.cachedCoverage(this.fingerprints(db))); }
   constructor(
     private readonly path: string, private readonly auth: GoogleAuth,
     private readonly options: { intervalMinutes: number | null; now?: () => number; send?: typeof fetch; execute?: Execute; retry?: RetryPolicy; sleep?: (ms: number) => Promise<void>; random?: () => number } = { intervalMinutes: null },
@@ -190,7 +216,7 @@ export class GoogleSyncService {
   private hasGaps(): boolean {
     try {
       const db = this.open();
-      try { return planBackfill(db, backfillFrom, addDays(sourceDay(new Date(this.now()).toISOString()), -1)).length > 0; } finally { db.close(); }
+      try { return this.plan(db, backfillFrom, addDays(sourceDay(new Date(this.now()).toISOString()), -1)).length > 0; } finally { db.close(); }
     } catch { return false; }
   }
   /** Wait before a repeat, waking early when the backfill is stopped. */
@@ -291,7 +317,7 @@ export class GoogleSyncService {
         delete run.code; delete run.retryAt;
         db = this.open();
         run.readsThisRun += await this.resumeRunning(db);
-        const next = planBackfill(db, run.from, run.through)[0];
+        const next = this.plan(db, run.from, run.through)[0];
         if (!next) { this.projectEnergy(db); projectRun(db); return end('done'); }
         const key = `${next.kind}:${next.first}:${next.last}`;
         // a chunk planned again right after its complete read would repeat forever; stop and report instead
@@ -325,7 +351,14 @@ export class GoogleSyncService {
     let kinds: BackfillStatus['kinds'] = []; let remainingReads: number | null = null;
     try {
       const db = this.open();
-      try { kinds = syncKinds.map((kind) => ({ kind, covered: coveredDays(db, kind, from, through).size, total })); remainingReads = planBackfill(db, from, through).length; } finally { db.close(); }
+      try {
+        const fingerprints = this.fingerprints(db), key = `${from}|${through}|${syncKinds.map((kind) => fingerprints.get(kind) ?? 'none').join(',')}`;
+        if (this.progressCache?.key !== key) {
+          const covered = this.cachedCoverage(fingerprints);
+          this.progressCache = { key, kinds: syncKinds.map((kind) => ({ kind, covered: covered(db, kind, from, through).size, total })), remainingReads: planBackfill(db, from, through, covered).length };
+        }
+        kinds = this.progressCache.kinds.map((item) => ({ ...item })); remainingReads = this.progressCache.remainingReads;
+      } finally { db.close(); }
     } catch { /* store unavailable: progress unknown, not zero */ }
     return { ...(this.backfill ?? { state: 'idle', from, through, startedAt: null, finishedAt: null, current: null, readsThisRun: 0 }), kinds, remainingReads };
   }
@@ -336,7 +369,7 @@ export class GoogleSyncService {
     if (from < firstSupportedDay) return null;
     try {
       const db = this.open();
-      try { return { from, through, kinds: syncKinds.length, days: through < from ? [] : coverageCalendar(db, from, through) }; } finally { db.close(); }
+      try { return { from, through, kinds: syncKinds.length, days: through < from ? [] : coverageCalendar(db, from, through, this.cachedCoverage(this.fingerprints(db))) }; } finally { db.close(); }
     } catch { return null; }
   }
   status() {

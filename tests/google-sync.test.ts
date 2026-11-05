@@ -168,6 +168,28 @@ test('backfill: pokrycie liczy tylko doby odczytane po ich końcu, a plan dzieli
   } finally { db.close(); }
 });
 
+test('backfill: zapamiętane pokrycie zmienia się po dodaniu, ukończeniu i usunięciu zadania', async () => {
+  const env = migrated();
+  try {
+    await env.ready();
+    const service = new GoogleSyncService(env.path, await authorized(), { intervalMinutes: null, now: () => Date.parse('2026-01-20T10:00:00Z') });
+    const steps = () => { const status = service.backfillStatus(); return [status.kinds.find((item) => item.kind === 'steps')?.covered, status.remainingReads]; };
+    const [, before] = steps();
+    assert.deepEqual(steps(), [0, before]);
+    const digest = createHash('sha256').update('synthetic-account').digest('hex');
+    // a running job covers nothing; once its last page is saved it covers its days read after they ended
+    const job = createGoogleReadJob(env.db, digest, 'steps', '2026-01-01', '2026-01-11');
+    assert.deepEqual(steps(), [0, before]);
+    commitGooglePage(env.db, job, null, '{}');
+    assert.deepEqual(steps(), [10, before]);
+    assert.deepEqual(service.coverage(2026)?.days.slice(0, 2).map((day) => day.covered), [1, 1]);
+    env.db.prepare('DELETE FROM google_read_pages WHERE job_id = ?').run(job);
+    env.db.prepare('DELETE FROM google_read_jobs WHERE id = ?').run(job);
+    assert.deepEqual(steps(), [0, before]);
+    assert.deepEqual(service.coverage(2026)?.days.slice(0, 2).map((day) => day.covered), [0, 0]);
+  } finally { env.db.close(); rmSync(env.dir, { recursive: true, force: true }); }
+});
+
 test('backfill: czyta wszystkie luki, wznawia bez powtórzeń, zatrzymuje się po paczce i czeka po trwałym 429', async () => {
   const env = migrated();
   try {

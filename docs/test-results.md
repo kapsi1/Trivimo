@@ -1,5 +1,11 @@
 # Raport weryfikacji
 
+## 2026-11-05 — szybki status uzupełniania; Vite 7.3.7
+
+- `npm test`: 136 testów zaliczonych (nowy: zapamiętane pokrycie zmienia się po dodaniu zadania, jego ukończeniu i usunięciu, także w kalendarzu roku). `npm run build`: poprawny (typecheck i build Vite 7.3.7).
+- Pomiar `GoogleSyncService.status()` na magazynie użytkownika (tylko odczyt, 1379 ukończonych zadań): zakres od 2026-01-01 — pierwsze wywołanie 142 ms, kolejne ok. 7 ms (przed zmianą ok. 250 ms za każdym razem); zakres od 2000-01-01 — pierwsze 701 ms, kolejne ok. 7 ms (przed zmianą ok. 1,2 s za każdym razem).
+- `pnpm audit` po podbiciu Vite (7.2.4 → 7.3.7): zostały zgłoszenia zod (< 4.6.6) i csv-parse (< 7.0.2), żadne dla Vite. Przeglądarka (serwer dev Vite 7.3.7 i API na magazynie użytkownika): widok „Pokrycie historii” się wczytuje, konsola bez błędów, `/api/google/sync-status` 11–18 ms. Nie sprawdzono: czasu statusu w trakcie rzeczywistego przebiegu uzupełniania.
+
 ## 2026-11-05 — pusta baza w bieżącej wersji przy starcie serwera
 
 - `npm test`: 135 testów zaliczonych (nowy: pusta baza v12 w nowym katalogu przechodzi weryfikację, otwiera ją serwis CSV, drugi start i istniejący plik zostają bez zmian). `npm run typecheck`: poprawny. Serwer dev po zmianie wystartował na bazie użytkownika bez tworzenia nowej (plik istnieje). Nie sprawdzono: startu serwera z osobnym `TRIVIMO_DATA_DIR`, autoryzacji Google i importu Takeout do świeżej bazy v12.
