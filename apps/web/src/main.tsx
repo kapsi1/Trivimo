@@ -3,7 +3,6 @@ import { createRoot } from 'react-dom/client';
 import { earliestOf, earliestSchema, metrics, syncStatusSchema, useJson, type MetricKey } from './api.ts';
 import { Tooltip } from './charts.tsx';
 import { DayView, type DayTab } from './day.tsx';
-import { Drawer, type DrawerState } from './details.tsx';
 import { addDays, fmtDL, timeOf, warsawToday, whenOf , firstDay } from './format.ts';
 import { Loading, LogoMark } from './logo.tsx';
 import { BackfillNotice } from './notice.tsx';
@@ -69,7 +68,6 @@ function Shell() {
   const earliestAll = useJson(prefs.range < 0 || trendPrefs.range < 0 ? '/api/earliest-days' : null, earliestSchema);
   const tableEarliest = earliestOf(earliestAll, tableMetricKeys(prefs.cols)), trendEarliest = earliestOf(earliestAll, [...metrics.map((metric) => metric.key), 'hr']);
   const [originMetric, setOriginMetric] = useState<MetricKey | null>(null);
-  const [drawer, setDrawer] = useState<DrawerState | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [syncTick, setSyncTick] = useState(0);
   const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem('trivimo-side') === 'collapsed'; } catch { return false; } });
@@ -91,7 +89,7 @@ function Shell() {
       const leaving = previous.view === 'dzien' && (next.view !== 'dzien' || validDay(next.day, warsawToday()) !== validDay(previous.day, warsawToday()));
       if (leaving && dirty.current && !window.confirm('Notatka ma niezapisane zmiany. Opuścić ten dzień?')) { history.replaceState(null, '', current.current || '#dzien'); return; }
       if (leaving) dirty.current = false;
-      current.current = location.hash; setRoute(next); setDrawer(null); setAddOpen(false);
+      current.current = location.hash; setRoute(next); setAddOpen(false);
     };
     const unload = (event: BeforeUnloadEvent) => { if (dirty.current) { event.preventDefault(); event.returnValue = ''; } };
     window.addEventListener('hashchange', change); window.addEventListener('beforeunload', unload);
@@ -99,7 +97,7 @@ function Shell() {
   }, []);
   const go = useCallback((hash: string) => { if (location.hash === `#${hash}`) return; location.hash = hash; }, []);
   const setDay = (next: string, tab: DayTab = route.view === 'dzien' ? dayTab : dayTabs[0]) => { if (next < firstDay || next > warsawToday()) return; go(dayHash(next, tab)); };
-  const openDay = (next: string, tab: DayTab = dayTabs[0]) => { setDrawer(null); setDay(next, tab); };
+  const openDay = (next: string, tab: DayTab = dayTabs[0]) => setDay(next, tab);;
 
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
@@ -127,9 +125,9 @@ function Shell() {
   if (route.view === 'trendy') context = <><TableRange prefs={trendPrefs} earliest={trendEarliest} onChange={setTrendPrefs} /><Segmented className="hide-sm" label="Agregacja" items={aggregations} value={trendAgg} onChange={setTrendAgg} /></>;
 
   let content: ReactNode;
-  if (route.view === 'dzien') content = <DayView metric={originMetric} date={date} tab={dayTab} onTab={(tab) => setDay(date, tab)} onDate={(next) => setDay(next)} sync={syncData} onDirty={(value) => { dirty.current = value; }} onDrawer={setDrawer} />;
+  if (route.view === 'dzien') content = <DayView metric={originMetric} date={date} tab={dayTab} onTab={(tab) => setDay(date, tab)} onDate={(next) => setDay(next)} sync={syncData} onDirty={(value) => { dirty.current = value; }} />;
   else if (route.view === 'tabela') content = <TableView {...tableBounds(prefs, tableEarliest)} cols={prefs.cols} onCols={(cols) => setPrefs({ cols: { ...prefs.cols, ...cols } })} onOpenDay={(next) => { setOriginMetric(null); openDay(next); }} onOpenMetric={(next, key) => { setOriginMetric(key); openDay(next, 'pochodzenie'); }} />;
-  else if (route.view === 'trendy') content = <TrendsView earliest={earliestAll} prefs={trendPrefs} agg={trendAgg} onPrefs={setTrendPrefs} onAgg={setTrendAgg} onDrawer={setDrawer} />;
+  else if (route.view === 'trendy') content = <TrendsView earliest={earliestAll} prefs={trendPrefs} agg={trendAgg} onPrefs={setTrendPrefs} onAgg={setTrendAgg} />;
   else if (route.view === 'treningi') content = <WorkoutsView />;
   else if (route.view === 'jedzenie') content = <FoodView tab={foodTab} onTab={(tab) => go(tabHash('jedzenie', tab, foodTabs))} />;
   else if (route.view === 'zrodla') content = <SourcesView tab={srcTab} onTab={(tab) => go(tabHash('zrodla', tab, srcTabs))} sync={syncData} onSyncChanged={() => setSyncTick((value) => value + 1)} />;
@@ -152,7 +150,6 @@ function Shell() {
       <main className="content">{content}</main>
     </div>
     <nav className="bottomnav" aria-label="Nawigacja">{bottom('dzien', I.day, 'Dzień')}{bottom('tabela', I.table, 'Dni')}{bottom('trendy', I.trend, 'Trendy')}{bottom('jedzenie', I.food, 'Jedzenie')}{bottom('zrodla', I.more, 'Więcej')}</nav>
-    {drawer && <Drawer state={drawer} onClose={() => setDrawer(null)} onOpenDay={openDay} />}
     <Tooltip />
   </div>;
 }

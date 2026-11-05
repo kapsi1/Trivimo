@@ -37,10 +37,6 @@ export function Tooltip() {
   return <div ref={ref} className="tip" role="tooltip" hidden />;
 }
 
-/** The "?" button in a chart or card corner: opens the metadata panel without zooming the chart. */
-export function InfoButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return <button type="button" className="info" aria-label={`Skąd te dane: ${label}`} title="Skąd te dane" onClick={(event) => { event.stopPropagation(); onClick(); }}>?</button>;
-}
 /** A chart area that opens its zoomed version on click or Enter. */
 export function Zoomable({ label, onZoom, children, style }: { label: string; onZoom: () => void; children: ReactNode; style?: React.CSSProperties }) {
   return <div className="zoomable" role="button" tabIndex={0} aria-label={`Powiększ wykres: ${label}`} style={style} onClick={onZoom} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onZoom(); } }}>{children}</div>;
