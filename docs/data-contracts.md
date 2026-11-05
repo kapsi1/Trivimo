@@ -4,6 +4,8 @@ Reguły docelowe, do implementacji i weryfikacji. Jedna wersjonowana definicja o
 
 ## Oryginał, kopia, wynik i korekta
 
+Warstwa pochodna (np. sparsowane okna stron Google, magazyn v13) jest pamięcią podręczną zapisaną w bazie, nie danymi: wyznacza ją treść oryginału i wersja parsera, nigdy nie zastępuje oryginału, a niezgodność z oryginałem jest błędem weryfikacji magazynu.
+
 1. Nie utożsamiaj transportu z urządzeniem pomiarowym. Dane odczytane z telefonu/Connect nie muszą być oszacowane przez telefon; pole zapisane przez Health nie dowodzi noszenia opaski. Zapisuj producenta, urządzenie/metodę i rodzinę źródła, o ile są rzeczywiście dostępne; w przeciwnym razie „nieznane”.
 2. Tożsamość źródłowa: dostawca + konto + typ + oryginalne ID. Gdy brak ID, jawny wersjonowany klucz z danych rekordu, nie numer wiersza/nazwa pliku. Hash treści to rewizja, nie zawsze ID. Zachowuj precyzję czasów i liczb.
 3. API i Takeout mogą zawierać ten sam pomiar w innych jednostkach/precyzji. Łącz tylko po jednoznacznym dopasowaniu lub zatwierdzonej decyzji; nie dodawaj ich do siebie. Zapis własny odczytany z Connect/API to replika, nie nowy pomiar.

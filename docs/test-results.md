@@ -1,5 +1,19 @@
 # Raport weryfikacji
 
+## 2026-11-05 — magazyn v13: warstwa pochodna okien 10-minutowych
+
+- `npm test`: 144 testy zaliczone (nowe: migracja 12→13 z kopią i oryginałami bez zmian; zapis okien razem ze stroną, odczyt z warstwy, wykrycie zmienionego wiersza przy weryfikacji, usunięcie po polityce odczytów; ta sama treść strony w zadaniach różnych rodzajów i brak wiersza wykrywany jako `missing_page_windows`). Łańcuchy migracji w testach kończą się na v13. `npm run build`: poprawny.
+- Na kopii magazynu (poza repozytorium): migracja ok. 5 s, 390 wierszy pochodnych, 495 → 502 MB; `verifyTakeout` 2,1 s (v12) → 2,5 s (v13; bez indeksu stron po digeście było 26 s, indeks dodano do migracji). Pierwsze odczyty po starcie procesu: projekcja roku 339 → 101 ms, udział opaski 365 dni 109 → 24 ms, tętno 365 dni 34 → 10 ms; pierwsze `runOnce` 414 → 166 ms (najdłuższa blokada pętli 20 ms), 309 dób bez zmian.
+- Magazyn użytkownika: `npm run migrate:canonical` przy zatrzymanym serwerze, kopia v12 zweryfikowana i przeniesiona do `D:\Trivimo-bak\przed-v13-20261105.sqlite` (porównana bajtowo). Po migracji serwer i automatyczne odświeżanie: wynik `ok`, 13 odczytów, 1 doba opublikowana, 308 bez zmian; `verifyTakeout` po tym zapisie poprawny (2,5 s). Przeglądarka: widok dnia bez błędów w konsoli; `sync-status` 12 ms, `day-range` 365 dni 71 ms, `band-share-range` 20 ms, `heart-rate-range` 12 ms, tętno i seria dnia 3–4 ms.
+- Nie sprawdzono: przywrócenia kopii v13 skryptem `verify:restore` na magazynie użytkownika.
+
+## 2026-11-05 — wydajność i bezpieczeństwo po przeglądzie (W2–W5, B2–B6)
+
+- `npm test`: 141 testów zaliczonych (nowe: dni do ponownej projekcji; projekcja przyrostowa zgodna z pełną po nowym odczycie starej doby, usunięciu nowszego odczytu i końcu doby w toku; strony okien w pamięci pod digestem; odrzucenie ścieżek UNC i urządzeń; obcy callback OAuth nie przerywa autoryzacji, token odświeżany minutę przed wygaśnięciem). `npm run build`: poprawny. `pnpm audit`: brak znanych podatności (zod 4.6.7, csv-parse 7.0.3, Vite 7.3.7).
+- Pomiary na magazynie użytkownika (odczyt; przebiegi odświeżania na kopii pliku poza repozytorium, bez żądań do Google): projekcja roku pierwszy raz w procesie 333 ms, kolejne ok. 60 ms; zakres band-share 365 dni 108 → 14 ms, tętno 365 dni 36 → 7 ms, kalendarz pokrycia 129 → 20 ms; pamięć procesu +7 MB. `runOnce` na kopii: pierwszy 414 ms łącznie z najdłuższą blokadą pętli 73 ms (309 dób bez zmian, czyli ten sam wynik co zapisane snapshoty), kolejne ok. 9 ms.
+- Przeglądarka (serwer dev i API na magazynie użytkownika): widok dnia bez błędów w konsoli, pięć przejść strzałką w lewo bez nowego żądania `day-range`, podsumowanie i tabela wczytane; `sync-status` 12–14 ms, `day-range` 365 dni 77 ms, `band-share-range` 20 ms, `heart-rate-range` 25 ms, `coverage` 6 ms. Automatyczne odświeżanie po starcie: wynik `ok`, 1 doba opublikowana, 308 bez zmian.
+- Nie sprawdzono: importu dużego Takeoutu i CSV z wielu lat w przeglądarce (zachowanie między porcjami pokrywają testy usługi), nowej autoryzacji Google po zmianie callbacku, działania przy jednoczesnym zapisie (timeout odczytu) na rzeczywistej bazie.
+
 ## 2026-11-05 — szybki status uzupełniania; Vite 7.3.7
 
 - `npm test`: 136 testów zaliczonych (nowy: zapamiętane pokrycie zmienia się po dodaniu zadania, jego ukończeniu i usunięciu, także w kalendarzu roku). `npm run build`: poprawny (typecheck i build Vite 7.3.7).

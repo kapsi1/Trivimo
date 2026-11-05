@@ -70,7 +70,7 @@ test('import z archiwum: wysłanie, rozpakowanie, podgląd, zapis i usunięcie p
     // the uploaded archive is gone after extraction; the extracted folder stays until the import succeeds
     assert.deepEqual(readdirSync(join(dir, 'takeout-work', 'uploads')), []);
     assert.equal(readdirSync(join(dir, 'takeout-work', 'extracted')).length, 2);
-    assert.deepEqual(service.commit(preview.token), { files: 1, rows: 1 });
+    assert.deepEqual(await service.commit(preview.token), { files: 1, rows: 1 });
     assert.deepEqual(readdirSync(join(dir, 'takeout-work', 'extracted')), []);
     const check = new DatabaseSync(path, { readOnly: true });
     try { assert.equal(check.prepare("SELECT COUNT(*) AS n FROM import_sessions WHERE state = 'complete'").get()?.n, 1); } finally { check.close(); }

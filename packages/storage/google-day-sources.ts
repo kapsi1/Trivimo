@@ -22,6 +22,8 @@ function jobDays(db: DatabaseSync, kind: SourceListKind, jobId: unknown, pages: 
       sources.set(id, { source: entry.source, records: (current?.records ?? 0) + entry.records });
     }
   }
+  // jobs replaced by the read policy are never asked for again; a bound keeps their entries from piling up
+  if (cache.size >= 2000) cache.clear();
   cache.set(cacheKey, byDay);
   return byDay;
 }

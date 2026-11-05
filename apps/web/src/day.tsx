@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { bandShareSchema, dailyReviewSchema, dayResponseSchema, daySourcesSchema, forecastSchema, groups, heartRateDaySchema, heartRateRangeSchema, metricOf, metrics, post, rangeSchema, ruleOf, seriesSchema, sourceName, useJson, userNoteSchema, type DayRow, type Forecast, type MetricKey, type Snapshot, type SyncStatus } from './api.ts';
 import { EnergyLegend, HourChart, HR_LEGEND, HrDayChart, HrSpark, HrTrendChart, InfoButton, Sparkline, TrendChart, Zoomable, type HourKey } from './charts.tsx';
 import { axisEvents, dayHours, dayTip, dayTotal, heartTrend, hrOf, lastMeasured, meanValid, metricTrend, valueOf, type DayHours } from './derive.ts';
@@ -12,14 +12,21 @@ import { Loading } from './logo.tsx';
 export type DayTab = 'podsumowanie' | 'przebieg' | 'pochodzenie' | 'jedzenie' | 'treningi';
 type Zoom = { type: 'day'; key: MetricKey; len: number } | { type: 'hrdays'; len: number } | { type: 'hour'; key: HourKey; name: string } | { type: 'hrday' };
 const lengths: [number, string][] = [[7, '7 dni'], [14, '14 dni'], [30, '30 dni'], [90, '90 dni']];
+/** Days of the loaded window: the 90 days of the view plus 60 to move through before the next request. */
+const windowDays = 150;
+const windowEnd = (date: string, today: string) => { const later = addDays(date, 30); return later < today ? later : today; };
 
 export function DayView({ date, tab, onTab, onDate, sync, onDirty, onDrawer }: { date: string; tab: DayTab; onTab: (tab: DayTab) => void; onDate: (date: string) => void; sync: SyncStatus | undefined; onDirty: (dirty: boolean) => void; onDrawer: (state: DrawerState) => void }) {
   const today = warsawToday(), isToday = date === today, read = date >= firstDay;
   const [zoom, setZoom] = useState<Zoom | null>(null);
   const [refresh, setRefresh] = useState(0);
   const day = useJson(`/api/day?date=${date}`, dayResponseSchema, refresh);
-  const range = useJson(`/api/day-range?from=${addDays(date, -89)}&to=${date}`, rangeSchema, refresh);
-  const hrRange = useJson(read ? `/api/google/heart-rate-range?from=${maxDate(firstDay, addDays(date, -89))}&to=${date}` : null, heartRateRangeSchema, refresh);
+  // the 90 days up to the shown day come from a wider window that stays while moving day by day (no request, no flicker)
+  const [anchor, setAnchor] = useState(() => windowEnd(date, today));
+  let end = anchor;
+  if (!(date <= anchor && addDays(date, -89) >= addDays(anchor, -(windowDays - 1)))) { end = windowEnd(date, today); if (end !== anchor) setAnchor(end); }
+  const range = useJson(`/api/day-range?from=${addDays(end, -(windowDays - 1))}&to=${end}`, rangeSchema, refresh);
+  const hrRange = useJson(read ? `/api/google/heart-rate-range?from=${maxDate(firstDay, addDays(end, -(windowDays - 1)))}&to=${end}` : null, heartRateRangeSchema, refresh);
   const heart = useJson(read ? `/api/google/heart-rate?date=${date}` : null, heartRateDaySchema, refresh);
   const total = useJson(read ? `/api/google/day-series?metric=total-calories&date=${date}` : null, seriesSchema, refresh);
   const active = useJson(read ? `/api/google/day-series?metric=active-energy-burned&date=${date}` : null, seriesSchema, refresh);
@@ -29,11 +36,12 @@ export function DayView({ date, tab, onTab, onDate, sync, onDirty, onDrawer }: {
   // a new sync result refreshes the day in progress
   useEffect(() => { if (isToday && sync?.last?.at) setRefresh((value) => value + 1); }, [sync?.last?.at]);
 
-  const rows = range.data?.state === 'ready' ? range.data.days : [];
+  const first = addDays(date, -89);
+  const rows = useMemo(() => range.data?.state === 'ready' ? range.data.days.filter((row) => row.date >= first && row.date <= date) : [], [range.data, first, date]);
   const snapshot = day.data?.state === 'ready' ? day.data.snapshot : null;
   const fc = forecast.data ?? null;
   const hours = dayHours(date, { total: total.data, active: active.data, steps: steps.data, distance: distance.data }, heart.data ?? undefined, fc ?? undefined, isToday);
-  const hrSummaries = hrRange.data ?? [];
+  const hrSummaries = useMemo(() => (hrRange.data ?? []).filter((item) => item.date >= first && item.date <= date), [hrRange.data, first, date]);
   const hrToday = hrOf(hrSummaries.find((item) => item.date === date));
   const len = Math.round(hours.slots / 6);
   const asOf = sync?.last?.result === 'ok' ? sync.last.at : sync?.kinds.map((kind) => kind.lastReadAt).filter((at): at is string => !!at).sort().at(-1);

@@ -1,6 +1,6 @@
 import { lstatSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { setTimeout as delay } from 'node:timers/promises';
+import { setImmediate as nextTurn, setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { currentStoreVersion } from '../../packages/storage/canonical-days.ts';
 import { maxRollupDays } from '../../packages/adapters/google-health/daily-rollup.ts';
@@ -8,7 +8,7 @@ import { defaultRetryPolicy, RateLimitedError, withRateLimitRetry, type RetryPol
 import { sourceDay } from '../../packages/domain/source-day.ts';
 import { firstSupportedDay, warsawDay } from '../../packages/domain/warsaw-day.ts';
 import type { GoogleJobKind } from '../../packages/storage/google-pages.ts';
-import { publishGoogleDays, publishDayRange } from '../../packages/storage/google-day-snapshots.ts';
+import { publishDayRangeYielding } from '../../packages/storage/google-day-snapshots.ts';
 import { applyReadPolicy, registerAutomaticJob } from '../../packages/storage/google-read-policy.ts';
 import type { GoogleAuth } from './google-auth.ts';
 import { readGoogleJobPage, startGoogleReadJob } from './google-read-service.ts';
@@ -69,6 +69,39 @@ export const backfillFrom = '2026-01-01';
 // measurements are a few records a day, so a month fits in one page; the read service allows ranges up to 31 days
 const chunkDays = (kind: SyncKind) => windowed(kind) ? maxCatchUpDays : kind.endsWith('-sources') ? 7 : kind === 'weight' || kind === 'body-fat' ? 30 : maxRollupDays(kind as Exclude<SyncKind, `${string}-10m` | `${string}-sources` | 'weight' | 'body-fat'>);
 const dayEnd = (day: string) => Date.parse(warsawDay(day).end);
+
+/**
+ * Inputs of the projection as id → "version, range start, range end": complete jobs, and CSV imports with their latest
+ * decision over the days of their values. The days a refresh projection must redo follow from their changes.
+ */
+function projectionInputs(db: DatabaseSync): Map<string, string> {
+  const inputs = new Map(db.prepare("SELECT id, kind, range_start, range_end FROM google_read_jobs WHERE state = 'complete'").all().map((row) => [`job:${String(row.id)}`, `${String(row.kind)}	${String(row.range_start)}	${String(row.range_end)}`]));
+  for (const row of db.prepare('SELECT i.id, (SELECT MAX(revision) FROM csv_import_decisions d WHERE d.import_id = i.id) AS revision, MIN(v.day) AS first, MAX(v.day) AS last FROM csv_imports i JOIN csv_import_values v ON v.import_id = i.id GROUP BY i.id').all()) {
+    inputs.set(`csv:${String(row.id)}`, `csv-${String(row.revision)}	${String(row.first)}	${addDays(String(row.last), 1)}`);
+  }
+  return inputs;
+}
+/** First and last day an input's range touches (instants as Warsaw days, civil ranges end-exclusive). */
+function jobSpan(job: string): [string, string] {
+  const [, start = '', end = ''] = job.split('	');
+  return start.includes('T') ? [sourceDay(start), sourceDay(new Date(Date.parse(end) - 1).toISOString())] : [start, addDays(end, -1)];
+}
+
+/**
+ * Days of [from, today] whose projection may differ from the last one: days of every job added, completed or removed
+ * since then (a day takes the newest read covering it, so other days keep their inputs), and the days from the last
+ * projection's day to today (a day in progress, or one that has ended since, changes with time alone). Consecutive ranges.
+ */
+export function changedDays(before: Map<string, string>, after: Map<string, string>, lastDay: string, from: string, today: string): [string, string][] {
+  const days = new Set<string>();
+  const add = (first: string, last: string) => { for (let day = first < from ? from : first; day <= last && day <= today; day = addDays(day, 1)) days.add(day); };
+  for (const [id, job] of before) if (after.get(id) !== job) add(...jobSpan(job));
+  for (const [id, job] of after) if (before.get(id) !== job) add(...jobSpan(job));
+  add(lastDay, today);
+  const ranges: [string, string][] = [];
+  for (const day of [...days].sort()) { const current = ranges.at(-1); if (current && addDays(current[1], 1) === day) current[1] = day; else ranges.push([day, day]); }
+  return ranges;
+}
 
 /**
  * Days of [from, through] that a complete read of this kind (manual, automatic or backfill) covered in full after the day
@@ -240,7 +273,7 @@ export class GoogleSyncService {
       reads += await this.resumeRunning(db);
       const interval = (this.options.intervalMinutes ?? 60) * 60000;
       for (const read of planSync(db, sourceDay(new Date(this.now()).toISOString()), this.now(), interval / 2)) { await this.execute(db, read); reads++; }
-      const energy = this.projectEnergy(db);
+      const energy = await this.projectEnergy(db);
       const outcome = finish('ok'); outcome.energy = energy;
       return outcome;
     } catch (error) {
@@ -249,9 +282,19 @@ export class GoogleSyncService {
     } finally { db?.close(); this.running = false; }
   }
   /** Local recompute of day snapshots (steps, distance, calories) from saved pages (no requests); a failure leaves earlier snapshots and reads intact. */
-  private projectEnergy(db: DatabaseSync): { published: number; unchanged: number } | 'failed' {
-    const today = sourceDay(new Date(this.now()).toISOString());
-    try { return publishGoogleDays(db, this.projectionFrom(), today, this.now()); } catch { return 'failed'; }
+  /** Projection inputs at the last successful refresh projection of this process and its time; the first run projects the whole window. */
+  private projected?: { jobs: Map<string, string>; at: number };
+  private async projectEnergy(db: DatabaseSync): Promise<{ published: number; unchanged: number } | 'failed'> {
+    const now = this.now(), today = sourceDay(new Date(now).toISOString()), from = this.projectionFrom();
+    try {
+      const jobs = projectionInputs(db);
+      const ranges = this.projected ? changedDays(this.projected.jobs, jobs, sourceDay(new Date(this.projected.at).toISOString()), from, today) : [[from, today] as [string, string]];
+      const total = { published: 0, unchanged: 0 };
+      for (const [first, last] of ranges) { const part = await publishDayRangeYielding(db, first, last, now); total.published += part.published; total.unchanged += part.unchanged; }
+      // after a failure the next run diffs against the last success again, so no change is skipped
+      this.projected = { jobs, at: now };
+      return total;
+    } catch { return 'failed'; }
   }
   /** First day the refresh re-projects: a year back, not before the automatic history start. */
   private projectionFrom(): string {
@@ -303,13 +346,13 @@ export class GoogleSyncService {
     const run = this.backfill!;
     const end = (state: BackfillStatus['state'], code?: string) => { run.state = state; run.current = null; delete run.retrying; run.finishedAt = new Date(this.now()).toISOString(); if (code) run.code = code; };
     // days before the refresh's projection window (the last year, from 2026) get their snapshots from the run's own range
-    const projectRun = (db: DatabaseSync) => {
+    const projectRun = async (db: DatabaseSync) => {
       const window = this.projectionFrom(), last = addDays(window, -1) < run.through ? addDays(window, -1) : run.through;
-      if (run.from <= last) { try { publishDayRange(db, run.from, last, this.now()); } catch { /* reads stay saved; the next run projects again */ } }
+      if (run.from <= last) { try { await publishDayRangeYielding(db, run.from, last, this.now()); } catch { /* reads stay saved; the next run projects again */ } }
     };
     let previous = '', failures = 0;
     while (true) {
-      if (this.stopRequested) { this.withStore(projectRun); return end('stopped'); }
+      if (this.stopRequested) { await this.withStore(projectRun); return end('stopped'); }
       if (this.pausedUntil !== null && this.now() < this.pausedUntil) { run.code = 'rate_limited'; run.retryAt = new Date(this.pausedUntil).toISOString(); await this.sleep(Math.min(this.pausedUntil - this.now(), 60000)); continue; }
       if (this.running) { await this.sleep(1000); continue; }
       this.running = true; let db: DatabaseSync | undefined;
@@ -318,7 +361,7 @@ export class GoogleSyncService {
         db = this.open();
         run.readsThisRun += await this.resumeRunning(db);
         const next = this.plan(db, run.from, run.through)[0];
-        if (!next) { this.projectEnergy(db); projectRun(db); return end('done'); }
+        if (!next) { await this.projectEnergy(db); await projectRun(db); return end('done'); }
         const key = `${next.kind}:${next.first}:${next.last}`;
         // a chunk planned again right after its complete read would repeat forever; stop and report instead
         if (key === previous) return end('error', 'no_progress');
@@ -340,9 +383,11 @@ export class GoogleSyncService {
       } finally { db?.close(); this.running = false; }
     }
   }
-  private withStore(action: (db: DatabaseSync) => void): void {
+  /** Run a local store action under the run lock (a refresh does not start while it yields between steps). */
+  private async withStore(action: (db: DatabaseSync) => Promise<void>): Promise<void> {
     if (this.running) return;
-    try { const db = this.open(); try { action(db); } finally { db.close(); } } catch { /* store unavailable: nothing to project now */ }
+    this.running = true;
+    try { const db = this.open(); try { await action(db); } finally { db.close(); } } catch { /* store unavailable: nothing to project now */ } finally { this.running = false; }
   }
   backfillStatus(): BackfillStatus {
     const through = this.backfill?.through ?? addDays(sourceDay(new Date(this.now()).toISOString()), -1);

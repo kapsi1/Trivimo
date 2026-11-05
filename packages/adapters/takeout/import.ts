@@ -3,6 +3,8 @@ import { closeSync, fstatSync, lstatSync, openSync, readSync, readdirSync, realp
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { parse } from 'csv-parse/sync';
+import { setImmediate as nextTurn } from 'node:timers/promises';
+import { storeHas } from '../../storage/canonical-days.ts';
 
 const MAX_FILE_BYTES = 32 * 1024 * 1024;
 const MAX_FILES = 5000;
@@ -67,19 +69,29 @@ function readContent(root: string, path: string, kind: string): Content {
   return { bytes, header, rows: records, digest };
 }
 
+/**
+ * The plan and the import read one file per step (a generator that yields after each file, never inside a transaction).
+ * `run` finishes the steps at once (CLI, tests); `runYielding` lets the server answer other requests between files.
+ */
+type Steps<T> = Generator<void, T, void>;
+function run<T>(steps: Steps<T>): T { for (;;) { const step = steps.next(); if (step.done) return step.value; } }
+async function runYielding<T>(steps: Steps<T>): Promise<T> { for (;;) { const step = steps.next(); if (step.done) return step.value; await nextTurn(); } }
+
 /** Discover only supported files under the explicitly selected directory; never follow links. */
-export function planTakeout(directory: string): TakeoutPlan {
+export function planTakeout(directory: string): TakeoutPlan { return run(planSteps(directory)); }
+
+function* planSteps(directory: string): Steps<TakeoutPlan> {
   const root = realpathSync(directory);
   if (!lstatSync(root).isDirectory()) throw new Error('Nieprawidłowy katalog eksportu');
   const files: PlannedFile[] = [];
   let entries = 0;
-  function visit(current: string, depth: number): void {
+  function* visit(current: string, depth: number): Steps<void> {
     if (depth > MAX_DEPTH) throw new Error('Zbyt wiele poziomów katalogów');
     for (const entry of readdirSync(current, { withFileTypes: true })) {
       if (++entries > MAX_ENTRIES) throw new Error('Zbyt wiele plików eksportu');
       const path = join(current, entry.name);
       if (entry.isSymbolicLink()) continue;
-      if (entry.isDirectory()) { visit(path, depth + 1); continue; }
+      if (entry.isDirectory()) { yield* visit(path, depth + 1); continue; }
       if (!entry.isFile() || !path.split(sep).includes('Google Health')) continue;
       const group = dirname(path).split(sep).at(-1) ?? '';
       const candidate = dirname(dirname(path)).split(sep).at(-1) === 'Physical Activity_GoogleData' && Object.hasOwn(types, group) ? types[group] : undefined;
@@ -88,19 +100,24 @@ export function planTakeout(directory: string): TakeoutPlan {
       const filePath = relative(root, path);
       const content = readContent(root, filePath, kind);
       files.push({ path: filePath, kind, digest: content.digest, rows: content.rows.length });
+      yield;
     }
   }
-  visit(root, 0);
+  yield* visit(root, 0);
   files.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
   if (!files.length) throw new Error('Nie znaleziono obsługiwanych plików eksportu');
   return { root, files, pendingId: null };
 }
 
 /** Resume the saved decisions instead of recalculating a partially executed plan. */
-export function previewTakeout(directory: string, db?: DatabaseSync): TakeoutPlan {
+export function previewTakeout(directory: string, db?: DatabaseSync): TakeoutPlan { return run(previewSteps(directory, db)); }
+/** `previewTakeout` that yields to other work between files (server). */
+export function previewTakeoutYielding(directory: string, db?: DatabaseSync): Promise<TakeoutPlan> { return runYielding(previewSteps(directory, db)); }
+
+function* previewSteps(directory: string, db?: DatabaseSync): Steps<TakeoutPlan> {
   const root = realpathSync(directory);
   const pending = db?.prepare("SELECT id, root FROM import_sessions WHERE state = 'running' ORDER BY rowid LIMIT 1").get();
-  if (!pending) return planTakeout(root);
+  if (!pending) return yield* planSteps(root);
   if (pending.root !== root || typeof pending.id !== 'string') throw new Error('Niedokończony import dotyczy innego katalogu');
   const rows = db!.prepare('SELECT path, kind, digest, row_count FROM import_files WHERE session_id = ? ORDER BY path').all(pending.id);
   const files = rows.map((row) => {
@@ -115,7 +132,7 @@ export function initializeTakeoutStore(db: DatabaseSync): void {
   db.exec('PRAGMA foreign_keys = ON');
   const version = db.prepare('PRAGMA user_version').get()?.user_version;
   const appId = db.prepare('PRAGMA application_id').get()?.application_id;
-  if ((version === 1 || version === 2 || version === 3 || (version === 4 || version === 5 || version === 6 || version === 7 || version === 8 || version === 9 || version === 10 || version === 11 || version === 12)) && appId === 1414682185) return;
+  if (storeHas(version, 1) && appId === 1414682185) return;
   if (version !== 0 || appId !== 0 || Number(db.prepare("SELECT COUNT(*) AS count FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").get()?.count) !== 0) {
     throw new Error('Nieobsługiwana baza importu');
   }
@@ -132,6 +149,14 @@ export function initializeTakeoutStore(db: DatabaseSync): void {
 }
 
 export function importTakeout(db: DatabaseSync, directory: string, onPreview?: (files: number, rows: number) => void, approvedPlan?: TakeoutPlan, approvedAccountId?: string | null): { files: number; rows: number } {
+  return run(importSteps(db, directory, onPreview, approvedPlan, approvedAccountId));
+}
+/** `importTakeout` that yields to other work after each committed file (server); an interruption resumes like before. */
+export function importTakeoutYielding(db: DatabaseSync, directory: string, approvedPlan?: TakeoutPlan, approvedAccountId?: string | null): Promise<{ files: number; rows: number }> {
+  return runYielding(importSteps(db, directory, undefined, approvedPlan, approvedAccountId));
+}
+
+function* importSteps(db: DatabaseSync, directory: string, onPreview?: (files: number, rows: number) => void, approvedPlan?: TakeoutPlan, approvedAccountId?: string | null): Steps<{ files: number; rows: number }> {
   const root = realpathSync(directory);
   const pending = db.prepare("SELECT id, root FROM import_sessions WHERE state = 'running' ORDER BY rowid LIMIT 1").get();
   let sessionId: string;
@@ -141,14 +166,14 @@ export function importTakeout(db: DatabaseSync, directory: string, onPreview?: (
     sessionId = pending.id;
   } else {
     if (approvedPlan && (approvedPlan.root !== root || approvedPlan.pendingId !== null)) throw new Error('Plan importu zmienił się od podglądu');
-    const plan = approvedPlan ?? planTakeout(root);
+    const plan = approvedPlan ?? (yield* planSteps(root));
     onPreview?.(plan.files.length, plan.files.reduce((sum, file) => sum + file.rows, 0));
     sessionId = randomUUID();
     db.exec('BEGIN IMMEDIATE');
     try {
       db.prepare("INSERT INTO import_sessions VALUES (?, ?, 'running')").run(sessionId, root);
       if (approvedAccountId) {
-        if (![4, 5, 6, 7, 8, 9, 10, 11, 12].includes(Number(db.prepare('PRAGMA user_version').get()?.user_version))) throw new Error('Nieobsługiwana wersja konta');
+        if (!storeHas(db.prepare('PRAGMA user_version').get()?.user_version, 4)) throw new Error('Nieobsługiwana wersja konta');
         db.prepare("INSERT INTO import_account_decisions VALUES (?, 1, ?, 'user_confirmed', ?)").run(sessionId, approvedAccountId, new Date().toISOString());
       }
       const insert = db.prepare('INSERT INTO import_files (session_id, path, kind, digest, row_count) VALUES (?, ?, ?, ?, ?)');
@@ -173,6 +198,7 @@ export function importTakeout(db: DatabaseSync, directory: string, onPreview?: (
       db.prepare('UPDATE import_files SET done = 1 WHERE session_id = ? AND path = ?').run(sessionId, file.path);
       db.exec('COMMIT');
     } catch (error) { db.exec('ROLLBACK'); throw error; }
+    yield;
   }
   db.prepare("UPDATE import_sessions SET state = 'complete' WHERE id = ?").run(sessionId);
   return { files: files.length, rows: files.reduce((sum, file) => sum + Number(file.row_count), 0) };

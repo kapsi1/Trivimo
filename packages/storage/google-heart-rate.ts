@@ -1,10 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { parseHeartRateWindows, windowSeconds } from '../adapters/google-health/window-rollup.ts';
+import { windowSeconds } from '../adapters/google-health/window-rollup.ts';
 import { savedWindowsWith, warsawDays, type Day } from './google-band-share-day.ts';
 
-type Saved = { start: number; avg: number; min: number; max: number };
-const parse = (raw: string): Saved[] => parseHeartRateWindows(raw).map((window) => ({ ...window, start: Date.parse(window.start) }));
-const read = (db: DatabaseSync, days: Day[]) => savedWindowsWith(db, 'heart-rate-10m', days, parse);
+const read = (db: DatabaseSync, days: Day[]) => savedWindowsWith(db, 'heart-rate-10m', days, 'heart-rate-detail@1');
 
 /**
  * Heart-rate windows of one Warsaw day for presentation: mean, min and max of each ten-minute window with a measurement.

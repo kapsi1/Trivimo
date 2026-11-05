@@ -6,10 +6,11 @@ import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
 import { extractZip, isGoogleHealthEntry, listZip } from '../../packages/adapters/takeout/zip.ts';
 import { DatabaseSync } from 'node:sqlite';
-import { importTakeout, initializeTakeoutStore, previewTakeout, type TakeoutPlan } from '../../packages/adapters/takeout/import.ts';
+import { importTakeoutYielding, initializeTakeoutStore, previewTakeoutYielding, type TakeoutPlan } from '../../packages/adapters/takeout/import.ts';
 import { saveUserNote } from '../../packages/storage/user-notes.ts';
 import type { UserNoteInput } from '../../packages/contracts/day-snapshot.ts';
 import { assignSessions, unassignedSessions } from '../../packages/storage/source-accounts.ts';
+import { storeHas } from '../../packages/storage/canonical-days.ts';
 
 export class TakeoutService {
   private previewState?: { token: string; plan: TakeoutPlan; accountId: string | null; expires: number; extracted?: string };
@@ -19,16 +20,18 @@ export class TakeoutService {
   private accountState?: { token: string; accountId: string; sessions: string[]; expires: number };
   constructor(private readonly dbPath: string) {}
 
-  preview(directory: string, sameAccount = false) {
-    if (!isAbsolute(directory) || directory.length > 4096) throw new Error('invalid_directory');
+  /** Reads every file of the export (digests, rows); yields between files so the server keeps answering. */
+  async preview(directory: string, sameAccount = false) {
+    // a local folder only: a UNC or device path (\\host\share, \\?\, //host) would make Windows contact another host (and send NTLM)
+    if (!isAbsolute(directory) || directory.length > 4096 || /^[\\/]{2}/.test(directory)) throw new Error('invalid_directory');
     let db: DatabaseSync | undefined;
     try {
       if (existsSync(this.dbPath)) {
         db = new DatabaseSync(this.dbPath, { readOnly: true, timeout: 5000 });
       }
-      const plan = previewTakeout(directory, db);
+      const plan = await previewTakeoutYielding(directory, db);
       let accountId: string | null = null;
-      if (db && [4, 5, 6, 7, 8, 9, 10, 11, 12].includes(Number(db.prepare('PRAGMA user_version').get()?.user_version))) {
+      if (db && storeHas(db.prepare('PRAGMA user_version').get()?.user_version, 4)) {
         if (plan.pendingId) {
           const previous = db.prepare('SELECT account_id FROM import_account_decisions WHERE session_id = ? ORDER BY revision DESC LIMIT 1').get(plan.pendingId);
           accountId = typeof previous?.account_id === 'string' ? previous.account_id : null;
@@ -81,7 +84,7 @@ export class TakeoutService {
     }
     for (const [index, part] of parts.entries()) { rmSync(part.path, { force: true }); this.uploads.delete(ids[index]!); }
     try {
-      const result = this.preview(target, sameAccount);
+      const result = await this.preview(target, sameAccount);
       this.previewState!.extracted = target;
       return result;
     } catch (error) { if (!this.pendingRoot(target)) this.removeExtracted(target); throw error; }
@@ -94,17 +97,17 @@ export class TakeoutService {
   }
   private removeExtracted(target: string) { rmSync(target, { recursive: true, force: true }); rmSync(`${target}.done`, { force: true }); }
 
-  commit(token: string) {
+  async commit(token: string) {
     const state = this.previewState;
     this.previewState = undefined;
     if (!state || state.token !== token || state.expires < Date.now()) throw new Error('preview_expired');
-    const result = this.commitPlan(state);
+    const result = await this.commitPlan(state);
     // the originals are now in the store; the extracted copy is temporary (kept above only for resuming a failed import)
     if (state.extracted) this.removeExtracted(state.extracted);
     return result;
   }
 
-  private commitPlan(state: NonNullable<TakeoutService['previewState']>) {
+  private async commitPlan(state: NonNullable<TakeoutService['previewState']>) {
     const directory = dirname(this.dbPath);
     mkdirSync(directory, { recursive: true });
     if (lstatSync(directory).isSymbolicLink()) throw new Error('invalid_store');
@@ -113,7 +116,7 @@ export class TakeoutService {
     const db = new DatabaseSync(this.dbPath, { timeout: 5000 });
     try {
       initializeTakeoutStore(db);
-      return importTakeout(db, state.plan.root, undefined, state.plan, state.accountId);
+      return await importTakeoutYielding(db, state.plan.root, state.plan, state.accountId);
     } finally { db.close(); }
   }
 
@@ -122,7 +125,7 @@ export class TakeoutService {
     const db = new DatabaseSync(this.dbPath, { timeout: 5000 });
     try {
       const version = db.prepare('PRAGMA user_version').get()?.user_version;
-      if (db.prepare('PRAGMA application_id').get()?.application_id !== 1414682185 || (version !== 3 && (version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8 && version !== 9 && version !== 10 && version !== 11 && version !== 12))) throw new Error('invalid_store');
+      if (db.prepare('PRAGMA application_id').get()?.application_id !== 1414682185 || !storeHas(version, 3)) throw new Error('invalid_store');
       return saveUserNote(db, input);
     } finally { db.close(); }
   }
@@ -131,7 +134,7 @@ export class TakeoutService {
     if (!existsSync(this.dbPath) || lstatSync(this.dbPath).isSymbolicLink()) throw new Error('invalid_store');
     const db = new DatabaseSync(this.dbPath, { readOnly: true, timeout: 5000 });
     try {
-      if (![4, 5, 6, 7, 8, 9, 10, 11, 12].includes(Number(db.prepare('PRAGMA user_version').get()?.user_version))) throw new Error('account_unavailable');
+      if (!storeHas(db.prepare('PRAGMA user_version').get()?.user_version, 4)) throw new Error('account_unavailable');
       const accounts = db.prepare('SELECT id FROM source_accounts LIMIT 2').all();
       if (accounts.length !== 1 || typeof accounts[0]?.id !== 'string') throw new Error('account_unavailable');
       const sessions = unassignedSessions(db);
@@ -149,7 +152,7 @@ export class TakeoutService {
     if (!existsSync(this.dbPath) || lstatSync(this.dbPath).isSymbolicLink()) throw new Error('invalid_store');
     const db = new DatabaseSync(this.dbPath, { timeout: 5000 });
     try {
-      if (db.prepare('PRAGMA application_id').get()?.application_id !== 1414682185 || ![4, 5, 6, 7, 8, 9, 10, 11, 12].includes(Number(db.prepare('PRAGMA user_version').get()?.user_version))) throw new Error('invalid_store');
+      if (db.prepare('PRAGMA application_id').get()?.application_id !== 1414682185 || !storeHas(db.prepare('PRAGMA user_version').get()?.user_version, 4)) throw new Error('invalid_store');
       db.exec('PRAGMA foreign_keys = ON');
       assignSessions(db, state.accountId, state.sessions);
       return { assigned: state.sessions.length };

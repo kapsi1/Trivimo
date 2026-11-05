@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { setImmediate as nextTurn } from 'node:timers/promises';
 import { parseDailyRollup, type DailyRollupType } from '../adapters/google-health/daily-rollup.ts';
 import { snapshotInputSchema, type DaySnapshotInput } from '../contracts/day-snapshot.ts';
 import { csvMetrics, type CsvMetric } from '../contracts/csv-import.ts';
@@ -197,6 +198,21 @@ export function publishDayRange(db: DatabaseSync, from: string, to: string, nowM
     const last = addDays(first, 364) < to ? addDays(first, 364) : to;
     const part = publishGoogleDays(db, first, last, nowMs);
     total.published += part.published; total.unchanged += part.unchanged;
+  }
+  return total;
+}
+
+/**
+ * `publishGoogleDays` over [from, to] in steps of `stepDays`, yielding to other work between steps (server). Every day
+ * is published on its own, so the steps give the same snapshots as one call; a failure keeps the days already published.
+ */
+export async function publishDayRangeYielding(db: DatabaseSync, from: string, to: string, nowMs: number, stepDays = 31): Promise<{ published: number; unchanged: number }> {
+  const total = { published: 0, unchanged: 0 };
+  for (let first = from; first <= to; first = addDays(first, stepDays)) {
+    const last = addDays(first, stepDays - 1) < to ? addDays(first, stepDays - 1) : to;
+    const part = publishGoogleDays(db, first, last, nowMs);
+    total.published += part.published; total.unchanged += part.unchanged;
+    await nextTurn();
   }
   return total;
 }

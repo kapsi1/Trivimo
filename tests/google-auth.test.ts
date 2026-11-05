@@ -9,14 +9,35 @@ test('OAuth wiąże state i PKCE, nie udostępnia tokenów i nie ponawia kodu', 
   const auth = new GoogleAuth({ client_id: 'synthetic-id', client_secret: 'synthetic-secret' }, fake, () => 1000);
   const url = new URL(auth.start()); const state = url.searchParams.get('state');
   await assert.rejects(auth.finish('incorrect', 'code'));
+  await assert.rejects(auth.finish(`${state!.slice(0, 42)}${state!.endsWith('A') ? 'B' : 'A'}`, 'code'));
   assert.equal(calls, 0);
+  // a callback with another state does not cancel the authorization in progress; a newer start replaces it
+  const next = new URL(auth.start());
   await assert.rejects(auth.finish(state, 'code'));
-  const next = new URL(auth.start()); await auth.finish(next.searchParams.get('state'), 'code');
+  assert.equal(calls, 0);
+  await auth.finish(next.searchParams.get('state'), 'code');
   assert.equal(calls, 1);
   assert.equal(createHash('sha256').update(sent!.get('code_verifier')!).digest('base64url'), next.searchParams.get('code_challenge'));
   assert.equal(auth.status().connected, true);
   assert.equal(JSON.stringify(auth.status()).includes('synthetic-token'), false);
+  // the code is used once: the same callback again is refused without a request
   await assert.rejects(auth.finish(next.searchParams.get('state'), 'code'));
+  assert.equal(calls, 1);
+});
+
+test('OAuth: obcy callback nie przerywa trwającej autoryzacji, token jest odświeżany minutę przed wygaśnięciem', async () => {
+  let clock = 1000, calls = 0;
+  const fake: typeof fetch = async () => { calls++; return Response.json({ access_token: `synthetic-${calls}`, refresh_token: 'synthetic-refresh', expires_in: 3600, scope: 'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly' }); };
+  const auth = new GoogleAuth({ client_id: 'synthetic-id', client_secret: 'synthetic-secret' }, fake, () => clock);
+  const state = new URL(auth.start()).searchParams.get('state');
+  await assert.rejects(auth.finish('A'.repeat(43), 'code'));
+  await auth.finish(state, 'code');
+  assert.equal(calls, 1);
+  const scope = 'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly';
+  clock = 1000 + 3600_000 - 120_000;
+  assert.equal(await auth.withAccessToken(scope, async (token) => token), 'synthetic-1');
+  clock = 1000 + 3600_000 - 30_000;
+  assert.equal(await auth.withAccessToken(scope, async (token) => token), 'synthetic-2');
 });
 
 test('OAuth zachowuje poprzedni token po błędzie wymiany', async () => {

@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { parseWindowRollup, windowSeconds, type WindowRollupType } from '../adapters/google-health/window-rollup.ts';
+import { windowSeconds, type WindowRollupType } from '../adapters/google-health/window-rollup.ts';
+import { derivedReader, pageParsers, windowParser, type PageParser } from './google-page-windows.ts';
 import { warsawDay } from '../domain/warsaw-day.ts';
 import type { WindowJobKind } from './google-pages.ts';
 
@@ -30,27 +31,49 @@ function dates(from: string, to: string): Day[] {
  * A day covered by a job with no windows maps to an empty list (read, nothing there); an unread day is absent.
  */
 export function savedWindows(db: DatabaseSync, kind: WindowJobKind, type: WindowRollupType, days: Day[]): Map<string, Window[]> {
-  return savedWindowsWith(db, kind, days, (raw) => parseWindowRollup(raw, type).windows.map((window) => ({ start: Date.parse(window.start), value: window.value })));
+  return savedWindowsWith(db, kind, days, windowParser(type)) as Map<string, Window[]>;
 }
 
-/** Same day claiming as `savedWindows`, with a caller-supplied page parser (e.g. heart-rate values for presentation). */
-export function savedWindowsWith<T extends { start: number }>(db: DatabaseSync, kind: WindowJobKind, days: Day[], parse: (rawJson: string) => T[]): Map<string, T[]> {
+/**
+ * Parsed pages by parser and page digest (SHA-256 of the saved text): the result depends only on the text. A page is
+ * taken from this process memory, else from the store's derived layer (v13), else parsed from the original once.
+ * Bounded by the number of kept windows; the least recently used pages go first. Callers must not change the windows.
+ */
+const pageCache = new Map<string, readonly { start: number }[]>();
+let cachedWindows = 0;
+const maxCachedWindows = 400_000;
+function parsedPage(key: string, compute: () => readonly { start: number }[]): readonly { start: number }[] {
+  const hit = pageCache.get(key);
+  if (hit) { pageCache.delete(key); pageCache.set(key, hit); return hit; }
+  const windows = compute();
+  pageCache.set(key, windows); cachedWindows += windows.length;
+  for (const [oldest, value] of pageCache) { if (cachedWindows <= maxCachedWindows || oldest === key) break; pageCache.delete(oldest); cachedWindows -= value.length; }
+  return windows;
+}
+
+/** Same day claiming as `savedWindows`, with any parser of saved pages (e.g. heart-rate values for presentation). */
+export function savedWindowsWith<P extends PageParser>(db: DatabaseSync, kind: WindowJobKind, days: Day[], parser: P): Map<string, ReturnType<(typeof pageParsers)[P]>> {
+  type T = ReturnType<(typeof pageParsers)[P]>[number];
   const claimed = new Map<string, T[]>();
-  const pages = db.prepare('SELECT raw_json FROM google_read_pages WHERE job_id = ? ORDER BY page_number LIMIT 50');
-  if (days.length === 0) return claimed;
+  if (days.length === 0) return claimed as Map<string, ReturnType<(typeof pageParsers)[P]>>;
+  const parse = pageParsers[parser] as (rawJson: string) => T[];
+  const pages = db.prepare('SELECT page_number, digest FROM google_read_pages WHERE job_id = ? ORDER BY page_number LIMIT 50');
+  const text = db.prepare('SELECT raw_json FROM google_read_pages WHERE job_id = ? AND page_number = ?');
+  const derived = derivedReader(db, parser);
   // only jobs that can cover one of the days, so reads of other years never push relevant ones past the limit
   for (const job of db.prepare("SELECT id, range_start, range_end FROM google_read_jobs WHERE kind = ? AND state = 'complete' AND julianday(range_start) <= julianday(?) AND julianday(range_end) >= julianday(?) ORDER BY created_at DESC, id LIMIT 500").all(kind, new Date(days.at(-1)!.start).toISOString(), new Date(days[0]!.end).toISOString())) {
     const from = Date.parse(String(job.range_start)), to = Date.parse(String(job.range_end));
     const needed = days.filter((day) => !claimed.has(day.date) && from <= day.start && to >= day.end);
     if (needed.length === 0) continue;
     const windows: T[] = [];
-    for (const page of pages.iterate(job.id)) {
-      if (typeof page.raw_json !== 'string') throw new Error('invalid_page');
-      windows.push(...parse(page.raw_json));
+    for (const page of pages.all(job.id)) {
+      const original = () => { const raw = text.get(job.id, page.page_number)?.raw_json; if (typeof raw !== 'string') throw new Error('invalid_page'); return parse(raw); };
+      const digest = typeof page.digest === 'string' && /^[0-9a-f]{64}$/.test(page.digest) ? page.digest : null;
+      windows.push(...(digest ? parsedPage(`${parser}:${digest}`, () => (derived?.(digest) as T[] | undefined) ?? original()) as T[] : original()));
     }
     for (const day of needed) claimed.set(day.date, windows.filter((window) => window.start >= day.start && window.start < day.end));
   }
-  return claimed;
+  return claimed as Map<string, ReturnType<(typeof pageParsers)[P]>>;
 }
 
 export function warsawDays(from: string, to: string): Day[] { return dates(from, to); }

@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { initializeTakeoutStore } from '../adapters/takeout/import.ts';
 import {
   currentStoreVersion, migrateCalorieJobs, migrateCanonicalDays, migrateCsvImports, migrateCsvNotes, migrateDailyRollups, migrateGooglePages,
-  migrateReadPolicy, migrateSourceAccounts, migrateSourceLists, migrateUserNotes, migrateWindowJobs,
+  migratePageWindows, migrateReadPolicy, migrateSourceAccounts, migrateSourceLists, migrateUserNotes, migrateWindowJobs,
 } from './canonical-days.ts';
 import { verifyTakeout } from './verify-takeout.ts';
 
@@ -26,7 +26,7 @@ export async function createEmptyStore(path: string): Promise<boolean> {
       await migrateCanonicalDays(db, step(1)); await migrateUserNotes(db, step(2)); await migrateSourceAccounts(db, step(3), true);
       await migrateGooglePages(db, step(4)); await migrateDailyRollups(db, step(5)); await migrateCalorieJobs(db, step(6));
       await migrateWindowJobs(db, step(7)); await migrateReadPolicy(db, step(8)); await migrateSourceLists(db, step(9));
-      await migrateCsvImports(db, step(10)); await migrateCsvNotes(db, step(11));
+      await migrateCsvImports(db, step(10)); await migrateCsvNotes(db, step(11)); await migratePageWindows(db, step(12));
       if (db.prepare('PRAGMA user_version').get()?.user_version !== currentStoreVersion) throw new Error('store_version_mismatch');
     } finally { db.close(); }
     verifyTakeout(file);

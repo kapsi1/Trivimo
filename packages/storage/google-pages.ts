@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { dailyRollupTypes, maxRollupDays, parseDailyRollup, type DailyRollupType } from '../adapters/google-health/daily-rollup.ts';
 import { maxWindowRangeDays, parseWindowRollup, windowSeconds } from '../adapters/google-health/window-rollup.ts';
+import { derivePageWindows } from './google-page-windows.ts';
 import { isSourceListKind, maxSourceListDays, parseSourceList, sourceListTypes, type SourceListKind } from '../adapters/google-health/source-list.ts';
 
 export const windowJobKinds = { 'heart-rate-10m': 'heart-rate', 'active-energy-10m': 'active-energy-burned', 'total-calories-10m': 'total-calories', 'steps-10m': 'steps', 'distance-10m': 'distance' } as const;
@@ -45,6 +46,8 @@ export function commitGooglePage(db: DatabaseSync, jobId: string, expectedCursor
     const pageNumber = Number(db.prepare('SELECT COALESCE(MAX(page_number), 0) + 1 AS n FROM google_read_pages WHERE job_id = ?').get(jobId)?.n);
     const digest = createHash('sha256').update(rawJson, 'utf8').digest('hex');
     db.prepare('INSERT INTO google_read_pages VALUES (?, ?, ?, ?, ?, ?, ?)').run(jobId, pageNumber, expectedCursor, nextCursor, rawJson, digest, new Date().toISOString());
+    // the derived windows commit with their original, so a saved page never lacks them (store v13)
+    derivePageWindows(db, String(job.kind), digest, rawJson);
     db.prepare('UPDATE google_read_jobs SET cursor = ?, state = ? WHERE id = ?').run(nextCursor, nextCursor ? 'running' : 'complete', jobId);
     db.exec('COMMIT'); return { complete: nextCursor === null, pageNumber };
   } catch (error) { db.exec('ROLLBACK'); throw error; }

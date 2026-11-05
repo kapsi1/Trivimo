@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import { removeUnusedPageWindows } from './google-page-windows.ts';
 import { sourceDay } from '../domain/source-day.ts';
 
 /**
@@ -33,7 +34,9 @@ type Row = Record<string, string | number | bigint | Uint8Array | null>;
 function remove(db: DatabaseSync, old: Row, replacedBy: string, reason: string, now: string): number {
   const pages = Number(db.prepare('SELECT COUNT(*) AS n FROM google_read_pages WHERE job_id = ?').get(old.id)?.n);
   db.prepare('INSERT INTO google_read_supersessions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(randomUUID(), old.kind, old.range_start, old.range_end, old.account_digest, contentDigest(db, String(old.id)), old.created_at, replacedBy, pages, reason, now);
+  const digests = db.prepare('SELECT digest FROM google_read_pages WHERE job_id = ?').all(old.id).map((row) => String(row.digest));
   db.prepare('DELETE FROM google_read_pages WHERE job_id = ?').run(old.id);
+  removeUnusedPageWindows(db, digests);
   db.prepare('DELETE FROM google_read_job_meta WHERE job_id = ?').run(old.id);
   db.prepare('DELETE FROM google_read_jobs WHERE id = ?').run(old.id);
   return pages;

@@ -47,6 +47,10 @@ Nowe wymaganie pełnego katalogu API zastępuje dla tej aplikacji dawne ogranicz
 - Użytkownik zlecił import danych sprzed 2026 z API. Wybrał kwalifikację tych dób do tabeli tymi samymi regułami co 2026 (zamiast samych oryginałów); osobny audyt wcześniejszych lat pozostaje otwarty. Odczyt starszych lat uruchamia się ręcznie datą początkową; automatyczne nadrabianie luk nadal zaczyna się od 2026-01-01.
 - Import dowolnego CSV z mapowaniem kolumn na metryki aplikacji. Użytkownik wybrał wariant „uzupełniają braki”: CSV nie nadpisuje i nie sumuje się z wartościami Google (reguła `csv-fill-v1` w [kontraktach](data-contracts.md)).
 
+## Wydajność po przeglądzie (2026-11-05)
+
+- Użytkownik zlecił poprawki z przeglądu kodu i migrację magazynu do v13: sparsowane okna 10-minutowe są zapisywane jako warstwa pochodna obok oryginalnych stron (wersjonowany parser, weryfikacja przy kopii i przywróceniu), a projekcja snapshotów po odświeżeniu jest przyrostowa. Przepisanie backendu na inny język odrzucono: koszt był w architekturze (blokowanie wątku, ponowne parsowanie), nie w szybkości języka.
+
 ## Proponowane domyślne decyzje techniczne
 
 Na potrzeby pierwszej próby P0 wybrano TypeScript, React, SQLite i lokalny serwis Node z REST; szczegóły i ograniczenia są w [środowisku developerskim](development.md). Próbę parserów Kotlin należy jeszcze wykonać przed ostateczną oceną stosu. MCP pozostaje przyszłym adapterem tych samych komend.
@@ -63,6 +67,7 @@ Kanoniczny dzień: Europe/Warsaw, zachowanie czasu źródła i jawnie osobnych p
 | Model kalorii i progi kwalifikacji | M1 przed backfill | Ocena kilku dni API/Takeout; nie zgadywać czasu noszenia ani progu kompletności |
 | Wariant bez serwera aplikacji (local-first PWA) | Przed mobilnym dostępem; razem z wyborem hosta | Dziś nie ma hostowanego backendu: serwer działa na 127.0.0.1, baza to lokalny plik. Wariant: SQLite-WASM (OPFS) w przeglądarce, domena i kontrakty współdzielone, opcjonalny bezstanowy proxy wyłącznie do wymiany tokenów OAuth (bez danych zdrowotnych). Do rozstrzygnięcia w bieżących dokumentach Google (stan na 2026-11-05 niezweryfikowany): flow OAuth bez sekretu w kliencie, refresh token, CORS Health API. Skutki: brak synchronizacji w tle przy zamkniętej karcie, ryzyko wyczyszczenia OPFS (`storage.persist()` i eksport kopii), jeden pisarz (Web Locks/Worker), brak REST/MCP bez serwera, klucza modelu AI nie wolno trzymać w przeglądarce, dane na jednym urządzeniu bez osobnej synchronizacji. Dopóki nie wybrano: przypadki użycia nie zakładają HTTP, a dostęp do bazy idzie przez cienki interfejs; nie dodawać zależności ani sterownika WASM |
 | Zdalny dostęp i stale dostępny serwer | Przed mobilnym wpisywaniem/MCP | Prywatny host/tunel lub serwer; osobny wybór kosztów, dostępności i prywatności |
+| Uwierzytelnienie poza 127.0.0.1 | Przed każdym dostępem spoza tego komputera (LAN, tunel, telefon, PWA z serwerem) | Dziś cookie sesji wydaje `GET /api/session` każdemu, kto dosięgnie portu: chroni przed stronami w przeglądarce (Host/Origin, SameSite=Strict, nagłówek żądania), nie przed lokalnymi procesami. Origin `127.0.0.1:5173` i `localhost:5173` są dozwolone na stałe. Nie wystawiać serwera ani Vite poza 127.0.0.1, dopóki nie ma parowania urządzenia lub tokenu, TLS i listy Origin z konfiguracji (przegląd 2026-11-05) |
 | Wariant ChatGPT Android | Spike w AI | Potwierdzić konkretne konto, klienta, głos/zdjęcia, odczyt/zapis i wyłączenie PC |
 | Polityka AI i koszty | Przed wywołaniami modeli | Dostawca/model i dane wysyłane, limity; brak sztywnego modelu w domenie |
 | Mapy i licencje katalogów żywności | Przed ich adapterami | Dostawca, limity, atrybucja, przechowywanie i eksport |

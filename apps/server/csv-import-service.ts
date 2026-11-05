@@ -6,7 +6,7 @@ import { csvParserVersion, inspectCsv, parseMappedCsv } from '../../packages/ada
 import { sourceDay } from '../../packages/domain/source-day.ts';
 import { currentStoreVersion, readCanonicalDay, remarksByDay } from '../../packages/storage/canonical-days.ts';
 import { contentDigest, csvDayOrigin, decideCsvImport, listCsvImports, mappingDigest, planCsvNotes, saveCsvImport } from '../../packages/storage/csv-imports.ts';
-import { publishDayRange } from '../../packages/storage/google-day-snapshots.ts';
+import { publishDayRangeYielding } from '../../packages/storage/google-day-snapshots.ts';
 
 /**
  * CSV import with a column mapping: inspect the file, preview what the mapping yields and which day values it would
@@ -58,7 +58,7 @@ export class CsvImportService {
     };
   }
 
-  commit(name: string, content: string, input: unknown, token: string) {
+  async commit(name: string, content: string, input: unknown, token: string) {
     const mapping = csvMappingSchema.parse(input);
     if (token !== this.token(content, mapping)) throw new Error('plan_changed');
     const parsed = parseMappedCsv(content, mapping, this.today());
@@ -67,7 +67,7 @@ export class CsvImportService {
       db.exec('PRAGMA foreign_keys = ON');
       const saved = saveCsvImport(db, { fileName: name, content, mapping, parsed, now: new Date(this.now()).toISOString() });
       const days = parsed.values.map((value) => value.day).sort();
-      const result = days.length ? publishDayRange(db, days[0]!, days.at(-1)!, this.now()) : { published: 0, unchanged: 0 };
+      const result = days.length ? await publishDayRangeYielding(db, days[0]!, days.at(-1)!, this.now()) : { published: 0, unchanged: 0 };
       return { id: saved.id, created: saved.created, notes: saved.notes, ...result };
     } finally { db.close(); }
   }
@@ -76,12 +76,12 @@ export class CsvImportService {
   /** Origin of one day's data in CSV imports, for the day's provenance panel only. */
   day(date: string) { const db = this.open(true); try { return csvDayOrigin(db, date); } finally { db.close(); } }
 
-  decide(id: string, state: 'included' | 'excluded') {
+  async decide(id: string, state: 'included' | 'excluded') {
     const db = this.open(false);
     try {
       db.exec('PRAGMA foreign_keys = ON');
       const range = decideCsvImport(db, id, state, new Date(this.now()).toISOString());
-      return { notes: range.notes, ...(range.first && range.last ? publishDayRange(db, range.first, range.last, this.now()) : { published: 0, unchanged: 0 }) };
+      return { notes: range.notes, ...(range.first && range.last ? await publishDayRangeYielding(db, range.first, range.last, this.now()) : { published: 0, unchanged: 0 }) };
     } finally { db.close(); }
   }
 }

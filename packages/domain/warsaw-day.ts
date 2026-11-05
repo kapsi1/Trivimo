@@ -32,8 +32,23 @@ function midnightUtc(year: number, month: number, day: number): number {
 export const firstSupportedYear = 2000;
 export const firstSupportedDay = `${firstSupportedYear}-01-01`;
 
-/** Warsaw civil day as [start, end), using the runtime's timezone database. */
-export function warsawDay(date: string): { start: string; end: string } {
+/**
+ * Bounds of days already computed (a call costs several `Intl` formats, and coverage and projection loops ask for the
+ * same days many times). Only valid dates are kept; the timezone database does not change while the process runs.
+ */
+const dayCache = new Map<string, Readonly<{ start: string; end: string }>>();
+
+/** Warsaw civil day as [start, end), using the runtime's timezone database. The result is frozen and shared. */
+export function warsawDay(date: string): Readonly<{ start: string; end: string }> {
+  const hit = dayCache.get(date);
+  if (hit) return hit;
+  const bounds = Object.freeze(computeWarsawDay(date));
+  if (dayCache.size >= 50000) dayCache.clear();
+  dayCache.set(date, bounds);
+  return bounds;
+}
+
+function computeWarsawDay(date: string): { start: string; end: string } {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
   if (!match) throw new Error('Nieprawidłowa data');
   const [, yearText, monthText, dayText] = match;

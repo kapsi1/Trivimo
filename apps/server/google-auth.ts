@@ -9,6 +9,7 @@ const tokenSchema = z.object({ access_token: z.string().min(1), expires_in: z.nu
 const savedSchema = z.object({ refresh: z.string().min(1), scopes: z.array(z.string()) });
 
 type Credentials = z.infer<typeof credentialsSchema>['web'];
+const expiryMarginMs = 60_000;
 export class GoogleAuth {
   private pending?: { state: string; verifier: string; expires: number; returnTo?: string };
   private tokens?: { access: string; refresh?: string; expires: number; scopes: string[] };
@@ -35,8 +36,10 @@ export class GoogleAuth {
   }
   async finish(state: string | null, code: string | null): Promise<string | undefined> {
     const pending = this.pending;
+    // only the callback of this authorization (matching state) ends it; another request to the callback address does not cancel it
+    if (!pending || !state || !/^[A-Za-z0-9_-]{43}$/.test(state) || state.length !== pending.state.length || !timingSafeEqual(Buffer.from(state), Buffer.from(pending.state))) throw new Error('invalid_callback');
     this.pending = undefined;
-    if (!pending || !state || !/^[A-Za-z0-9_-]{43}$/.test(state) || !code || code.length > 4096 || this.now() > pending.expires || state.length !== pending.state.length || !timingSafeEqual(Buffer.from(state), Buffer.from(pending.state))) throw new Error('invalid_callback');
+    if (!code || code.length > 4096 || this.now() > pending.expires) throw new Error('invalid_callback');
     const body = new URLSearchParams({ code, client_id: this.credentials.client_id, client_secret: this.credentials.client_secret, redirect_uri: callback, grant_type: 'authorization_code', code_verifier: pending.verifier });
     const response = await this.send('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body, signal: AbortSignal.timeout(15000) });
     if (!response.ok) throw new Error('token_exchange_failed');
@@ -69,9 +72,10 @@ export class GoogleAuth {
     return this.refreshing;
   }
   async withAccessToken<T>(scope: string, action: (token: string) => Promise<T>): Promise<T> {
-    if (this.tokens && this.tokens.expires <= this.now() && this.tokens.refresh) await this.refresh();
+    // refreshed a minute early, so a token does not expire during the request it is used for
+    if (this.tokens && this.tokens.expires - expiryMarginMs <= this.now() && this.tokens.refresh) await this.refresh();
     const token = this.tokens;
-    if (!token || token.expires <= this.now()) throw new Error('authorization_required');
+    if (!token || token.expires - (token.refresh ? expiryMarginMs : 0) <= this.now()) throw new Error('authorization_required');
     if (!token.scopes.includes(scope)) throw new Error('scope_missing');
     return action(token.access);
   }

@@ -7,6 +7,7 @@ import { parseMappedCsv } from '../adapters/csv/mapped-csv.ts';
 import { sourceDay } from '../domain/source-day.ts';
 import { backupToNewFile } from './backup.ts';
 import { verifyTakeout } from './verify-takeout.ts';
+import { fillPageWindows } from './google-page-windows.ts';
 
 const applicationId = 1414682185;
 
@@ -234,8 +235,23 @@ export function remarksByDay(notes: { day: string; text: string }[]): Map<string
   return days;
 }
 
+/**
+ * Version 13: derived ten-minute windows of saved pages (`google_page_windows`, see google-page-windows.ts), filled for
+ * every existing window page, and an index of pages by digest (derived rows are looked up and cleaned up by it).
+ * Originals are unchanged; the rows are a versioned cache checked by the restore check.
+ */
+export async function migratePageWindows(db: DatabaseSync, backupPath: string): Promise<void> {
+  await migrateWithBackup(db, backupPath, 12, `CREATE TABLE google_page_windows (
+      digest TEXT NOT NULL CHECK(length(digest) = 64), parser TEXT NOT NULL, windows TEXT NOT NULL, PRIMARY KEY(digest, parser)
+    ) STRICT;
+    CREATE INDEX google_read_pages_digest ON google_read_pages(digest);
+    PRAGMA user_version = 13;`, () => fillPageWindows(db));
+}
+
 /** Store version the server, services and CLI expect. */
-export const currentStoreVersion = 12;
+export const currentStoreVersion = 13;
+/** Whether a store version has the given feature version (and is not newer than this code understands). */
+export const storeHas = (version: unknown, since: number): boolean => typeof version === 'number' && version >= since && version <= currentStoreVersion;
 
 export function publishCanonicalDay(db: DatabaseSync, input: DaySnapshotInput, expectedRevision: number | null) {
   const parsed = snapshotInputSchema.parse(input);

@@ -23,7 +23,8 @@ if (sourcePath) {
 let sourceDb: DatabaseSync | undefined;
 function getSourceDb(): DatabaseSync | undefined {
   if (sourceDb || !sourcePath) return sourceDb;
-  try { sourceDb = new DatabaseSync(sourcePath, { readOnly: true }); } catch { return undefined; }
+  // the refresh and imports write through their own connections; a read waits for their commit instead of failing at once
+  try { sourceDb = new DatabaseSync(sourcePath, { readOnly: true, timeout: 5000 }); } catch { return undefined; }
   return sourceDb;
 }
 let googleAuth: GoogleAuth | undefined;
