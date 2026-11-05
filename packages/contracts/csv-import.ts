@@ -16,6 +16,7 @@ const metricColumn = <T extends readonly [string, ...string[]]>(units: T) => z.o
  * the day is the civil date written in the file (an ISO time with an offset is assigned to its Warsaw day).
  * `dailyRows` decides what several rows of one day mean for daily totals: `single` (copies; differing values are a
  * conflict) or `sum` (parts of the day, added up by this explicit choice). Weight and body fat are always measurements.
+ * `note` is a column of remarks: on import they are written to the day notes, like notes typed in the application.
  */
 export const csvMappingSchema = z.object({
   delimiter: z.enum([',', ';', '\t']),
@@ -24,11 +25,14 @@ export const csvMappingSchema = z.object({
   date: z.object({ column, format: z.enum(csvDateFormats) }).strict(),
   time: column.nullable(),
   dailyRows: z.enum(['single', 'sum']),
+  // optional column with a free-text remark of the day; absent in mappings saved before csv-mapped-v2
+  note: column.optional(),
   metrics: z.object({
     weight: metricColumn(csvUnits.weight).optional(), body_fat: metricColumn(csvUnits.body_fat).optional(), steps: metricColumn(csvUnits.steps).optional(),
     distance: metricColumn(csvUnits.distance).optional(), total_energy: metricColumn(csvUnits.total_energy).optional(), active_energy: metricColumn(csvUnits.active_energy).optional(),
-  }).strict().refine((metrics) => Object.keys(metrics).length > 0, { message: 'Wybierz co najmniej jedną metrykę' }),
-}).strict();
+  }).strict(),
+}).strict().refine((mapping) => Object.keys(mapping.metrics).length > 0 || mapping.note !== undefined, { message: 'Wybierz co najmniej jedną metrykę lub kolumnę uwag' });
 export type CsvMapping = z.infer<typeof csvMappingSchema>;
 
 export const csvContentSchema = z.object({ name: z.string().min(1).max(255), content: z.string().min(1).max(8 * 1024 * 1024) }).strict();
+

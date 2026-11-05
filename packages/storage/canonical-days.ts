@@ -2,6 +2,9 @@ import type { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
 import { daySnapshotSchema, snapshotInputSchema, type DaySnapshotInput } from '../contracts/day-snapshot.ts';
 import { projectIssueNotes } from '../domain/data-issues.ts';
+import { csvMappingSchema } from '../contracts/csv-import.ts';
+import { parseMappedCsv } from '../adapters/csv/mapped-csv.ts';
+import { sourceDay } from '../domain/source-day.ts';
 import { backupToNewFile } from './backup.ts';
 import { verifyTakeout } from './verify-takeout.ts';
 
@@ -187,8 +190,52 @@ export async function migrateCsvImports(db: DatabaseSync, backupPath: string): P
     PRAGMA user_version = 11;`);
 }
 
+/**
+ * Version 12: origin of the day notes written by CSV imports, so withdrawing an import also takes back its remarks.
+ * `csv_import_notes` keeps the remarks of each day of an import (distinct texts joined by new lines);
+ * `user_note_sources` marks a note revision written by an import: `apply` added `text` to the note, `withdraw`
+ * removed it. A revision without a row was written in the application. Imports saved before this version are
+ * matched by their saved file and mapping, and by note revisions created at the same moment as the import.
+ */
+export async function migrateCsvNotes(db: DatabaseSync, backupPath: string): Promise<void> {
+  await migrateWithBackup(db, backupPath, 11, `CREATE TABLE csv_import_notes (
+      import_id TEXT NOT NULL REFERENCES csv_imports(id), day TEXT NOT NULL, text TEXT NOT NULL, PRIMARY KEY(import_id, day)
+    ) STRICT;
+    CREATE TABLE user_note_sources (
+      day TEXT NOT NULL, revision INTEGER NOT NULL, import_id TEXT NOT NULL REFERENCES csv_imports(id),
+      action TEXT NOT NULL CHECK(action IN ('apply','withdraw')), text TEXT NOT NULL, PRIMARY KEY(day, revision),
+      FOREIGN KEY(day, revision) REFERENCES user_note_versions(day, revision)
+    ) STRICT;
+    CREATE INDEX user_note_sources_import ON user_note_sources(import_id, day);
+    PRAGMA user_version = 12;`, () => {
+    const note = db.prepare('INSERT INTO csv_import_notes VALUES (?, ?, ?)');
+    const source = db.prepare("INSERT INTO user_note_sources VALUES (?, ?, ?, 'apply', ?)");
+    const revisions = db.prepare('SELECT revision, content FROM user_note_versions WHERE day = ? AND created_at = ? ORDER BY revision');
+    const previous = db.prepare('SELECT content FROM user_note_versions WHERE day = ? AND revision = ?');
+    for (const row of db.prepare("SELECT id, content, mapping, created_at FROM csv_imports WHERE json_extract(mapping, '$.note') IS NOT NULL ORDER BY created_at, id").all()) {
+      const parsed = parseMappedCsv(String(row.content), csvMappingSchema.parse(JSON.parse(String(row.mapping))), sourceDay(String(row.created_at)));
+      for (const [day, texts] of remarksByDay(parsed.notes)) {
+        note.run(row.id, day, texts.join('\n'));
+        for (const revision of revisions.all(day, row.created_at)) {
+          const before = revision.revision === 1 ? null : previous.get(day, Number(revision.revision) - 1)?.content;
+          const content = String(revision.content), prior = typeof before === 'string' && before.trim() !== '' ? before : null;
+          const added = prior === null ? content : content.startsWith(`${prior}\n`) ? content.slice(prior.length + 1) : null;
+          if (added) source.run(day, revision.revision, row.id, added);
+        }
+      }
+    }
+  });
+}
+
+/** Remarks of a parsed file per day: distinct texts in row order. */
+export function remarksByDay(notes: { day: string; text: string }[]): Map<string, string[]> {
+  const days = new Map<string, string[]>();
+  for (const item of notes) { const list = days.get(item.day) ?? []; if (!list.includes(item.text)) list.push(item.text); days.set(item.day, list); }
+  return days;
+}
+
 /** Store version the server, services and CLI expect. */
-export const currentStoreVersion = 11;
+export const currentStoreVersion = 12;
 
 export function publishCanonicalDay(db: DatabaseSync, input: DaySnapshotInput, expectedRevision: number | null) {
   const parsed = snapshotInputSchema.parse(input);

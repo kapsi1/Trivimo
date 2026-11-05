@@ -6,7 +6,7 @@ import { StatusChip, hourMetricLabel, type DrawerState } from './details.tsx';
 import { addDays, fmtD, fmtDL, formatRational, maxDate, nf, timeOf, warsawToday, whenOf , firstDay } from './format.ts';
 import { Placeholder } from './placeholders.tsx';
 import { DateControl, Segmented, ZoomDialog, zoomSize } from './zoom.tsx';
-import type { z } from 'zod';
+import { z } from 'zod';
 import { Loading } from './logo.tsx';
 
 export type DayTab = 'podsumowanie' | 'przebieg' | 'pochodzenie' | 'jedzenie' | 'treningi';
@@ -188,8 +188,25 @@ function DayProvenance({ date, snapshot, slots }: { date: string; snapshot: Snap
       <header style={{ marginTop: 16 }}><h3>Historia odczytów doby</h3><span className="sub">kalorie total, suma dobowa</span></header>
       {reads.error ? <p role="alert">Nie udało się odczytać historii.</p> : !read ? <p className="sub">—</p> : !reads.data ? <Loading /> : reads.data.rows.length === 0 ? <ul className="timeline"><li><span>—</span><span>Brak odczytu. Uzupełnianie historii nadrobi tę dobę.</span></li></ul>
         : <ul className="timeline">{reads.data.rows.map((row, index) => <li key={index}><span>{whenOf(row.receivedAt)}</span><span>{row.converted ? `${nf(Number(row.converted.value))} ${row.converted.unit}` : row.originalValue}{index === 0 ? ' · najnowszy, użyty' : ' · wcześniejszy, zachowany'}</span></li>)}</ul>}
+      <CsvDayOrigin date={date} snapshot={snapshot} />
     </section>
   </div>;
+}
+
+const csvOriginSchema = z.array(z.object({ id: z.string(), fileName: z.string(), createdAt: z.string(), state: z.enum(['included', 'excluded']), metrics: z.array(z.string()), note: z.object({ action: z.enum(['apply', 'withdraw']), revision: z.number() }).nullable() }));
+/** Which CSV imports hold data of this day; origin is shown here, not in the table or the day's summary. */
+function CsvDayOrigin({ date, snapshot }: { date: string; snapshot: Snapshot | null }) {
+  const imports = useJson(`/api/csv/day?date=${date}`, csvOriginSchema);
+  if (imports.error || !imports.data || imports.data.length === 0) return null;
+  const used = new Set(snapshot?.csv?.metrics ?? []);
+  return <>
+    <header style={{ marginTop: 16 }}><h3>Importy CSV</h3><span className="sub">dane tej doby z plików</span></header>
+    <ul className="timeline">{imports.data.map((item) => {
+      const metrics = item.metrics.map((key) => `${metricOf(key as MetricKey).label}${item.state === 'included' ? used.has(key as MetricKey) ? ' (w wyniku)' : ' (wartość Google ma pierwszeństwo)' : ''}`);
+      const note = item.note ? item.note.action === 'apply' ? `notatka r-${item.note.revision}: dopisane uwagi` : `notatka r-${item.note.revision}: uwagi wycofane` : null;
+      return <li key={item.id}><span>{whenOf(item.createdAt)}</span><span>{item.fileName}{item.state === 'excluded' ? ' · wycofany' : ''}{metrics.length ? ` · ${metrics.join(', ')}` : ''}{note ? ` · ${note}` : ''}</span></li>;
+    })}</ul>
+  </>;
 }
 
 function DayZoom({ zoom, setZoom, date, onDate, rows, snapshot, hours, legacy, seriesRead, loading, forecast, hrSummaries, hrToday, onInfo }: { zoom: Zoom; setZoom: (zoom: Zoom | null) => void; date: string; onDate?: (date: string) => void; rows: DayRow[]; snapshot: Snapshot | null; hours: DayHours; legacy: boolean; seriesRead: boolean; loading: boolean; forecast: Forecast; hrSummaries: z.infer<typeof heartRateRangeSchema>; hrToday: ReturnType<typeof hrOf>; onInfo: () => void }) {

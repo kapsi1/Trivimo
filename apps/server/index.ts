@@ -3,6 +3,7 @@ import { createApp } from './app.ts';
 import { createDemoDatabase } from '../../packages/storage/days.ts';
 import { DatabaseSync } from 'node:sqlite';
 import { takeoutDatabasePath } from '../../packages/storage/location.ts';
+import { createEmptyStore } from '../../packages/storage/create-store.ts';
 import { TakeoutService } from './takeout-service.ts';
 import { GoogleAuth } from './google-auth.ts';
 import { GoogleReadService } from './google-read-service.ts';
@@ -13,6 +14,12 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 const sourcePath = takeoutDatabasePath();
+// a data directory without a store (first start, or a separate TRIVIMO_DATA_DIR for testing) gets an empty one at
+// the current version; an existing store is never touched here (upgrades stay with migrate:canonical and a backup)
+if (sourcePath) {
+  try { if (await createEmptyStore(sourcePath)) console.log(`Utworzono pusty magazyn: ${sourcePath}`); }
+  catch (error) { console.error('Nie udało się utworzyć pustego magazynu:', error instanceof Error ? error.message : error); }
+}
 let sourceDb: DatabaseSync | undefined;
 function getSourceDb(): DatabaseSync | undefined {
   if (sourceDb || !sourcePath) return sourceDb;

@@ -3,9 +3,17 @@ import { csvMetrics, type CsvMapping, type CsvMetric } from '../../contracts/csv
 import { isInteger, multiply, parseDecimal, rational, type Rational } from '../../domain/rational.ts';
 import { sourceDay } from '../../domain/source-day.ts';
 import { firstSupportedDay } from '../../domain/warsaw-day.ts';
+import { ungroupDigits } from './decimal.ts';
 
-/** Version of the mapping parser; stored with every import so a changed rule is a new version, not a silent change. */
-export const csvParserVersion = 'csv-mapped-v1';
+/**
+ * Version of the mapping parser; stored with every import so a changed rule is a new version, not a silent change.
+ * v2: a percent value may end with "%" ("20,90%"), and a column of remarks may be mapped to the day's note.
+ * v3: digits may be grouped by threes with a space, no-break space, narrow no-break space or thin space ("12 345").
+ */
+export const csvParserVersion = 'csv-mapped-v3';
+export { ungroupDigits };
+/** Longest remark kept from one cell (the length limit of a day note). */
+export const csvNoteMax = 10000;
 const maxRows = 200000, maxColumns = 256, maxRecord = 65536;
 
 function records(text: string, delimiter: string, toLine?: number): string[][] {
@@ -35,9 +43,10 @@ export function inspectCsv(text: string): { delimiter: ',' | ';' | '\t'; columns
   return { delimiter, columns: Math.max(...all.slice(0, 50).map((row) => row.length)), rows: all.length, head: all.slice(0, 6).map((row) => row.map((cell) => cell.slice(0, 200))) };
 }
 
-export type CsvRejection = 'invalid_date' | 'date_out_of_range' | 'invalid_time' | 'invalid_number' | 'out_of_range' | 'not_integer' | 'missing_column';
+export type CsvRejection = 'invalid_date' | 'date_out_of_range' | 'invalid_time' | 'invalid_number' | 'out_of_range' | 'not_integer' | 'missing_column' | 'note_too_long';
 export interface CsvValue { row: number; metric: CsvMetric; day: string; time: string | null; sourceText: string; sourceUnit: string; value: Rational }
-export interface ParsedCsv { values: CsvValue[]; rejected: { row: number; metric: CsvMetric | null; reason: CsvRejection }[]; empty: number; dataRows: number }
+export interface CsvNote { row: number; day: string; text: string }
+export interface ParsedCsv { values: CsvValue[]; notes: CsvNote[]; rejected: { row: number; metric: CsvMetric | 'note' | null; reason: CsvRejection }[]; empty: number; dataRows: number }
 
 const valid = (year: number, month: number, day: number) => { const date = new Date(Date.UTC(year, month - 1, day)); return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day; };
 const iso = (year: number, month: number, day: number) => `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -77,7 +86,7 @@ const factors: Record<string, Rational> = {
 export function parseMappedCsv(text: string, mapping: CsvMapping, today: string): ParsedCsv {
   let rows: string[][];
   try { rows = records(text, mapping.delimiter); } catch (error) { throw new Error(error instanceof Error && /^too_many_/.test(error.message) ? error.message : 'invalid_csv'); }
-  const result: ParsedCsv = { values: [], rejected: [], empty: 0, dataRows: 0 };
+  const result: ParsedCsv = { values: [], notes: [], rejected: [], empty: 0, dataRows: 0 };
   rows.forEach((cells, index) => {
     if (mapping.header && index === 0) return;
     result.dataRows++;
@@ -102,12 +111,20 @@ export function parseMappedCsv(text: string, mapping: CsvMapping, today: string)
       const cell = cells[target.column];
       if (cell === undefined) { result.rejected.push({ row, metric, reason: 'missing_column' }); continue; }
       if (cell.trim() === '') { result.empty++; continue; }
-      const source = parseDecimal(cell, mapping.decimal);
+      // a percent may carry its sign ("20,90%", "20.9 %"); the sign is accepted only where the declared unit is %
+      const number = ungroupDigits(target.unit === '%' ? cell.trim().replace(/\s*%$/, '') : cell);
+      const source = parseDecimal(number, mapping.decimal);
       if (!source) { result.rejected.push({ row, metric, reason: 'invalid_number' }); continue; }
       const value = multiply(source, factors[target.unit]!);
       if (metric === 'body_fat' && value.numerator > 100n * value.denominator) { result.rejected.push({ row, metric, reason: 'out_of_range' }); continue; }
       if (metric === 'steps' && !isInteger(value)) { result.rejected.push({ row, metric, reason: 'not_integer' }); continue; }
       result.values.push({ row, metric, day: parsed.day, time, sourceText: cell.trim(), sourceUnit: target.unit, value });
+    }
+    if (mapping.note !== undefined) {
+      // free text, kept as written (trimmed); an empty cell is no remark
+      const text = (cells[mapping.note] ?? '').trim();
+      if (text.length > csvNoteMax) result.rejected.push({ row, metric: 'note', reason: 'note_too_long' });
+      else if (text) result.notes.push({ row, day: parsed.day, text });
     }
   });
   return result;

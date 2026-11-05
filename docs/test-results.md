@@ -1,5 +1,21 @@
 # Raport weryfikacji
 
+## 2026-11-05 — pusta baza w bieżącej wersji przy starcie serwera
+
+- `npm test`: 135 testów zaliczonych (nowy: pusta baza v12 w nowym katalogu przechodzi weryfikację, otwiera ją serwis CSV, drugi start i istniejący plik zostają bez zmian). `npm run typecheck`: poprawny. Serwer dev po zmianie wystartował na bazie użytkownika bez tworzenia nowej (plik istnieje). Nie sprawdzono: startu serwera z osobnym `TRIVIMO_DATA_DIR`, autoryzacji Google i importu Takeout do świeżej bazy v12.
+
+## 2026-11-05 — import CSV: znak „%”, grupy cyfr, uwagi do dnia; globalne powiadomienie o uzupełnianiu
+
+- Wycofanie importu obejmuje uwagi (magazyn v12, `user_note_sources`): `npm test` 134 testy zaliczone (nowe: wycofanie linii z edytowanej notatki, przywrócenie, linia usunięta przez użytkownika, pochodzenie doby; migracja 11→12 odtwarza pochodzenie wcześniejszych uwag i pozwala je wycofać). `npm run build`: poprawny. Migracja magazynu użytkownika 11→12 (`npm run migrate:canonical`, kopia `przed-v12-20261105.sqlite` poza repozytorium, zweryfikowana): wersja 12, istniejący import z uwagami dostał pochodzenie (12 dób w `csv_import_notes`, 12 rewizji w `user_note_sources`). Przeglądarka: lista importów z kolumną „Uwagi (doby)”, stanem „w danych” i przyciskiem „Wycofaj”; zakładka „Pochodzenie danych” doby z uwagą z CSV pokazuje sekcję „Importy CSV” (plik, metryki, „notatka r-1: dopisane uwagi”). Nie sprawdzono: kliknięcia „Wycofaj” na danych użytkownika (tylko test) i resetu formularza po udanym imporcie.
+
+- Wykrywanie przecinka dziesiętnego w sugestii mapowania (także `"88,9"` w cudzysłowach w pliku z przecinkiem jako separatorem pól): `npm test` 133 testy zaliczone. Przeglądarka (magazyn użytkownika, bez zapisu): syntetyczny plik z `"88,9"`, `"12 345"` (NBSP) i `"20,90%"` — wybrany „przecinek”, podgląd 5 wartości, 0 odrzuceń.
+
+- Grupy cyfr („12 345” z U+00A0, U+202F, U+2009 lub spacją, parser `csv-mapped-v3`): `npm test` 132 testy zaliczone (nowy test: także „2 150,5” i „20,90 %” z NBSP; „1 23”, „12 3456” i podwójny separator odrzucone). `npm run typecheck`: poprawny. Nie sprawdzono na rzeczywistym eksporcie z arkusza Google (tylko syntetyczne komórki).
+
+- `npm test`: 131 testów zaliczonych (nowe: „20,90%” i „21,5 %” przy jednostce %, odrzucenie przy jednostce „ułamek”, uwagi z przycięciem i limitem 10 000 znaków; zapis uwag jako notatek dni: nowa notatka, dopisanie nowej rewizji do istniejącej, ponowny import bez zmian, limit długości, liczniki w podglądzie, wykluczenie importu zostawia notatki). `npm run typecheck`, `npm run build`: poprawne.
+- Przeglądarka aplikacji (serwer dev, magazyn użytkownika, bez zapisu): syntetyczny plik ze średnikiem, „20,90%” i kolumną „Uwagi” — mapowanie zaproponowało kolumnę uwag i jednostkę %, podgląd: 2 wartości, 0 odrzuceń, 1 uwaga. Nagłówki tabeli metryk: „Metryka w Trivimo”, „Kolumna w pliku CSV”, „Jednostka w pliku CSV”. Nie sprawdzono w przeglądarce: zapisu importu i notatek w tabeli i widoku dnia (tylko test magazynu).
+- Powiadomienie o końcu uzupełniania: przyciskami testowymi (później usuniętymi) sprawdzone przejście do `#zrodla/pokrycie`, zamknięcie i ukrycie na tej stronie. Nie sprawdzono na rzeczywistym zakończonym przebiegu.
+
 ## 2026-11-04 — logo, ikony aplikacji i animacja ładowania
 
 - `npx tsc --noEmit`: poprawny. Testów automatycznych nie dodano (zmiana tylko wizualna).

@@ -4,8 +4,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { csvMappingSchema, csvMetrics, type CsvMapping, type CsvMetric } from '../../packages/contracts/csv-import.ts';
 import { csvParserVersion, inspectCsv, parseMappedCsv } from '../../packages/adapters/csv/mapped-csv.ts';
 import { sourceDay } from '../../packages/domain/source-day.ts';
-import { currentStoreVersion, readCanonicalDay } from '../../packages/storage/canonical-days.ts';
-import { contentDigest, decideCsvImport, listCsvImports, mappingDigest, saveCsvImport } from '../../packages/storage/csv-imports.ts';
+import { currentStoreVersion, readCanonicalDay, remarksByDay } from '../../packages/storage/canonical-days.ts';
+import { contentDigest, csvDayOrigin, decideCsvImport, listCsvImports, mappingDigest, planCsvNotes, saveCsvImport } from '../../packages/storage/csv-imports.ts';
 import { publishDayRange } from '../../packages/storage/google-day-snapshots.ts';
 
 /**
@@ -29,7 +29,8 @@ export class CsvImportService {
   preview(name: string, content: string, input: unknown) {
     const mapping = csvMappingSchema.parse(input);
     const parsed = parseMappedCsv(content, mapping, this.today());
-    const days = [...new Set(parsed.values.map((value) => value.day))].sort();
+    const days = [...new Set([...parsed.values, ...parsed.notes].map((value) => value.day))].sort();
+    let notes: { values: number; days: number; create: number; append: number; unchanged: number; tooLong: number } | null = null;
     const perMetric = Object.fromEntries(csvMetrics.filter((metric) => mapping.metrics[metric]).map((metric) => [metric, { values: 0, days: 0, fills: 0, keepsGoogle: 0 }])) as Partial<Record<CsvMetric, { values: number; days: number; fills: number; keepsGoogle: number }>>;
     const db = this.open(true);
     let duplicate = false;
@@ -45,10 +46,15 @@ export class CsvImportService {
           if (!snapshot || snapshot.metrics[metric].status === 'missing' || snapshot.csv?.metrics.includes(metric)) stat.fills++; else stat.keepsGoogle++;
         }
       }
+      if (mapping.note !== undefined) {
+        // the remarks become day notes on import: a new note, an appended line, or nothing when the note already has it
+        const plan = planCsvNotes(db, remarksByDay(parsed.notes)), count = (action: string) => plan.filter((item) => item.action === action).length;
+        notes = { values: parsed.notes.length, days: plan.length, create: count('create'), append: count('append'), unchanged: count('unchanged'), tooLong: count('too_long') };
+      }
     } finally { db.close(); }
     return {
       token: this.token(content, mapping), name, duplicate, dataRows: parsed.dataRows, values: parsed.values.length, empty: parsed.empty,
-      rejected: parsed.rejected.length, rejectedSample: parsed.rejected.slice(0, 20), first: days[0] ?? null, last: days.at(-1) ?? null, days: days.length, perMetric,
+      rejected: parsed.rejected.length, rejectedSample: parsed.rejected.slice(0, 20), first: days[0] ?? null, last: days.at(-1) ?? null, days: days.length, perMetric, notes,
     };
   }
 
@@ -62,18 +68,20 @@ export class CsvImportService {
       const saved = saveCsvImport(db, { fileName: name, content, mapping, parsed, now: new Date(this.now()).toISOString() });
       const days = parsed.values.map((value) => value.day).sort();
       const result = days.length ? publishDayRange(db, days[0]!, days.at(-1)!, this.now()) : { published: 0, unchanged: 0 };
-      return { id: saved.id, created: saved.created, ...result };
+      return { id: saved.id, created: saved.created, notes: saved.notes, ...result };
     } finally { db.close(); }
   }
 
   list() { const db = this.open(true); try { return listCsvImports(db); } finally { db.close(); } }
+  /** Origin of one day's data in CSV imports, for the day's provenance panel only. */
+  day(date: string) { const db = this.open(true); try { return csvDayOrigin(db, date); } finally { db.close(); } }
 
   decide(id: string, state: 'included' | 'excluded') {
     const db = this.open(false);
     try {
       db.exec('PRAGMA foreign_keys = ON');
       const range = decideCsvImport(db, id, state, new Date(this.now()).toISOString());
-      return range.first && range.last ? publishDayRange(db, range.first, range.last, this.now()) : { published: 0, unchanged: 0 };
+      return { notes: range.notes, ...(range.first && range.last ? publishDayRange(db, range.first, range.last, this.now()) : { published: 0, unchanged: 0 }) };
     } finally { db.close(); }
   }
 }
