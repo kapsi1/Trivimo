@@ -12,11 +12,11 @@ export function millimetresToKm(value: string): string {
 /** Bounded review of saved producer-civil-day aggregates for one date; never deduplicates, qualifies or sums. */
 export function readGoogleDailySourceDay(db: DatabaseSync, kind: DailyRollupType, date: string) {
   z.iso.date().parse(date);
-  const jobRows = db.prepare(`SELECT id, range_start, range_end, state FROM google_read_jobs
+  const jobRows = db.prepare(`SELECT id, range_start, range_end, state, created_at FROM google_read_jobs
     WHERE kind = ? AND range_start <= ? AND range_end > ? ORDER BY created_at DESC, id LIMIT 51`).all(kind, date, date);
-  const jobs = jobRows.slice(0, 50).map((job) => z.object({ id: z.string(), range_start: z.string(), range_end: z.string(), state: z.enum(['running', 'complete']) }).parse(job));
+  const jobs = jobRows.slice(0, 50).map((job) => z.object({ id: z.string(), range_start: z.string(), range_end: z.string(), state: z.enum(['running', 'complete']), created_at: z.string() }).parse(job));
   const accounts = db.prepare('SELECT COUNT(DISTINCT account_digest) AS n FROM google_read_jobs WHERE kind = ? AND range_start <= ? AND range_end > ?').get(kind, date, date)?.n;
-  const rows: { originalValue: string; unit: 'steps' | 'mm' | 'kcal'; converted: { value: string; unit: 'szt.' | 'km' | 'kcal' } | null; receivedAt: string }[] = [];
+  const rows: { originalValue: string; unit: 'steps' | 'mm' | 'kcal'; converted: { value: string; unit: 'szt.' | 'km' | 'kcal' } | null; receivedAt: string; jobStartedAt: string; state: 'running' | 'complete' }[] = [];
   const pages = db.prepare('SELECT raw_json, received_at FROM google_read_pages WHERE job_id = ? ORDER BY page_number LIMIT 51');
   let truncated = jobRows.length > 50;
   for (const job of jobs) {
@@ -28,7 +28,7 @@ export function readGoogleDailySourceDay(db: DatabaseSync, kind: DailyRollupType
         if (day.date !== date) continue;
         const parsed = kind === 'steps' ? parseSourceValue('steps', day.value) : null;
         const converted = kind === 'steps' ? (parsed?.status === 'parsed' ? { value: parsed.value, unit: 'szt.' as const } : null) : kind === 'distance' ? { value: millimetresToKm(day.value), unit: 'km' as const } : { value: day.value, unit: 'kcal' as const };
-        rows.push({ originalValue: day.value, unit: day.unit, converted, receivedAt: page.received_at });
+        rows.push({ originalValue: day.value, unit: day.unit, converted, receivedAt: page.received_at, jobStartedAt: job.created_at, state: job.state });
       }
     }
   }

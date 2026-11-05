@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { bodyReviewSchema } from '../../../packages/contracts/source-records.ts';
 import { bandShareSchema, dailyReviewSchema, dayResponseSchema, daySourcesSchema, forecastSchema, groups, heartRateDaySchema, heartRateRangeSchema, metricOf, metrics, post, rangeSchema, ruleOf, seriesSchema, sourceName, useJson, userNoteSchema, type DayRow, type Forecast, type MetricKey, type Snapshot, type SyncStatus } from './api.ts';
 import { EnergyLegend, HourChart, HR_LEGEND, HrDayChart, HrSpark, HrTrendChart, InfoButton, Sparkline, TrendChart, Zoomable, type HourKey } from './charts.tsx';
 import { axisEvents, dayHours, dayTip, dayTotal, heartTrend, hrOf, lastMeasured, meanValid, metricTrend, valueOf, type DayHours } from './derive.ts';
-import { CellBody, StatusChip, hourMetricLabel, type DrawerState } from './details.tsx';
+import { StatusChip, hourMetricLabel, type DrawerState } from './details.tsx';
 import { addDays, fmtD, fmtDL, formatRational, maxDate, nf, timeOf, warsawToday, whenOf , firstDay } from './format.ts';
 import { Placeholder } from './placeholders.tsx';
 import { DateControl, Segmented, ZoomDialog, zoomSize } from './zoom.tsx';
@@ -61,7 +62,7 @@ export function DayView({ metric, date, tab, onTab, onDate, sync, onDirty, onDra
 
   let body;
   if (tab === 'przebieg') body = <DayHourly date={date} hours={hours} snapshot={snapshot} legacy={legacy} seriesRead={!!total.data} loading={loading} forecast={fc} hrToday={hrToday} onZoom={setZoom} onInfo={openHourInfo} onHrInfo={openHrInfo} />;
-  else if (tab === 'pochodzenie') body = <DayProvenance key={date} date={date} snapshot={snapshot} slots={hours.slots} focus={metric} />;
+  else if (tab === 'pochodzenie') body = <DayProvenance key={`${date}-${metric}`} date={date} snapshot={snapshot} focus={metric} />;
   else if (tab === 'jedzenie') body = <Placeholder title="Dziennik jedzenia dnia" stage="M3" text="Tu pojawią się posiłki tego dnia, ich suma i pokrycie składników, a obok bilans z wydatkiem energii. Szczegóły zaprojektujemy razem z etapem M3." list={['Lista posiłków chronologicznie', 'Suma kcal i makr z oznaczeniem wpisów niepełnych', 'Bilans tylko dla dni z porównywalnym wydatkiem']} />;
   else if (tab === 'treningi') body = <Placeholder title="Treningi dnia" stage="M2" text="Sesje z czasem, tętnem, strefami i mapą trasy pojawią się w etapie M2. Kolumna „Treningi” w tabeli będzie ich zwięzłą projekcją." list={['Lista sesji dnia, np. „2 × spacer, 1 × rower”', 'Czas w strefach tętna i AZM osobno', 'Mapa trasy z TCX']} />;
   else body = <DaySummary date={date} rows={rows} snapshot={snapshot} hours={hours} legacy={legacy} seriesRead={!!total.data} forecast={fc} hrSummaries={hrSummaries} hrToday={hrToday}
@@ -168,12 +169,36 @@ function DayHourly({ date, hours, snapshot, legacy, seriesRead, loading, forecas
   </>;
 }
 
-function DayProvenance({ date, snapshot, slots, focus }: { date: string; snapshot: Snapshot | null; slots: number; focus: MetricKey | null }) {
-  const [selected, setSelected] = useState<MetricKey | null>(focus);
+const dailyReadKind: Partial<Record<MetricKey, string>> = { steps: 'steps', distance: 'distance', total_energy: 'total-calories', active_energy: 'active-energy-burned' };
+const shortList = 5;
+/** One metric's saved records of the day: the day's value, then each record with its Warsaw time (body: time of the measurement and its source; others: time of each read). */
+function MetricRecords({ date, metricKey, snapshot, open }: { date: string; metricKey: MetricKey; snapshot: Snapshot | null; open: boolean }) {
+  const metric = metricOf(metricKey), read = date >= firstDay, body = metricKey === 'weight' || metricKey === 'body_fat';
+  const [all, setAll] = useState(open);
+  const reads = useJson(read && !body ? `/api/google/daily-candidates?kind=${dailyReadKind[metricKey]}&date=${date}` : null, dailyReviewSchema);
+  const measurements = useJson(read && body ? `/api/google/body-candidates?kind=${metricKey}&date=${date}` : null, bodyReviewSchema);
+  const value = snapshot?.metrics[metricKey];
+  const unit = metric.unit ? ` ${metric.unit}` : '';
+  const items: { time: string; value: string; note: string }[] = body
+    ? (measurements.data?.rows ?? []).map((row) => ({ time: whenOf(row.timestamp), value: row.converted.status === 'parsed' ? `${row.converted.value.replace('.', ',')} ${row.converted.unit}` : '—', note: row.origin || 'źródło nieznane' }))
+    : (reads.data?.rows ?? []).map((row, index, list) => ({ time: whenOf(row.jobStartedAt ?? row.receivedAt), value: row.converted ? `${nf(Number(row.converted.value), metric.decimals)} ${row.converted.unit}` : row.originalValue, note: row.state === 'running' ? 'pobieranie w toku, jeszcze nieużyte' : index === list.findIndex((other) => other.state !== 'running') ? 'użyty w wyniku dnia (ostatnio rozpoczęte pobranie)' : 'starsze pobranie, zachowane' }));
+  const failed = reads.error || measurements.error, loading = read && !failed && !(body ? measurements.data : reads.data);
+  const shown = all ? items : items.slice(0, shortList);
+  return <tbody className={open ? 'focus' : undefined}>
+    <tr className="mrow"><th scope="row" className="l">{metric.label}</th><td className="num">{value?.value ? <b>{formatRational(value.value, metric.decimals)}{unit}</b> : <span className="v-none">—</span>} <StatusChip value={value} compact /></td><td className="l faint" colSpan={2}>wartość dnia</td></tr>
+    {!read ? <tr><td /><td className="l faint" colSpan={3}>Doba sprzed zakresu odczytów.</td></tr>
+      : failed ? <tr><td /><td className="l" colSpan={3} role="alert">Nie udało się odczytać zapisów.</td></tr>
+      : loading ? <tr><td /><td colSpan={3}><Loading /></td></tr>
+      : items.length === 0 ? <tr><td /><td className="l faint" colSpan={3}>{body ? 'Brak zapisanego pomiaru tej doby.' : 'Brak zapisanego odczytu tej doby.'}</td></tr>
+      : shown.map((item, index) => <tr key={index}><td /><td className="num">{item.value}</td><td className="l">{item.time}</td><td className="l faint">{item.note}</td></tr>)}
+    {items.length > shortList && <tr><td /><td className="l" colSpan={3}><button type="button" className="btn ghost" onClick={() => setAll(!all)}>{all ? 'Pokaż mniej' : `Pokaż wszystkie (${items.length})`}</button></td></tr>}
+  </tbody>;
+}
+
+function DayProvenance({ date, snapshot, focus }: { date: string; snapshot: Snapshot | null; focus: MetricKey | null }) {
   const read = date >= firstDay;
   const sources = useJson(read ? `/api/google/day-sources?from=${date}&to=${date}` : null, daySourcesSchema);
   const band = useJson(read ? `/api/google/band-share?date=${date}` : null, bandShareSchema);
-  const reads = useJson(read ? `/api/google/daily-candidates?kind=total-calories&date=${date}` : null, dailyReviewSchema);
   const day = sources.data?.[0];
   const names = new Map<string, { name: string; steps: number | null; active: number | null }>();
   for (const [field, items] of [['steps', day?.steps], ['active', day?.activeEnergy]] as const) for (const item of items ?? []) {
@@ -181,10 +206,13 @@ function DayProvenance({ date, snapshot, slots, focus }: { date: string; snapsho
     current[field] = (current[field] ?? 0) + item.records; names.set(name, current);
   }
   const role = (name: string) => name.startsWith('Opaska') ? 'urządzenie; producent wybiera je dla kroków, gdy mierzyło' : name.startsWith('Health Connect') || name.includes('(Health Connect)') ? 'kopia przez Health Connect, uzgadniana przez producenta' : 'źródło telefonu, uzgadniane przez producenta';
-  return <><section className="panel"><header><h3>Szczegóły wartości</h3><span className="sub">skąd wzięła się wartość metryki tego dnia</span></header>
-    <div className="seg" role="group" aria-label="Metryka">{metrics.map((item) => <button type="button" key={item.key} aria-pressed={selected === item.key} onClick={() => setSelected(selected === item.key ? null : item.key)}>{item.short}</button>)}</div>
-    {selected ? <div style={{ display: 'grid', gap: 12, marginTop: 12 }}><CellBody date={date} metricKey={selected} /></div> : <p className="sub" style={{ margin: '10px 0 0' }}>Wybierz metrykę, aby zobaczyć jej definicję, uzgodnienie źródeł i odczyty.</p>}</section>
-  <div className="cols2">
+  return <div className="cols2">
+    <section className="panel"><header><h3>Zapisy dnia</h3><span className="sub">czasy w strefie Europe/Warsaw</span></header>
+      <div className="tw"><table className="simple"><thead><tr><th className="l">Metryka</th><th>Wartość</th><th className="l">Czas</th><th className="l">Uwaga</th></tr></thead>
+        {metrics.map((item) => <MetricRecords key={item.key} date={date} metricKey={item.key} snapshot={snapshot} open={focus === item.key} />)}
+      </table></div>
+      <p className="sub" style={{ margin: '10px 0 0' }}>Wartość dnia to uzgodnienie producenta, nigdy suma odczytów ani kopii z kilku źródeł. Przy masie i tkance czas to chwila pomiaru, przy pozostałych metrykach czas rozpoczęcia pobrania danych z Google.</p>
+    </section>
     <section className="panel"><header><h3>Kto zapisał dane tego dnia</h3><span className="sub">liczba wpisów z najnowszego pełnego odczytu</span></header>
       {sources.error ? <p role="alert">Nie udało się odczytać źródeł.</p> : !read ? <p className="sub">Doba sprzed zakresu odczytów.</p> : !sources.data ? <Loading /> : <div className="tw"><table className="simple"><thead><tr><th>Źródło</th><th>Kroki</th><th>Kalorie aktywne</th><th>Rola</th></tr></thead><tbody>
         {day?.steps === null && day?.activeEnergy === null ? <tr><td colSpan={4}>Brak odczytu listy źródeł dla tej doby.</td></tr> : names.size === 0 ? <tr><td colSpan={4}>Odczyt nie zawiera wpisów.</td></tr>
@@ -192,17 +220,9 @@ function DayProvenance({ date, snapshot, slots, focus }: { date: string; snapsho
       </tbody></table></div>}
       <p className="sub" style={{ margin: '10px 0 0' }}>Ten sam ruch bywa zapisany przez kilka źródeł. Wartość dnia to uzgodnienie producenta, nigdy suma kopii.</p>
       {band.data?.heartRate && <p className="sub" style={{ margin: '10px 0 0' }}>Tętno z urządzenia w {band.data.heartRate.windows} z {band.data.totalWindows} okien ({nf(band.data.heartRate.windows / band.data.totalWindows * 100)} % doby). To dowód pomiaru, nie noszenia przez całe okno.</p>}
-    </section>
-    <section className="panel"><header><h3>Reguły i rewizja</h3></header><dl className="kv">
-      <dt>Energia</dt><dd className="mono">{ruleOf(snapshot, 'energy')}{snapshot?.energy ? ` · ${({ current: 'pełny model', legacy: 'starszy model', basal_only: 'sama energia bazowa', unknown: 'model nieustalony' })[snapshot.energy.model]}` : ''}</dd>
-      <dt>Aktywność</dt><dd className="mono">{ruleOf(snapshot, 'activity')}</dd><dt>Ciało</dt><dd className="mono">{ruleOf(snapshot, 'body')}</dd>
-      <dt>Rewizja wyniku</dt><dd className="mono">{snapshot ? `r-${snapshot.revision}` : 'brak wyniku'}</dd><dt>Doba</dt><dd>{slots} okien 10-min · {date} 00:00 – następny dzień 00:00</dd></dl>
-      <header style={{ marginTop: 16 }}><h3>Historia odczytów doby</h3><span className="sub">kalorie total, suma dobowa</span></header>
-      {reads.error ? <p role="alert">Nie udało się odczytać historii.</p> : !read ? <p className="sub">—</p> : !reads.data ? <Loading /> : reads.data.rows.length === 0 ? <ul className="timeline"><li><span>—</span><span>Brak odczytu. Uzupełnianie historii nadrobi tę dobę.</span></li></ul>
-        : <ul className="timeline">{reads.data.rows.map((row, index) => <li key={index}><span>{whenOf(row.receivedAt)}</span><span>{row.converted ? `${nf(Number(row.converted.value))} ${row.converted.unit}` : row.originalValue}{index === 0 ? ' · najnowszy, użyty' : ' · wcześniejszy, zachowany'}</span></li>)}</ul>}
       <CsvDayOrigin date={date} snapshot={snapshot} />
     </section>
-  </div></>;
+  </div>;
 }
 
 const csvOriginSchema = z.array(z.object({ id: z.string(), fileName: z.string(), createdAt: z.string(), state: z.enum(['included', 'excluded']), metrics: z.array(z.string()), note: z.object({ action: z.enum(['apply', 'withdraw']), revision: z.number() }).nullable() }));

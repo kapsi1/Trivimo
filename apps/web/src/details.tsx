@@ -54,7 +54,6 @@ export function CellBody({ date, metricKey, onOpenDay }: { date: string; metricK
   const reads = useJson(kind && date >= firstDay ? `/api/google/daily-candidates?kind=${kind}&date=${date}` : null, dailyReviewSchema);
   const bodyKind = metricKey === 'weight' || metricKey === 'body_fat' ? metricKey : null;
   const googleBody = useJson(bodyKind && date >= firstDay ? `/api/google/body-candidates?kind=${bodyKind}&date=${date}` : null, bodyReviewSchema);
-  const takeoutBody = useJson(bodyKind ? `/api/body-candidates?kind=${bodyKind}&date=${date}` : null, bodyReviewSchema);
   if (day.error) return <p role="alert">Nie udało się odczytać wyniku dnia.</p>;
   if (!day.data) return <Loading />;
   if (day.data.state === 'not_ready') return <p>Wyniki dzienne nie są jeszcze przygotowane.</p>;
@@ -90,9 +89,6 @@ export function CellBody({ date, metricKey, onOpenDay }: { date: string; metricK
     {specific}
     <div className="dsec"><h4>Odczyty</h4>{reads.error || googleBody.error ? <p>Nie udało się odczytać historii odczytów.</p> : readsLoading ? <Loading /> : readList.length ? <ul className="timeline">{readList}</ul> : <p>Brak zapisanego odczytu tej doby.</p>}
       {reads.data && reads.data.rows.length > 1 && <p style={{ marginTop: 6 }}>Każde pobranie zachowuje swój oryginał; odczyty nie są sumowane, najnowszy jest pierwszy.</p>}</div>
-    <div className="dsec"><h4>Porównanie z Takeout</h4>{bodyKind ? (takeoutBody.error ? <p>Brak zaimportowanego Takeout albo nie udało się go odczytać.</p> : !takeoutBody.data ? <Loading /> : takeoutBody.data.rows.length === 0 ? <p>Takeout nie ma pomiarów tej doby (kompletność eksportu jest nieznana).</p>
-      : <><p>Takeout jest punktem odniesienia i nie jest łączony z API.</p><div className="tw"><table className="simple"><thead><tr><th>Czas źródła</th><th>Wartość</th><th>Źródło</th></tr></thead><tbody>{takeoutBody.data.rows.map((row, index) => <tr key={index}><td className="mono">{row.timestamp}</td><td>{row.converted.status === 'parsed' ? `${row.converted.value.replace('.', ',')} ${row.converted.unit}` : '—'}</td><td>{row.origin || 'nieznane'}</td></tr>)}</tbody></table></div></>)
-      : <p>Porównanie sum dobowych z Takeout nie jest jeszcze wyliczane. Oryginalne wiersze eksportu są w „Źródła danych” → „Importy plików”.</p>}</div>
     {snapshot && snapshot.notes.length > 0 && <div className="dsec"><h4>Uwagi dnia</h4><ul className="notes">{snapshot.notes.map((note) => <li key={note}>{note}</li>)}</ul></div>}
     <div className="dsec"><h4>Rewizja</h4><p className="mono">{snapshot ? `r-${snapshot.revision}` : 'brak'}</p></div>
     {onOpenDay && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button type="button" className="btn" onClick={() => onOpenDay(date)}>Otwórz dzień</button><button type="button" className="btn ghost" onClick={() => onOpenDay(date, 'pochodzenie')}>Pochodzenie danych</button></div>}

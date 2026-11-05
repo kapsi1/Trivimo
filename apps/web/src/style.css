@@ -403,5 +403,9 @@ td.src-c { color: var(--muted); max-width: 280px; overflow: hidden; text-overflo
 .notice-body { flex: 1; min-width: 0; padding: 10px 16px; border: 0; background: transparent; color: inherit; font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
 .notice-body:hover { text-decoration: underline; }
 .notice-close { flex: none; width: 44px; border: 0; background: transparent; color: inherit; font-size: 22px; line-height: 1; cursor: pointer; }
-.notice-close:hover { background: rgb(255 255 255 / .08); }.rowlink { cursor: pointer; }
+.notice-close:hover { background: rgb(255 255 255 / .08); }
+.rowlink { cursor: pointer; }
 .datebtn { border: 0; background: none; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.simple tbody.focus .mrow th, .simple tbody.focus .mrow td { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.simple .mrow th { font-weight: 600; }
+.simple tbody + tbody .mrow th, .simple tbody + tbody .mrow td { border-top: 1px solid var(--line); }

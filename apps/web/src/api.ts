@@ -67,7 +67,7 @@ export type HeartRateSummary = z.infer<typeof heartRateRangeSchema>[number];
 export const forecastSchema = z.object({ rule: z.literal('prognoza-spoczynek-v0'), burnedKcal: z.number(), restRateKcalPerHour: z.number(), restWindows: z.number().int(), asOf: z.iso.datetime(), remainingWindows: z.number().int(), forecastKcal: z.number() }).nullable();
 export type Forecast = z.infer<typeof forecastSchema>;
 export const dailyReviewSchema = z.object({
-  rows: z.array(z.object({ originalValue: z.string(), unit: z.enum(['steps', 'mm', 'kcal']), converted: z.object({ value: z.string(), unit: z.enum(['szt.', 'km', 'kcal']) }).nullable(), receivedAt: z.string() })),
+  rows: z.array(z.object({ originalValue: z.string(), unit: z.enum(['steps', 'mm', 'kcal']), converted: z.object({ value: z.string(), unit: z.enum(['szt.', 'km', 'kcal']) }).nullable(), receivedAt: z.string(), jobStartedAt: z.string().optional(), state: z.enum(['running', 'complete']).optional() })),
   truncated: z.boolean(), coverage: z.literal('unknown'), multipleAccounts: z.boolean(),
   jobs: z.array(z.object({ start: z.string(), end: z.string(), state: z.enum(['running', 'complete']) })),
 });
