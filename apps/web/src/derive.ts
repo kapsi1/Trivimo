@@ -1,6 +1,6 @@
 import { warsawDay } from '../../../packages/domain/warsaw-day.ts';
 import { metricOf, type DayRow, type Forecast, type HeartRateDay, type HeartRateSummary, type MetricKey, type Series, type Snapshot } from './api.ts';
-import { energyTip, weekTitle, type AxisEvent, type HourKey, type HourPoint, type HrTrendPt, type HrWindow, type TrendPt } from './charts.tsx';
+import { energyTip, weekTitle, type AxisEvent, type HourKey, type HourPoint, type SlotPoint, type HrTrendPt, type HrWindow, type TrendPt } from './charts.tsx';
 import { addDays, fmtDL, formatRational, hourOf, mondayOf, nf, timeOf, toNumber } from './format.ts';
 import { trendPoints } from './trends.ts';
 
@@ -52,7 +52,7 @@ export function dayTotal(snapshot: Snapshot | null | undefined, key: HourKey, ho
   return { text: `${nf(values.reduce((sum, item) => sum + item, 0), metric.decimals)} ${unit}`, computed: true };
 }
 
-export interface DayHours { hours: HourPoint[]; hr: HrWindow[]; slots: number; dayStart: number }
+export interface DayHours { hours: HourPoint[]; windows: SlotPoint[]; hr: HrWindow[]; slots: number; dayStart: number }
 const seriesValue = (value: string | null, unit: string) => value === null ? null : unit === 'mm' ? Number(value) / 1e6 : Number(value);
 /**
  * Hours of a Warsaw day (23 or 25 across DST) from the saved ten-minute series. For the day in progress, hours after the
@@ -81,7 +81,20 @@ export function dayHours(date: string, series: Partial<Record<HourKey, Series>>,
       hrWindows: heart ? inHour.length : null, hrAvg: inHour.length ? inHour.reduce((sum, window) => sum + window.avg, 0) / inHour.length : null,
     });
   }
-  return { hours, hr, slots, dayStart };
+  // the same day in ten-minute windows (the resolution of the saved series), for the charts
+  const hrBySlot = new Map(hr.map((window) => [window.index, window]));
+  const bySlot = (key: HourKey, index: number) => { const item = series[key]; return item ? seriesValue(item.slots[index] ?? null, item.unit) : null; };
+  const windows: SlotPoint[] = [];
+  for (let index = 0; index < slots; index++) {
+    const start = dayStart + index * 600000, end = start + 600000, futureMs = today ? Math.max(0, end - Math.max(start, asOf)) : 0;
+    windows.push({
+      index, start, range: `${timeOf(start)}–${timeOf(end)}`,
+      total: bySlot('total', index), active: bySlot('active', index), steps: bySlot('steps', index), distance: bySlot('distance', index),
+      fc: rate !== null && futureMs > 0 ? rate * futureMs / 3600000 : null, future: start >= asOf, now: start < asOf && asOf < end,
+      hr: heart ? hrBySlot.get(index)?.avg ?? null : undefined,
+    });
+  }
+  return { hours, windows, hr, slots, dayStart };
 }
 
 /** Day-level heart-rate values for presentation: min, max and mean of window means (not resting heart rate). */

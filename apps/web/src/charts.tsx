@@ -91,55 +91,92 @@ export function energyTip(hrWindows: number | null, windows: number): string[] {
   if (hrWindows === null) return ['Źródło: nieustalone'];
   return [`Źródło: ${hrWindows === 0 ? 'telefon' : hrWindows >= windows ? 'opaska' : 'mieszane'}`, `Opaska: ${nf(hrWindows / windows * 100)} %`];
 }
+/** One ten-minute window of the day; `hr` is the window's mean heart rate (null: no measurement, undefined: heart rate not read). */
+export interface SlotPoint { index: number; start: number; range: string; total: number | null; active: number | null; steps: number | null; distance: number | null; fc: number | null; now: boolean; future: boolean; hr: number | null | undefined }
+/** Tooltip lines of one window: its time, the value and (for calories) whose estimate it is. */
+function slotLines(s: SlotPoint, metric: HourKey, stacked: boolean, withHr: boolean): string[] {
+  const decimals = metric === 'distance' ? 2 : 0, unit = hourUnits[metric], out = [s.range];
+  if (s.future && !(stacked && s.fc !== null)) out.push('—');
+  else if (stacked) { out.push(s.total !== null ? `${nf(s.total)} kcal` : '—'); if (s.fc !== null) out.push(`Prognoza: ${nf((s.total ?? 0) + s.fc)} kcal`); }
+  else out.push(s[metric] === null ? '—' : `${nf(s[metric]!, decimals)} ${unit}`);
+  if ((metric === 'total' || metric === 'active') && !s.future && s[metric] !== null) out.push(...energyTip(s.hr === undefined ? null : s.hr === null ? 0 : 1, 1));
+  if (withHr && s.hr != null) out.push(`Tętno: śr. ${nf(s.hr)} bpm`);
+  return out;
+}
 /**
- * Hourly bars. For burned kcal: the part outside active kcal plus active kcal; for a day in progress a dashed resting
- * forecast fills the rest of the current hour and the future hours. With `hr`: the heart-rate window means on a right axis.
+ * Bars in ten-minute windows (the resolution of the saved series), hour labels on the axis. For burned kcal: the part outside
+ * active kcal plus active kcal; for a day in progress a dashed resting forecast fills the rest of the current window and the
+ * future ones. With `hr`: the heart-rate window means on a right axis.
  */
-export function HourChart({ hours, metric, height = 150, width = 640, hr }: { hours: HourPoint[]; metric: HourKey; height?: number; width?: number; hr?: HrWindow[] }) {
+export function HourChart({ windows, hours, metric, height = 150, width = 640, hr }: { windows: SlotPoint[]; hours: HourPoint[]; metric: HourKey; height?: number; width?: number; hr?: HrWindow[] }) {
   const H = height, W = width, L = 36, B = 18, T = 8, big = H > 200, color = metric === 'steps' || metric === 'distance' ? 'var(--c-activity)' : 'var(--c-energy)';
   const win = hr ?? [], R = win.length ? 40 : 0, PW = W - R, stacked = metric === 'total';
-  const values = hours.flatMap((h) => [h[metric], stacked && h.fc !== null ? (h.total ?? 0) + h.fc : null]).filter((v): v is number => v !== null);
-  if (!values.length) return <p className="sub">Brak danych godzinowych.</p>;
+  const values = windows.flatMap((h) => [h[metric], stacked && h.fc !== null ? (h.total ?? 0) + h.fc : null]).filter((v): v is number => v !== null);
+  if (!values.length) return <p className="sub">Brak danych 10-minutowych.</p>;
   const ticks = niceTicks(0, Math.max(...values, 1), big ? 4 : 2), top = ticks.at(-1)!;
-  const n = hours.length, step = (PW - L) / n, base = H - B, y = (v: number) => T + (base - T) * (1 - v / top);
-  const decimals = metric === 'distance' ? 2 : 0, unit = hourUnits[metric];
+  const n = windows.length, step = (PW - L) / n, base = H - B, y = (v: number) => T + (base - T) * (1 - v / top);
+  const unit = hourUnits[metric];
   let hrMarks: ReactNode = null;
   if (win.length) {
     const { ticks: hticks, lo: h0, hi: h1 } = fitAxis(Math.min(...win.map((v) => v.avg)), Math.max(...win.map((v) => v.avg)), big ? 4 : 2);
-    const y2 = (v: number) => T + (base - T) * (1 - (v - h0) / (h1 - h0)), ws = step / 6, xw = (i: number) => L + i * ws + ws / 2;
+    const y2 = (v: number) => T + (base - T) * (1 - (v - h0) / (h1 - h0)), xw = (i: number) => L + i * step + step / 2;
     let path = '', previous = -2; for (const v of win) { path += `${v.index === previous + 1 ? 'L' : 'M'}${xw(v.index).toFixed(1)},${y2(v.avg).toFixed(1)}`; previous = v.index; }
     const indexes = new Set(win.map((v) => v.index));
     hrMarks = <><path d={path} fill="none" stroke="var(--c-band)" strokeWidth={1.8} strokeLinejoin="round" />
       {win.filter((v) => !indexes.has(v.index - 1) && !indexes.has(v.index + 1)).map((v) => <circle key={v.index} cx={xw(v.index)} cy={y2(v.avg)} r={2} fill="var(--c-band)" />)}
       {hticks.map((t) => <text key={`hr${t}`} x={PW + 6} y={y2(t) + 3.5} style={{ fill: 'var(--c-band)' }}>{t}</text>)}</>;
   }
-  const lines = (h: HourPoint) => {
-    const out = [h.range];
-    if (h.future && !(stacked && h.fc !== null)) out.push('—');
-    else if (stacked) { if (h.total !== null) out.push(`${nf(h.total)} kcal`); else out.push('—'); if (h.fc !== null) out.push(`Prognoza: ${nf((h.total ?? 0) + h.fc)} kcal`); }
-    else out.push(h[metric] === null ? '—' : `${nf(h[metric]!, decimals)} ${unit}`);
-    if ((metric === 'total' || metric === 'active') && !h.future && h[metric] !== null) out.push(...energyTip(h.hrWindows, 6));
-    if (hr && h.hrAvg !== null) out.push(`Tętno: śr. ${nf(h.hrAvg)} bpm`);
-    return out;
-  };
-  const every = W > 900 ? 1 : 3;
-  return <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Rozkład godzinowy, ${unit}${win.length ? ', z tętnem' : ''}`}>
+  const every = W > 900 ? 1 : 3, gap = Math.min(0.6, step * 0.15);
+  return <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Rozkład w oknach 10-minutowych, ${unit}${win.length ? ', z tętnem' : ''}`}>
     {ticks.map((t) => <g key={t}><line className="grid" x1={L} x2={PW} y1={y(t)} y2={y(t)} /><text x={L - 6} y={y(t) + 3.5} textAnchor="end">{nf(t, metric === 'distance' ? 1 : 0)}</text></g>)}
-    {hours.map((h, i) => {
-      const x = L + i * step + 1.5, w = Math.max(1, step - 3), opacity = h.now ? 0.55 : 1;
+    {windows.map((h) => {
+      const x = L + h.index * step + gap / 2, w = Math.max(0.8, step - gap), opacity = h.now ? 0.55 : 1;
       const total = h.total, rest = total === null ? null : total - (h.active ?? 0);
       return <g key={h.start}>
         {stacked && total !== null && rest !== null && <><rect x={x} y={y(rest)} width={w} height={Math.max(0, base - y(rest))} fill="color-mix(in srgb, var(--c-energy) 32%, transparent)" opacity={opacity} />
           {!!h.active && <rect x={x} y={y(total)} width={w} height={Math.max(0, y(rest) - y(total))} fill="var(--c-energy)" opacity={opacity} />}</>}
-        {!stacked && h[metric] !== null && <rect x={x} y={y(h[metric]!)} width={w} height={Math.max(0.5, base - y(h[metric]!))} rx={2} fill={color} opacity={h.now ? 0.45 : 0.9} />}
-        {stacked && h.fc !== null ? <rect x={x + 0.5} y={y((total ?? 0) + h.fc)} width={Math.max(0, w - 1)} height={Math.max(0, y(total ?? 0) - y((total ?? 0) + h.fc))} fill="color-mix(in srgb, var(--c-energy) 8%, transparent)" stroke="var(--c-energy)" strokeWidth={1} strokeDasharray="3 2" />
+        {!stacked && h[metric] !== null && <rect x={x} y={y(h[metric]!)} width={w} height={Math.max(0.5, base - y(h[metric]!))} fill={color} opacity={h.now ? 0.45 : 0.9} />}
+        {stacked && h.fc !== null ? <rect x={x} y={y((total ?? 0) + h.fc)} width={w} height={Math.max(0, y(total ?? 0) - y((total ?? 0) + h.fc))} fill="color-mix(in srgb, var(--c-energy) 8%, transparent)" stroke="var(--c-energy)" strokeWidth={0.6} strokeDasharray="2 1.5" />
           : h.future ? <rect x={x} y={base - 2} width={w} height={2} fill="var(--line-strong)" /> : null}
       </g>;
     })}
     {hrMarks}<line className="axis" x1={L} x2={PW} y1={base} y2={base} />
-    {hours.map((h, i) => i % every === 0 || h.label.endsWith('′') ? <text key={`l${h.start}`} x={L + i * step + step / 2} y={H - 4} textAnchor="middle">{h.label}</text> : null)}
-    {hours.map((h, i) => <rect key={`t${h.start}`} className="hit" x={L + i * step} y={T} width={step} height={base - T} {...tip(lines(h))} />)}
+    {hours.map((h, i) => i % every === 0 || h.label.endsWith('′') ? <text key={`l${h.start}`} x={L + (i * 6 + 3) * step} y={H - 4} textAnchor="middle">{h.label}</text> : null)}
+    {windows.map((h) => <rect key={`t${h.start}`} className="hit" x={L + h.index * step} y={T} width={step} height={base - T} {...tip(slotLines(h, metric, stacked, !!hr))} />)}
   </svg>;
+}
+
+/** The day in hours as a card-sized chart (same size as the 14-day sparkline): bars from zero, kcal split like the big chart. Cards stay hourly; the zoomed chart has ten-minute windows. */
+export function DayMini({ hours, metric }: { hours: HourPoint[]; metric: HourKey }) {
+  const W = 140, H = 34, n = hours.length, step = (W - 8) / Math.max(1, n), stacked = metric === 'total', decimals = metric === 'distance' ? 2 : 0;
+  const values = hours.flatMap((h) => h[metric] === null ? [] : [h[metric]!]);
+  const lines = (h: HourPoint) => [h.range, h.future ? '—' : h[metric] === null ? '—' : `${nf(h[metric]!, decimals)} ${hourUnits[metric]}`, ...((metric === 'total' || metric === 'active') && !h.future && h[metric] !== null ? energyTip(h.hrWindows, 6) : [])];
+  const hits = hours.map((h, i) => <rect key={`h${i}`} className="hit" x={4 + i * step} y={0} width={step} height={H} {...tip(lines(h))} />);
+  if (!values.length) return <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true"><line x1={0} x2={W} y1={30} y2={30} className="axis" strokeDasharray="2 3" />{hits}</svg>;
+  const max = Math.max(...values), y = (v: number) => 30 - (v / (max || 1)) * 26, color = metric === 'steps' || metric === 'distance' ? 'var(--c-activity)' : 'var(--c-energy)';
+  return <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true">
+    {hours.map((h, i) => {
+      const v = h[metric]; if (v === null) return null;
+      const x = 4 + i * step + 0.5, w = Math.max(1, step - 1), rest = stacked ? v - (h.active ?? 0) : v;
+      return <g key={i} opacity={h.now ? 0.5 : 1}><rect x={x} y={y(rest)} width={w} height={Math.max(0.5, 30 - y(rest))} fill={stacked ? 'color-mix(in srgb, var(--c-energy) 32%, transparent)' : color} />
+        {stacked && !!h.active && <rect x={x} y={y(v)} width={w} height={Math.max(0, y(rest) - y(v))} fill="var(--c-energy)" />}</g>;
+    })}
+    <line x1={4} x2={W - 4} y1={30} y2={30} className="axis" />{hits}</svg>;
+}
+/** The day's heart rate by hour as a card-sized chart: min–max band and the line of hourly means of the ten-minute window means. */
+export function HrDayMini({ windows, hours }: { windows: HrWindow[]; hours: number }) {
+  const W = 140, H = 34, step = (W - 8) / Math.max(1, hours), x = (i: number) => 4 + i * step + step / 2;
+  const byHour = new Map<number, HrWindow[]>(); for (const v of windows) byHour.set(Math.floor(v.index / 6), [...(byHour.get(Math.floor(v.index / 6)) ?? []), v]);
+  const pts = [...byHour].sort((p, q) => p[0] - q[0]).map(([hour, list]) => ({ hour, avg: list.reduce((sum, v) => sum + v.avg, 0) / list.length, min: Math.min(...list.map((v) => v.min)), max: Math.max(...list.map((v) => v.max)), n: list.length, label: `${list[0]!.label.slice(0, 2)}:00` }));
+  const hits = pts.map((v) => <rect key={`h${v.hour}`} className="hit" x={4 + v.hour * step} y={0} width={step} height={H} {...tip([`godz. ${v.label}`, `śr. ${nf(v.avg)} bpm`, `${nf(v.min)}–${nf(v.max)} bpm`, `${v.n} z 6 okien z pomiarem`])} />);
+  if (!pts.length) return <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true"><line x1={0} x2={W} y1={30} y2={30} className="axis" strokeDasharray="2 3" /></svg>;
+  const lo = Math.min(...pts.map((v) => v.min)), hi = Math.max(...pts.map((v) => v.max)), y = (v: number) => 31 - ((v - lo) / (hi - lo || 1)) * 28;
+  let path = '', previous = -2; for (const v of pts) { path += `${v.hour === previous + 1 ? 'L' : 'M'}${x(v.hour).toFixed(1)},${y(v.avg).toFixed(1)}`; previous = v.hour; }
+  const have = new Set(pts.map((v) => v.hour));
+  return <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true">
+    {pts.map((v) => <line key={v.hour} x1={x(v.hour)} x2={x(v.hour)} y1={y(v.max)} y2={y(v.min)} stroke="color-mix(in srgb, var(--c-band) 35%, transparent)" strokeWidth={Math.max(1, step - 1)} />)}
+    <path d={path} fill="none" stroke="var(--c-band)" strokeWidth={1.3} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+    {pts.filter((v) => !have.has(v.hour - 1) && !have.has(v.hour + 1)).map((v) => <line key={`c${v.hour}`} x1={x(v.hour)} x2={x(v.hour)} y1={y(v.avg)} y2={y(v.avg)} stroke="var(--c-band)" strokeWidth={3} strokeLinecap="round" vectorEffect="non-scaling-stroke" />)}{hits}</svg>;
 }
 
 /** Heart rate in ten-minute windows: a min–max band and the window mean; windows without a measurement are gaps. */

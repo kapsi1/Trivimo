@@ -4,7 +4,7 @@ import { earliestOf, earliestSchema, metrics, syncStatusSchema, useJson, type Me
 import { Tooltip } from './charts.tsx';
 import { DayView, type DayTab } from './day.tsx';
 import { Drawer, type DrawerState } from './details.tsx';
-import { addDays, warsawToday, whenOf , firstDay } from './format.ts';
+import { addDays, fmtDL, timeOf, warsawToday, whenOf , firstDay } from './format.ts';
 import { Loading, LogoMark } from './logo.tsx';
 import { BackfillNotice } from './notice.tsx';
 import { FoodView, WorkoutsView, type FoodTab } from './placeholders.tsx';
@@ -145,7 +145,7 @@ function Shell() {
       <div className="side-foot"><button type="button" className="sync" title={collapsed ? `Google Health · ${lastOk ? `odświeżono ${whenOf(lastOk)}` : 'brak odczytu'}` : undefined} onClick={() => go('zrodla')}><span className={`dot ${syncBad ? 'warn' : ''}`} /><span>{sync.error ? 'Google Health · stan niedostępny' : `Google Health · ${lastOk ? `odświeżono ${whenOf(lastOk)}` : 'brak odczytu'}`}{syncBad && syncData?.last ? ' · błąd ostatniego odświeżenia' : ''}<br /><span className="faint">{syncData?.automatic ? `automatycznie co ${syncData.automatic} min` : sync.error ? 'zobacz Źródła danych' : 'odświeżanie ręczne'}</span></span></button></div>
     </aside>
     <div className="main">
-      <header className="topbar"><h1>{titles[route.view]}</h1>{context}
+      <header className="topbar"><h1>{route.view === 'dzien' ? fmtDL(date) : titles[route.view]}</h1>{route.view === 'dzien' && date === warsawToday() && <span className="live">w toku{lastOk ? ` · stan na ${timeOf(lastOk)}` : ''}</span>}{context}
         <div className="menuwrap"><button type="button" className="btn primary" aria-haspopup="menu" aria-expanded={addOpen} onClick={() => setAddOpen(!addOpen)}>{I.plus}<span className="hide-sm">Dodaj</span></button>
           {addOpen && <div className="menu" role="menu"><button type="button" role="menuitem" onClick={() => { setAddOpen(false); setDay(route.view === 'dzien' ? date : warsawToday(), 'podsumowanie'); setTimeout(() => document.getElementById('usernote')?.focus(), 150); }}>Notatka do dnia</button>
             <button type="button" role="menuitem" disabled>Posiłek <span className="tag food">M3</span></button><button type="button" role="menuitem" disabled>Pomiar wagi <span className="tag">M7</span></button></div>}</div></header>

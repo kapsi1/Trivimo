@@ -32,15 +32,20 @@ export function readDaySeries(db: DatabaseSync, metric: SeriesMetric, date: stri
   if (!windows) return null;
   const hours = Math.round((end - start) / 3600000);
   const sums: (bigint | null)[] = Array.from({ length: hours }, () => null);
+  // the same windows one by one (10 minutes each), index = window number from the day's start; no window or no value is null, never zero
+  const slots: (string | null)[] = Array.from({ length: hours * 3600 / windowSeconds }, () => null);
   for (const window of windows) {
     if (window.value === null) continue;
     const index = Math.floor((window.start - start) / 3600000);
     sums[index] = (sums[index] ?? 0n) + toScaled(window.value);
+    const slot = Math.floor((window.start - start) / (windowSeconds * 1000));
+    if (slot >= 0 && slot < slots.length) slots[slot] = format((slots[slot] === null ? 0n : toScaled(slots[slot]!)) + toScaled(window.value));
   }
   const total = sums.reduce<bigint>((sum, value) => sum + (value ?? 0n), 0n);
   return {
     unit: definition.unit, windowsPerDay: (end - start) / (windowSeconds * 1000), windows: windows.length,
     hours: sums.map((value, index) => ({ start: new Date(start + index * 3600000).toISOString(), value: value === null ? null : format(value) })),
+    slots,
     total: format(total),
   };
 }

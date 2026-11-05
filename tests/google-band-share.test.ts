@@ -99,6 +99,7 @@ test('seria godzinowa: godziny bez okien to brak, nie zero; dzień ze zmianą cz
     const series = readDaySeries(db, 'steps', '2026-03-29')!;
     assert.equal(series.hours.length, 23); assert.equal(series.windowsPerDay, 138); assert.equal(series.windows, 4);
     assert.deepEqual(series.hours.slice(0, 4).map((hour) => hour.value), ['150', '0', null, '7']);
+    assert.equal(series.slots.length, 138); assert.equal(series.slots.filter((slot) => slot !== null).length <= series.windows, true);
     assert.equal(series.total, '157'); assert.equal(series.unit, 'steps');
     assert.equal(readDaySeries(db, 'distance', '2026-03-29'), null);
     assert.equal(readDaySeries(db, 'steps', '2026-10-25') === null, true);

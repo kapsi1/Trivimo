@@ -21,9 +21,9 @@ export function DateControl({ date, onDate }: { date: string; onDate: (date: str
     <button type="button" className="btn ghost" disabled={date === today} onClick={() => onDate(today)}>Dziś</button></div>;
 }
 
-export function ZoomDialog({ title, sub, controls, legend, onInfo, onClose, children }: { title: string; sub: string; controls?: ReactNode; legend?: ReactNode; onInfo: () => void; onClose: () => void; children: ReactNode }) {
+export function ZoomDialog({ title, sub, controls, legend, onInfo, onClose, children }: { title: string; sub?: string; controls?: ReactNode; legend?: ReactNode; onInfo: () => void; onClose: () => void; children: ReactNode }) {
   const ref = useDialog(onClose); const { W, H } = zoomSize();
   return <><div className="scrim zscrim" onClick={onClose} /><section ref={ref} className="zoom" role="dialog" aria-modal="true" aria-labelledby="ztitle">
-    <header><div><h2 id="ztitle">{title}</h2><p>{sub}</p></div><div className="zctl">{controls}<InfoButton label={title} onClick={onInfo} /><button type="button" className="iconbtn" onClick={onClose} aria-label="Zamknij"><CloseIcon /></button></div></header>
+    <header><div><h2 id="ztitle">{title}</h2>{sub && <p>{sub}</p>}</div><div className="zctl">{controls}<InfoButton label={title} onClick={onInfo} /><button type="button" className="iconbtn" onClick={onClose} aria-label="Zamknij"><CloseIcon /></button></div></header>
     <div className="zbody"><div className="legend" style={{ minHeight: 20 }}>{legend}</div><div style={{ aspectRatio: `${W} / ${H}` }}>{children}</div></div></section></>;
 }
