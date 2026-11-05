@@ -20,6 +20,7 @@ const sourceSchema = z.object({
   device: z.object({ manufacturer: text, model: text, displayName: text, formFactor: text }).passthrough().optional(),
 }).passthrough();
 const civilDate = z.object({ year: z.number().int(), month: z.number().int(), day: z.number().int() });
+const intervalSchema = z.object({ interval: z.object({ civilStartTime: z.object({ date: civilDate }) }) }).passthrough();
 const responseSchema = z.object({ dataPoints: z.array(z.record(z.string(), z.unknown())).max(pageSize).optional(), nextPageToken: z.string().max(8192).optional() }).passthrough();
 
 export interface DataSource { platform: string | null; application: string | null; device: string | null; recordingMethod: string | null }
@@ -32,7 +33,7 @@ export function parseSourceList(rawJson: string, kind: SourceListKind): { days: 
   const parsed = responseSchema.parse(JSON.parse(rawJson) as unknown);
   const counts = new Map<string, DaySourceCount>();
   for (const point of parsed.dataPoints ?? []) {
-    const interval = z.object({ interval: z.object({ civilStartTime: z.object({ date: civilDate }) }) }).passthrough().parse(point[sourceListTypes[kind].field]);
+    const interval = intervalSchema.parse(point[sourceListTypes[kind].field]);
     const raw = sourceSchema.parse(point.dataSource ?? {});
     const device = raw.device ? [raw.device.manufacturer, raw.device.displayName ?? raw.device.model, raw.device.formFactor].filter(Boolean).join(' ') || null : null;
     const source: DataSource = { platform: raw.platform ?? null, application: raw.application?.packageName ?? raw.application?.displayName ?? raw.application?.webClientId ?? null, device, recordingMethod: raw.recordingMethod ?? null };

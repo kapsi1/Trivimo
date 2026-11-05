@@ -4,6 +4,28 @@ import { parseSourceList, type DataSource, type SourceListKind } from '../adapte
 const addDays = (date: string, days: number) => new Date(Date.parse(`${date}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
 export interface SourceRecords { source: DataSource; records: number }
 
+/**
+ * Per-day source counts of one complete job. A complete job's saved pages never change, and parsing them is the cost of
+ * the table (seconds), so the result is kept per open store connection and reused when the range is switched.
+ */
+const jobCache = new WeakMap<DatabaseSync, Map<string, Map<string, Map<string, SourceRecords>>>>();
+function jobDays(db: DatabaseSync, kind: SourceListKind, jobId: unknown, pages: ReturnType<DatabaseSync['prepare']>): Map<string, Map<string, SourceRecords>> {
+  const cache = jobCache.get(db) ?? new Map(); jobCache.set(db, cache);
+  const cacheKey = `${kind}:${String(jobId)}`, hit = cache.get(cacheKey);
+  if (hit) return hit;
+  const byDay = new Map<string, Map<string, SourceRecords>>();
+  for (const page of pages.iterate(jobId as string)) {
+    if (typeof page.raw_json !== 'string') throw new Error('invalid_page');
+    for (const entry of parseSourceList(page.raw_json, kind).days) {
+      const sources = byDay.get(entry.date) ?? new Map<string, SourceRecords>(); byDay.set(entry.date, sources);
+      const id = JSON.stringify(entry.source); const current = sources.get(id);
+      sources.set(id, { source: entry.source, records: (current?.records ?? 0) + entry.records });
+    }
+  }
+  cache.set(cacheKey, byDay);
+  return byDay;
+}
+
 /** Per date of [from, to] the sources of the newest complete read covering it; an unread date is absent (unknown, not "no source"). */
 function savedSources(db: DatabaseSync, kind: SourceListKind, from: string, to: string): Map<string, SourceRecords[]> {
   const claimed = new Map<string, SourceRecords[]>();
@@ -12,15 +34,7 @@ function savedSources(db: DatabaseSync, kind: SourceListKind, from: string, to: 
     const needed: string[] = [];
     for (let day = String(job.range_start) < from ? from : String(job.range_start); day < String(job.range_end) && day <= to; day = addDays(day, 1)) if (!claimed.has(day)) needed.push(day);
     if (needed.length === 0) continue;
-    const byDay = new Map<string, Map<string, SourceRecords>>();
-    for (const page of pages.iterate(job.id)) {
-      if (typeof page.raw_json !== 'string') throw new Error('invalid_page');
-      for (const entry of parseSourceList(page.raw_json, kind).days) {
-        const sources = byDay.get(entry.date) ?? new Map<string, SourceRecords>(); byDay.set(entry.date, sources);
-        const id = JSON.stringify(entry.source); const current = sources.get(id);
-        sources.set(id, { source: entry.source, records: (current?.records ?? 0) + entry.records });
-      }
-    }
+    const byDay = jobDays(db, kind, job.id, pages);
     for (const day of needed) claimed.set(day, [...(byDay.get(day)?.values() ?? [])].sort((a, b) => b.records - a.records));
   }
   return claimed;
