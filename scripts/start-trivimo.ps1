@@ -11,20 +11,39 @@ function Test-LocalPort([int]$port) {
     } catch { return $false } finally { $client.Dispose() }
 }
 
-foreach ($port in @(3000, 5173)) {
-    if (Test-LocalPort $port) { throw "Port $port jest zajety. Zamknij poprzednia instancje Trivimo i sprobuj ponownie." }
+function Stop-Tree($process) {
+    if ($process -and -not $process.HasExited) {
+        & taskkill.exe /PID $process.Id /T /F 2>$null | Out-Null
+    }
 }
 
-$server = Start-Process -FilePath $node.Source -ArgumentList @('--import', 'tsx', 'apps/server/index.ts') -WorkingDirectory $project -WindowStyle Hidden -PassThru
-$web = Start-Process -FilePath $node.Source -ArgumentList @('node_modules/vite/bin/vite.js', '--host', '127.0.0.1') -WorkingDirectory $project -WindowStyle Hidden -PassThru
-for ($attempt = 0; $attempt -lt 30; $attempt++) {
-    if ((Test-LocalPort 3000) -and (Test-LocalPort 5173)) {
-        Write-Output 'Trivimo dziala pod adresem http://localhost:5173/'
-        exit 0
-    }
-    if ($server.HasExited -or $web.HasExited) { break }
-    Start-Sleep -Milliseconds 200
+foreach ($port in @(3000, 5173)) {
+    if (Test-LocalPort $port) { throw "Port $port jest zajety. Zamknij poprzednia instancje Trivimo (stop-trivimo.cmd) i sprobuj ponownie." }
 }
-if (-not $server.HasExited) { Stop-Process -Id $server.Id -ErrorAction SilentlyContinue }
-if (-not $web.HasExited) { Stop-Process -Id $web.Id -ErrorAction SilentlyContinue }
-throw 'Nie udalo sie uruchomic Trivimo. Sprawdz instalacje Node i zaleznosci npm.'
+
+# Oba serwery pisza logi do tego samego okna konsoli. Ctrl+C zatrzymuje oba.
+$server = $null
+$web = $null
+try {
+    $server = Start-Process -FilePath $node.Source -ArgumentList @('--import', 'tsx', 'apps/server/index.ts') -WorkingDirectory $project -NoNewWindow -PassThru
+    $web = Start-Process -FilePath $node.Source -ArgumentList @('node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--clearScreen', 'false') -WorkingDirectory $project -NoNewWindow -PassThru
+
+    $ready = $false
+    for ($attempt = 0; $attempt -lt 50; $attempt++) {
+        if ((Test-LocalPort 3000) -and (Test-LocalPort 5173)) { $ready = $true; break }
+        if ($server.HasExited -or $web.HasExited) { break }
+        Start-Sleep -Milliseconds 200
+    }
+    if (-not $ready) { throw 'Nie udalo sie uruchomic Trivimo. Sprawdz logi powyzej oraz instalacje Node i zaleznosci.' }
+
+    Write-Output ''
+    Write-Output 'Trivimo dziala pod adresem http://localhost:5173/  (Ctrl+C zatrzymuje oba serwery)'
+    Write-Output ''
+
+    while (-not $server.HasExited -and -not $web.HasExited) { Start-Sleep -Milliseconds 500 }
+    $which = if ($server.HasExited) { 'API (port 3000)' } else { 'Vite (port 5173)' }
+    throw "Serwer $which zakonczyl dzialanie. Zatrzymuje pozostaly."
+} finally {
+    Stop-Tree $server
+    Stop-Tree $web
+}

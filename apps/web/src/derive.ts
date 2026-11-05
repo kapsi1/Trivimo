@@ -20,11 +20,11 @@ export function meanValid(rows: readonly DayRow[], key: MetricKey, from: string,
   }
   return { mean: n ? sum / n : null, n, total };
 }
-/** Newest confirmed measurement on or before a day: shown with its date, never carried over as that day's value. */
+/** Newest measurement on or before a day (a day in progress counts: its mean is provisional, but the measurement exists): shown with its date, never carried over as that day's value. */
 export function lastMeasured(rows: readonly DayRow[], key: MetricKey, onOrBefore: string): { date: string; value: number } | null {
   for (let index = rows.length - 1; index >= 0; index--) {
     const row = rows[index]!; const item = row.snapshot?.metrics[key];
-    if (row.date <= onOrBefore && item?.status === 'valid' && item.value) return { date: row.date, value: toNumber(item.value) };
+    if (row.date <= onOrBefore && (item?.status === 'valid' || item?.status === 'provisional') && item.value) return { date: row.date, value: toNumber(item.value) };
   }
   return null;
 }

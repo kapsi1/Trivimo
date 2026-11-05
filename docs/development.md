@@ -2,7 +2,7 @@
 
 Projekt używa TypeScript, React i Vite, Node 26 LTS od wersji 26.13 lub Node 24 LTS, wbudowanego `node:sqlite`, npm, Zod oraz test runnera Node przez tsx. Wersje bibliotek przypięto w `package.json` i `package-lock.json`. API nasłuchuje wyłącznie na 127.0.0.1. Interfejs (`apps/web`) realizuje [projekt UI](design/ui.md); kroje pisma są lokalnymi plikami w `apps/web/src/fonts` (SIL OFL), więc strona nie łączy się z Google Fonts.
 
-W systemie Windows można uruchomić `start-trivimo.cmd` poza środowiskiem izolowanym. Skrypt uruchamia serwer i interfejs w tle; stronę otwiera się pod `http://localhost:5173/`. Jeśli port jest zajęty, zgłasza problem i nie zatrzymuje innych procesów.
+W systemie Windows można uruchomić `start-trivimo.cmd` poza środowiskiem izolowanym. Skrypt uruchamia serwer i interfejs w tym samym oknie konsoli i pokazuje ich logi; stronę otwiera się pod `http://localhost:5173/`. Ctrl+C (lub zakończenie jednego z serwerów) zatrzymuje oba. Jeśli port jest zajęty, zgłasza problem i nie zatrzymuje innych procesów; serwery pozostawione z poprzedniej sesji zatrzymuje `stop-trivimo.cmd` (zabija procesy nasłuchujące na portach 3000 i 5173 wraz z ich watcherem).
 
 Alternatywnie w PowerShell, po zainstalowaniu obsługiwanej wersji Node:
 

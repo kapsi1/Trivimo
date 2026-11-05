@@ -76,9 +76,10 @@ export function DayView({ metric, date, tab, onTab, onDate, sync, onDirty, onDra
 function KpiCard({ date, rows, snapshot, metricKey, forecast, onZoom, onInfo, mini, quiet }: { date: string; rows: DayRow[]; snapshot: Snapshot | null; metricKey: MetricKey; forecast: Forecast; onZoom?: () => void; onInfo: () => void; mini?: ReactNode; quiet?: boolean }) {
   const metric = metricOf(metricKey), value = snapshot?.metrics[metricKey];
   const avg = meanValid(rows, metricKey, addDays(date, -7), addDays(date, -1));
+  const week = `${fmtD(addDays(date, -7))}–${fmtD(addDays(date, -1))}`; // the 7 days before the shown day, without it
   let cmp: string;
   if (metric.group === 'body' && !value?.value) { const last = lastMeasured(rows, metricKey, addDays(date, -1)); cmp = last ? `ostatni pomiar ${nf(last.value, metric.decimals)} ${metric.unit} · ${fmtD(last.date)}` : 'brak pomiaru w ostatnich 90 dniach'; }
-  else cmp = avg.mean !== null ? `śr. 7 dni ${nf(avg.mean, metric.decimals)} · ${avg.n} z 7 dób` : metric.group === 'body' ? 'brak pomiarów w 7 dniach' : 'brak potwierdzonych dób w 7 dniach';
+  else cmp = avg.mean !== null ? `śr. ${week}: ${nf(avg.mean, metric.decimals)} · ${avg.n} z 7 dób` : metric.group === 'body' ? 'brak pomiarów w 7 dniach' : 'brak potwierdzonych dób w 7 dniach';
   const byDate = new Map(rows.map((row) => [row.date, row]));
   const spark = Array.from({ length: 14 }, (_, i) => { const at = addDays(date, i - 13), row = byDate.get(at); return { value: valueOf(row?.snapshot, metricKey), provisional: row?.snapshot?.metrics[metricKey].status === 'provisional', tip: dayTip(row, at, metricKey, at === date && metricKey === 'total_energy' ? forecast : undefined) }; });
   const fc = metricKey === 'total_energy' && forecast && value?.value ? { now: valueOf(snapshot, metricKey) ?? 0, total: forecast.forecastKcal } : null;
@@ -99,7 +100,7 @@ function HrCard({ date, hrToday, avg7, n7, onZoom, onInfo, chart, quiet }: { dat
   return <div className="kcard" data-zoom onClick={onZoom}>
     <span className="k-label"><span>Tętno</span><span className="k-right">{!quiet && date === warsawToday() && hrToday && <span className="chip prov">w toku</span>}<InfoButton label="Tętno" onClick={onInfo} /></span></span>
     <span className={`k-value ${hrToday ? '' : 'none'}`}>{hrToday ? nf(hrToday.avg) : '—'}{hrToday && <><small>bpm</small><span className="k-fc" style={{ color: 'var(--c-band)' }}>{nf(hrToday.min)}–{nf(hrToday.max)} bpm</span></>}</span>
-    <span className="k-cmp">{hrToday ? avg7 !== null ? `śr. 7 dni ${nf(avg7)} · ${n7} z 7 dób` : 'brak pomiarów w 7 dniach' : 'Brak pomiarów tętna tej doby'}</span>
+    <span className="k-cmp">{hrToday ? avg7 !== null ? `śr. ${fmtD(addDays(date, -7))}–${fmtD(addDays(date, -1))}: ${nf(avg7)} · ${n7} z 7 dób` : 'brak pomiarów w 7 dniach' : 'Brak pomiarów tętna tej doby'}</span>
     <button type="button" className="chartbtn" aria-label="Powiększ wykres: Tętno" onClick={(event) => { event.stopPropagation(); onZoom(); }}>{chart}</button></div>;
 }
 
