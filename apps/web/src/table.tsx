@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { z } from 'zod';
 import { bandRangeSchema, daySourcesSchema, groups, metricOf, quality, rangeSchema, sourceName, useChunkedJson, type DayRow, type DaySources, type Group, type MetricKey } from './api.ts';
 import { meanValid } from './derive.ts';
-import { StatusChip, type DrawerState } from './details.tsx';
+import { StatusChip } from './details.tsx';
 import { addDays, dow, fmtD, formatRational, isoWeek, maxDate, mondayOf, nf, warsawToday, WDS , firstDay } from './format.ts';
 import { compareDailyRows } from './sort-days.ts';
 import { Loading } from './logo.tsx';
@@ -84,7 +84,7 @@ export function tableMetricKeys(cols: Columns): MetricKey[] {
   return keys.length ? keys : columnGroups.flatMap(([, list]) => list);
 }
 const columnGroups: [Group, MetricKey[]][] = [['body', ['weight', 'body_fat']], ['activity', ['steps', 'distance']], ['energy', ['total_energy', 'active_energy']]];
-export function TableView({ from, to, cols, onCols, onDrawer, onOpenDay }: { from: string; to: string; cols: Columns; onCols: (cols: Partial<Columns>) => void; onDrawer: (state: DrawerState) => void; onOpenDay: (date: string) => void }) {
+export function TableView({ from, to, cols, onCols, onOpenDay, onOpenMetric }: { from: string; to: string; cols: Columns; onCols: (cols: Partial<Columns>) => void; onOpenDay: (date: string) => void; onOpenMetric: (date: string, key: MetricKey) => void }) {
   const today = warsawToday(), read = maxDate(firstDay, from), readable = to >= firstDay;
   const [onlyNotes, setOnlyNotes] = useState(false);
   const [sort, setSort] = useState<{ key: 'date' | MetricKey; desc: boolean }>({ key: 'date', desc: true });
@@ -141,10 +141,10 @@ export function TableView({ from, to, cols, onCols, onDrawer, onOpenDay }: { fro
   }
   function dayRow(row: DayRow) {
     const notes = rowNotes(row, today), share = bandBy.get(row.date), src = sourcesText(sourcesBy.get(row.date)), weekend = dow(row.date) === 0 || dow(row.date) === 6;
-    return <tr key={row.date} data-kind="day" className={weekend ? 'we' : ''}>
-      <td className="date"><span className="wd">{WDS[dow(row.date)]}</span>{row.date}{row.date === today && <> <span className="chip prov">w toku</span></>}</td>
+    return <tr key={row.date} data-kind="day" className={`rowlink ${weekend ? 'we' : ''}`} onClick={() => onOpenDay(row.date)}>
+      <td className="date"><button type="button" className="datebtn" aria-label={`Otwórz dzień ${row.date}`} onClick={() => onOpenDay(row.date)}><span className="wd">{WDS[dow(row.date)]}</span>{row.date}</button>{row.date === today && <> <span className="chip prov">w toku</span></>}</td>
       {shown.flatMap(([, keys]) => keys.map((key) => { const metric = metricOf(key), value = row.snapshot?.metrics[key];
-        return <td key={key}><button type="button" className={`cellbtn ${value?.value ? value.status === 'provisional' ? 'v-prov' : '' : 'v-none'}`} aria-label={`${metric.label}, ${row.date}: ${value ? quality[value.status] : 'brak obliczonego wyniku'}`} onClick={() => onDrawer({ type: 'cell', date: row.date, key })}>{value?.status !== 'provisional' && <StatusChip value={value} compact />}{value?.value ? formatRational(value.value, metric.decimals) : '—'}</button></td>; }))}
+        return <td key={key}><button type="button" className={`cellbtn ${value?.value ? value.status === 'provisional' ? 'v-prov' : '' : 'v-none'}`} aria-label={`${metric.label}, ${row.date}: ${value ? quality[value.status] : 'brak obliczonego wyniku'}`} onClick={(event) => { event.stopPropagation(); onOpenMetric(row.date, key); }}>{value?.status !== 'provisional' && <StatusChip value={value} compact />}{value?.value ? formatRational(value.value, metric.decimals) : '—'}</button></td>; }))}
       {cols.food && <td className="food-c" aria-label="M3">·</td>}
       {cols.ctx && <><td>{share?.heartRate ? <span className="bandbar" title={`${share.heartRate.windows} z ${share.totalWindows} okien 10-minutowych z tętnem`}>{nf(share.heartRate.windows / share.totalWindows * 100)} %<i><b style={{ width: `${share.heartRate.windows / share.totalWindows * 100}%` }} /></i></span> : <span className="v-none">—</span>}</td>
         <td className="l src-c" title={src.detail}>{src.short}</td></>}

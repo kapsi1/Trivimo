@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { bandShareSchema, dailyReviewSchema, dayResponseSchema, daySourcesSchema, forecastSchema, groups, heartRateDaySchema, heartRateRangeSchema, metricOf, metrics, post, rangeSchema, ruleOf, seriesSchema, sourceName, useJson, userNoteSchema, type DayRow, type Forecast, type MetricKey, type Snapshot, type SyncStatus } from './api.ts';
 import { EnergyLegend, HourChart, HR_LEGEND, HrDayChart, HrSpark, HrTrendChart, InfoButton, Sparkline, TrendChart, Zoomable, type HourKey } from './charts.tsx';
 import { axisEvents, dayHours, dayTip, dayTotal, heartTrend, hrOf, lastMeasured, meanValid, metricTrend, valueOf, type DayHours } from './derive.ts';
-import { StatusChip, hourMetricLabel, type DrawerState } from './details.tsx';
+import { CellBody, StatusChip, hourMetricLabel, type DrawerState } from './details.tsx';
 import { addDays, fmtD, fmtDL, formatRational, maxDate, nf, timeOf, warsawToday, whenOf , firstDay } from './format.ts';
 import { Placeholder } from './placeholders.tsx';
 import { DateControl, Segmented, ZoomDialog, zoomSize } from './zoom.tsx';
@@ -16,7 +16,7 @@ const lengths: [number, string][] = [[7, '7 dni'], [14, '14 dni'], [30, '30 dni'
 const windowDays = 150;
 const windowEnd = (date: string, today: string) => { const later = addDays(date, 30); return later < today ? later : today; };
 
-export function DayView({ date, tab, onTab, onDate, sync, onDirty, onDrawer }: { date: string; tab: DayTab; onTab: (tab: DayTab) => void; onDate: (date: string) => void; sync: SyncStatus | undefined; onDirty: (dirty: boolean) => void; onDrawer: (state: DrawerState) => void }) {
+export function DayView({ metric, date, tab, onTab, onDate, sync, onDirty, onDrawer }: { metric: MetricKey | null; date: string; tab: DayTab; onTab: (tab: DayTab) => void; onDate: (date: string) => void; sync: SyncStatus | undefined; onDirty: (dirty: boolean) => void; onDrawer: (state: DrawerState) => void }) {
   const today = warsawToday(), isToday = date === today, read = date >= firstDay;
   const [zoom, setZoom] = useState<Zoom | null>(null);
   const [refresh, setRefresh] = useState(0);
@@ -61,7 +61,7 @@ export function DayView({ date, tab, onTab, onDate, sync, onDirty, onDrawer }: {
 
   let body;
   if (tab === 'przebieg') body = <DayHourly date={date} hours={hours} snapshot={snapshot} legacy={legacy} seriesRead={!!total.data} loading={loading} forecast={fc} hrToday={hrToday} onZoom={setZoom} onInfo={openHourInfo} onHrInfo={openHrInfo} />;
-  else if (tab === 'pochodzenie') body = <DayProvenance date={date} snapshot={snapshot} slots={hours.slots} />;
+  else if (tab === 'pochodzenie') body = <DayProvenance key={date} date={date} snapshot={snapshot} slots={hours.slots} focus={metric} />;
   else if (tab === 'jedzenie') body = <Placeholder title="Dziennik jedzenia dnia" stage="M3" text="Tu pojawią się posiłki tego dnia, ich suma i pokrycie składników, a obok bilans z wydatkiem energii. Szczegóły zaprojektujemy razem z etapem M3." list={['Lista posiłków chronologicznie', 'Suma kcal i makr z oznaczeniem wpisów niepełnych', 'Bilans tylko dla dni z porównywalnym wydatkiem']} />;
   else if (tab === 'treningi') body = <Placeholder title="Treningi dnia" stage="M2" text="Sesje z czasem, tętnem, strefami i mapą trasy pojawią się w etapie M2. Kolumna „Treningi” w tabeli będzie ich zwięzłą projekcją." list={['Lista sesji dnia, np. „2 × spacer, 1 × rower”', 'Czas w strefach tętna i AZM osobno', 'Mapa trasy z TCX']} />;
   else body = <DaySummary date={date} rows={rows} snapshot={snapshot} hours={hours} legacy={legacy} seriesRead={!!total.data} forecast={fc} hrSummaries={hrSummaries} hrToday={hrToday}
@@ -168,7 +168,8 @@ function DayHourly({ date, hours, snapshot, legacy, seriesRead, loading, forecas
   </>;
 }
 
-function DayProvenance({ date, snapshot, slots }: { date: string; snapshot: Snapshot | null; slots: number }) {
+function DayProvenance({ date, snapshot, slots, focus }: { date: string; snapshot: Snapshot | null; slots: number; focus: MetricKey | null }) {
+  const [selected, setSelected] = useState<MetricKey | null>(focus);
   const read = date >= firstDay;
   const sources = useJson(read ? `/api/google/day-sources?from=${date}&to=${date}` : null, daySourcesSchema);
   const band = useJson(read ? `/api/google/band-share?date=${date}` : null, bandShareSchema);
@@ -180,7 +181,10 @@ function DayProvenance({ date, snapshot, slots }: { date: string; snapshot: Snap
     current[field] = (current[field] ?? 0) + item.records; names.set(name, current);
   }
   const role = (name: string) => name.startsWith('Opaska') ? 'urządzenie; producent wybiera je dla kroków, gdy mierzyło' : name.startsWith('Health Connect') || name.includes('(Health Connect)') ? 'kopia przez Health Connect, uzgadniana przez producenta' : 'źródło telefonu, uzgadniane przez producenta';
-  return <div className="cols2">
+  return <><section className="panel"><header><h3>Szczegóły wartości</h3><span className="sub">skąd wzięła się wartość metryki tego dnia</span></header>
+    <div className="seg" role="group" aria-label="Metryka">{metrics.map((item) => <button type="button" key={item.key} aria-pressed={selected === item.key} onClick={() => setSelected(selected === item.key ? null : item.key)}>{item.short}</button>)}</div>
+    {selected ? <div style={{ display: 'grid', gap: 12, marginTop: 12 }}><CellBody date={date} metricKey={selected} /></div> : <p className="sub" style={{ margin: '10px 0 0' }}>Wybierz metrykę, aby zobaczyć jej definicję, uzgodnienie źródeł i odczyty.</p>}</section>
+  <div className="cols2">
     <section className="panel"><header><h3>Kto zapisał dane tego dnia</h3><span className="sub">liczba wpisów z najnowszego pełnego odczytu</span></header>
       {sources.error ? <p role="alert">Nie udało się odczytać źródeł.</p> : !read ? <p className="sub">Doba sprzed zakresu odczytów.</p> : !sources.data ? <Loading /> : <div className="tw"><table className="simple"><thead><tr><th>Źródło</th><th>Kroki</th><th>Kalorie aktywne</th><th>Rola</th></tr></thead><tbody>
         {day?.steps === null && day?.activeEnergy === null ? <tr><td colSpan={4}>Brak odczytu listy źródeł dla tej doby.</td></tr> : names.size === 0 ? <tr><td colSpan={4}>Odczyt nie zawiera wpisów.</td></tr>
@@ -198,7 +202,7 @@ function DayProvenance({ date, snapshot, slots }: { date: string; snapshot: Snap
         : <ul className="timeline">{reads.data.rows.map((row, index) => <li key={index}><span>{whenOf(row.receivedAt)}</span><span>{row.converted ? `${nf(Number(row.converted.value))} ${row.converted.unit}` : row.originalValue}{index === 0 ? ' · najnowszy, użyty' : ' · wcześniejszy, zachowany'}</span></li>)}</ul>}
       <CsvDayOrigin date={date} snapshot={snapshot} />
     </section>
-  </div>;
+  </div></>;
 }
 
 const csvOriginSchema = z.array(z.object({ id: z.string(), fileName: z.string(), createdAt: z.string(), state: z.enum(['included', 'excluded']), metrics: z.array(z.string()), note: z.object({ action: z.enum(['apply', 'withdraw']), revision: z.number() }).nullable() }));

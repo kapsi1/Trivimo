@@ -44,7 +44,7 @@ function ForecastSection({ forecast, intro }: { forecast: NonNullable<Forecast>;
     <p style={{ marginTop: 6 }}>Zakłada brak dalszej aktywności, więc rzeczywista wartość będzie zwykle wyższa. Własna pochodna <span className="mono">{forecast.rule}</span>: stawka ze średniej {forecast.restWindows} dzisiejszych okien 10-minutowych bez kroków i bez aktywnych kcal. Nie jest wartością producenta ani BMR i nie trafia do tabeli, średnich ani eksportu.</p></div>;
 }
 
-function CellBody({ date, metricKey, onOpenDay }: { date: string; metricKey: MetricKey; onOpenDay: (date: string, tab?: 'podsumowanie' | 'pochodzenie') => void }) {
+export function CellBody({ date, metricKey, onOpenDay }: { date: string; metricKey: MetricKey; onOpenDay?: (date: string, tab?: 'podsumowanie' | 'pochodzenie') => void }) {
   const metric = metricOf(metricKey), group = metric.group;
   const day = useJson(`/api/day?date=${date}`, dayResponseSchema);
   const today = date === warsawToday();
@@ -95,7 +95,7 @@ function CellBody({ date, metricKey, onOpenDay }: { date: string; metricKey: Met
       : <p>Porównanie sum dobowych z Takeout nie jest jeszcze wyliczane. Oryginalne wiersze eksportu są w „Źródła danych” → „Importy plików”.</p>}</div>
     {snapshot && snapshot.notes.length > 0 && <div className="dsec"><h4>Uwagi dnia</h4><ul className="notes">{snapshot.notes.map((note) => <li key={note}>{note}</li>)}</ul></div>}
     <div className="dsec"><h4>Rewizja</h4><p className="mono">{snapshot ? `r-${snapshot.revision}` : 'brak'}</p></div>
-    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button type="button" className="btn" onClick={() => onOpenDay(date)}>Otwórz dzień</button><button type="button" className="btn ghost" onClick={() => onOpenDay(date, 'pochodzenie')}>Pochodzenie danych</button></div>
+    {onOpenDay && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button type="button" className="btn" onClick={() => onOpenDay(date)}>Otwórz dzień</button><button type="button" className="btn ghost" onClick={() => onOpenDay(date, 'pochodzenie')}>Pochodzenie danych</button></div>}
   </>;
 }
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { earliestOf, earliestSchema, metrics, syncStatusSchema, useJson } from './api.ts';
+import { earliestOf, earliestSchema, metrics, syncStatusSchema, useJson, type MetricKey } from './api.ts';
 import { Tooltip } from './charts.tsx';
 import { DayView, type DayTab } from './day.tsx';
 import { Drawer, type DrawerState } from './details.tsx';
@@ -68,6 +68,7 @@ function Shell() {
   const trendPrefs = prefs, setTrendPrefs = setPrefs;
   const earliestAll = useJson(prefs.range < 0 || trendPrefs.range < 0 ? '/api/earliest-days' : null, earliestSchema);
   const tableEarliest = earliestOf(earliestAll, tableMetricKeys(prefs.cols)), trendEarliest = earliestOf(earliestAll, [...metrics.map((metric) => metric.key), 'hr']);
+  const [originMetric, setOriginMetric] = useState<MetricKey | null>(null);
   const [drawer, setDrawer] = useState<DrawerState | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [syncTick, setSyncTick] = useState(0);
@@ -126,8 +127,8 @@ function Shell() {
   if (route.view === 'trendy') context = <><TableRange prefs={trendPrefs} earliest={trendEarliest} onChange={setTrendPrefs} /><Segmented className="hide-sm" label="Agregacja" items={aggregations} value={trendAgg} onChange={setTrendAgg} /></>;
 
   let content: ReactNode;
-  if (route.view === 'dzien') content = <DayView date={date} tab={dayTab} onTab={(tab) => setDay(date, tab)} onDate={(next) => setDay(next)} sync={syncData} onDirty={(value) => { dirty.current = value; }} onDrawer={setDrawer} />;
-  else if (route.view === 'tabela') content = <TableView {...tableBounds(prefs, tableEarliest)} cols={prefs.cols} onCols={(cols) => setPrefs({ cols: { ...prefs.cols, ...cols } })} onDrawer={setDrawer} onOpenDay={(next) => openDay(next)} />;
+  if (route.view === 'dzien') content = <DayView metric={originMetric} date={date} tab={dayTab} onTab={(tab) => setDay(date, tab)} onDate={(next) => setDay(next)} sync={syncData} onDirty={(value) => { dirty.current = value; }} onDrawer={setDrawer} />;
+  else if (route.view === 'tabela') content = <TableView {...tableBounds(prefs, tableEarliest)} cols={prefs.cols} onCols={(cols) => setPrefs({ cols: { ...prefs.cols, ...cols } })} onOpenDay={(next) => { setOriginMetric(null); openDay(next); }} onOpenMetric={(next, key) => { setOriginMetric(key); openDay(next, 'pochodzenie'); }} />;
   else if (route.view === 'trendy') content = <TrendsView earliest={earliestAll} prefs={trendPrefs} agg={trendAgg} onPrefs={setTrendPrefs} onAgg={setTrendAgg} onDrawer={setDrawer} />;
   else if (route.view === 'treningi') content = <WorkoutsView />;
   else if (route.view === 'jedzenie') content = <FoodView tab={foodTab} onTab={(tab) => go(tabHash('jedzenie', tab, foodTabs))} />;
