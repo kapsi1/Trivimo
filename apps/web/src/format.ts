@@ -10,7 +10,6 @@ export const diffDays = (from: string, to: string) => Math.round((Date.parse(`${
 export const mondayOf = (date: string) => addDays(date, -((dow(date) + 6) % 7));
 export const fmtD = (date: string) => `${Number(date.slice(8))} ${MON[Number(date.slice(5, 7)) - 1]}`;
 export const fmtDL = (date: string) => `${WD[dow(date)]}, ${Number(date.slice(8))} ${MONG[Number(date.slice(5, 7)) - 1]} ${date.slice(0, 4)}`;
-export const fmtRange = (from: string, to: string) => from.slice(0, 4) === to.slice(0, 4) ? `${fmtD(from)} – ${fmtD(to)} ${to.slice(0, 4)}` : `${fmtD(from)} ${from.slice(0, 4)} – ${fmtD(to)} ${to.slice(0, 4)}`;
 export const maxDate = (a: string, b: string) => a > b ? a : b;
 /** First day the views and Google reads accept (same bound as the server); history before 2026 is read on request. */
 export { firstSupportedDay as firstDay } from '../../../packages/domain/warsaw-day.ts';

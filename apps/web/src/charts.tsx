@@ -206,7 +206,8 @@ export function TrendChart({ points, form, color, decimals, label, events = [], 
   const f = frame(points, agg, width, height), { L, T, B, H, W, step, n } = f, bar = form === 'bar', big = H > 200;
   let lo = bar ? 0 : Math.min(...values), hi = Math.max(...values);
   if (!bar) { const pad = (hi - lo) * 0.15 || 1; lo -= pad; hi += pad; }
-  const ticks = niceTicks(lo, hi, big ? 5 : 3).filter((t) => bar || (t >= lo && t <= hi)), top = bar ? ticks.at(-1)! : hi, bottom = bar ? 0 : lo;
+  // bars: the axis ends just above the highest bar instead of the next round tick (less empty space at the top)
+  const top = bar ? hi * 1.05 : hi, ticks = niceTicks(lo, hi, big ? 5 : 3).filter((t) => bar ? t <= top : t >= lo && t <= hi), bottom = bar ? 0 : lo;
   const y = (v: number) => T + (H - B - T) * (1 - (v - bottom) / (top - bottom));
   const bx = (i: number) => L + i * step + Math.min(1, step * 0.15), bw = Math.max(1, step - Math.min(2, step * 0.3));
   const path = points.reduce((acc, point, i) => point.value === null ? acc : `${acc}${acc ? 'L' : 'M'}${f.x(i).toFixed(1)},${y(point.value).toFixed(1)}`, '');

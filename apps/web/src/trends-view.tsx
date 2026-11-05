@@ -3,7 +3,7 @@ import type { z } from 'zod';
 import { forecastSchema, groups, heartRateRangeSchema, metricOf, metrics, rangeSchema, useChunkedJson, useJson, earliestOf, type Earliest, type Loaded, type MetricKey } from './api.ts';
 import { HR_LEGEND, HrTrendChart, TrendChart, Zoomable, tip } from './charts.tsx';
 import { axisEvents, heartTrend, meanValid, metricTrend, valueOf } from './derive.ts';
-import { addDays, fmtRange, maxDate, nf, warsawToday , firstDay } from './format.ts';
+import { addDays, maxDate, nf, warsawToday , firstDay } from './format.ts';
 import { tableBounds, type RangePrefs } from './table.tsx';
 import { ZoomDialog, zoomSize } from './zoom.tsx';
 import { Loading } from './logo.tsx';
@@ -28,24 +28,28 @@ export function TrendsView({ earliest, prefs, agg }: { earliest: Loaded<Earliest
   const hrPoints = (aggregation: 'day' | 'week') => heartTrend(hr.data ?? [], from, to, aggregation);
   const hrDays = hrPoints('day').filter((point) => point.avg !== null);
   const hrMean = hrDays.length ? hrDays.reduce((sum, point) => sum + point.avg!, 0) / hrDays.length : null;
-  const sub = `${fmtRange(from, to)} · ${agg === 'week' ? 'średnie tygodniowe' : 'wartości dzienne'}`;
+  // same order as on the day screen: energy, activity, body; the heart rate closes the set
+  const order = ['energy', 'activity', 'body'], ordered = [...metrics].sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group));
+  const mean = (key: MetricKey) => { const metric = metricOf(key); return meanValid(rows, key, from, to, metric.group === 'body').mean; };
+  const withUnit = (value: number | null, decimals: number, unit: string) => value === null ? null : `${nf(value, decimals)}${unit ? ` ${unit}` : ''}`;
+  const zoomMean = zoom === null ? null : zoom === 'hr' ? withUnit(hrMean, 0, 'bpm') : withUnit(mean(zoom), metricOf(zoom).decimals, metricOf(zoom).unit);
   const chart = (key: MetricKey, size?: { W: number; H: number }) => { const metric = metricOf(key);
     return <TrendChart points={metricTrend(rows, key, agg, key === 'total_energy' && to === today ? forecast.data ?? null : undefined)} form={metric.form} color={groups[metric.group].color} decimals={metric.decimals} label={metric.label} events={events(key)} agg={agg} forecast={key === 'total_energy' ? fc : null} width={size?.W} height={size?.H} />; };
   const { W, H } = zoomSize();
   return <>
     <div className="events"><span className="event"><i className="ev-legacy" />starszy model kalorii</span><span className="event"><i className="ev-hatch" />okres nieporównywalny</span>{fc && <span className="event"><i className="ev-fc" />prognoza do 24:00</span>}{agg === 'week' && <span className="event">Słupek bledszy = mniej dób z wartością w tygodniu</span>}</div>
     <div className="tgrid">
-      {metrics.map((metric) => { const body = metric.group === 'body', a = meanValid(rows, metric.key, from, to, body);
-        return <section key={metric.key} className="panel tcard"><header><h3 className="th"><i style={{ background: groups[metric.group].color }} />{metric.label}{metric.unit && <span className="sub"> {metric.unit}</span>}</h3>
-          <span className="stat" {...(!body && to === today ? tip(['Dzisiejsza doba nie jest brana pod uwagę do średniej, bo jeszcze trwa']) : {})}>śr. <b>{a.mean === null ? '—' : nf(a.mean, metric.decimals)}</b></span></header>
+      {ordered.map((metric) => { const body = metric.group === 'body', a = meanValid(rows, metric.key, from, to, body);
+        return <section key={metric.key} className="panel tcard"><header><h3 className="th"><i style={{ background: groups[metric.group].color }} />{metric.label}</h3>
+          <span className="stat" {...(!body && to === today ? tip(['Dzisiejsza doba nie jest brana pod uwagę do średniej, bo jeszcze trwa']) : {})}>śr. <b>{a.mean === null ? '—' : nf(a.mean, metric.decimals)}</b>{a.mean !== null && metric.unit ? ` ${metric.unit}` : ''}</span></header>
           <Zoomable label={metric.label} onZoom={() => setZoom(metric.key)}>{chart(metric.key)}</Zoomable></section>; })}
-      <section className="panel tcard"><header><h3 className="th"><i style={{ background: 'var(--c-band)' }} />Tętno<span className="sub"> bpm</span></h3>
-        <span className="stat">śr. <b>{hrMean === null ? '—' : nf(hrMean)}</b></span></header>
+      <section className="panel tcard"><header><h3 className="th"><i style={{ background: 'var(--c-band)' }} />Tętno</h3>
+        <span className="stat">śr. <b>{hrMean === null ? '—' : nf(hrMean)}</b>{hrMean !== null ? ' bpm' : ''}</span></header>
         {hr.error ? <p role="alert">Nie udało się odczytać tętna.</p> : <Zoomable label="tętno" onZoom={() => setZoom('hr')}><HrTrendChart points={hrPoints(agg)} events={events('hr')} agg={agg} /></Zoomable>}</section>
       <section className="panel tcard future"><header><h3>Tętno spoczynkowe</h3><span className="tag">M2</span></header><p className="sub" style={{ margin: 0 }}>Osobny typ z Google Health API. Nie jest minimum ani średnią tętna dnia, więc nie wyliczamy go z okien.</p></section>
     </div>
     <section className="panel"><header><h3>Porównania i korelacje</h3><span className="tag">M2+</span></header><p className="sub" style={{ margin: 0 }}>Obciążenie tygodnia, sen a aktywność, spożycie a wydatek. Opis korelacji osobno od wniosków przyczynowych.</p></section>
-    {zoom && <ZoomDialog title={zoom === 'hr' ? 'Tętno' : metricOf(zoom).label} sub={sub} legend={zoom === 'hr' ? HR_LEGEND : null} onClose={() => setZoom(null)}>
+    {zoom && <ZoomDialog title={`${zoom === 'hr' ? 'Tętno' : metricOf(zoom).label}${zoomMean ? `: śr. ${zoomMean}` : ''}`} legend={zoom === 'hr' ? HR_LEGEND : null} onClose={() => setZoom(null)}>
       {zoom === 'hr' ? <HrTrendChart points={hrPoints(agg)} events={events('hr')} agg={agg} width={W} height={H} /> : chart(zoom, { W, H })}</ZoomDialog>}
   </>;
 }

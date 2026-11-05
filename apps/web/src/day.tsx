@@ -103,7 +103,7 @@ function UserNoteEditor({ date, initial, onDirty }: { date: string; initial: z.i
     finally { setSaving(false); }
   }
   return <>
-    <header style={{ marginTop: 16 }}><h3><label htmlFor="usernote">Moja notatka</label></h3><span className="sub">nie zmienia się przy przeliczeniu</span></header>
+    <header style={{ marginTop: 16 }}><h3><label htmlFor="usernote">Moja notatka</label></h3></header>
     <textarea id="usernote" placeholder="Np. trening, choroba, podróż…" value={draft} maxLength={10000} disabled={saving} onChange={(event) => { setDraft(event.target.value); onDirty(event.target.value !== (saved?.content ?? '')); }} />
     <div className="rowend">{error ? <span role="alert" style={{ color: 'var(--bad)' }}>{error}</span> : <span role="status">{dirty ? 'Niezapisane zmiany' : saved ? `Zapisano ${whenOf(saved.createdAt)}` : ''}</span>}<button type="button" className="btn" disabled={!dirty || saving} onClick={() => void save()}>{saving ? 'Zapisywanie…' : 'Zapisz notatkę'}</button></div>
   </>;
