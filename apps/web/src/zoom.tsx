@@ -22,7 +22,9 @@ export function DateControl({ date, onDate }: { date: string; onDate: (date: str
 
 export function ZoomDialog({ title, sub, controls, legend, onClose, children }: { title: string; sub?: string; controls?: ReactNode; legend?: ReactNode; onClose: () => void; children: ReactNode }) {
   const ref = useDialog(onClose); const { W, H } = zoomSize();
-  return <><div className="scrim zscrim" onClick={onClose} /><section ref={ref} className="zoom" role="dialog" aria-modal="true" aria-labelledby="ztitle">
+  // the top bar (date, tabs) stays usable while a chart is zoomed: the dialog starts below it
+  const top = Math.max(0, Math.round(document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 0));
+  return <><div className="scrim zscrim" onClick={onClose} /><section ref={ref} className="zoom" style={{ top: top + 8, maxHeight: `calc(100% - ${top + 16}px)` }} role="dialog" aria-modal="true" aria-labelledby="ztitle">
     <header><div><h2 id="ztitle">{title}</h2>{sub && <p>{sub}</p>}</div><div className="zctl">{controls}<button type="button" className="iconbtn" onClick={onClose} aria-label="Zamknij"><CloseIcon /></button></div></header>
     <div className="zbody"><div className="legend" style={{ minHeight: 20 }}>{legend}</div><div style={{ aspectRatio: `${W} / ${H}` }}>{children}</div></div></section></>;
 }

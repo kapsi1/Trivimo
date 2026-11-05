@@ -5,7 +5,7 @@ import { dayHours, dayTotal, hrOf, lastMeasured, meanValid, valueOf, type DayHou
 import { StatusChip, hourMetricLabel } from './details.tsx';
 import { addDays, fmtD, formatRational, nf, warsawToday, whenOf, firstDay } from './format.ts';
 import { Placeholder } from './placeholders.tsx';
-import { DateControl, Segmented, ZoomDialog, zoomSize } from './zoom.tsx';
+import { Segmented, ZoomDialog, zoomSize } from './zoom.tsx';
 import { z } from 'zod';
 import { Loading } from './logo.tsx';
 
@@ -16,7 +16,7 @@ type Zoom = { type: 'hour'; key: HourKey; name: string } | { type: 'hrday' };
 const windowDays = 150;
 const windowEnd = (date: string, today: string) => { const later = addDays(date, 30); return later < today ? later : today; };
 
-export function DayView({ date, tab, onTab, onDate, sync, onDirty }: { date: string; tab: DayTab; onTab: (tab: DayTab) => void; onDate: (date: string) => void; sync: SyncStatus | undefined; onDirty: (dirty: boolean) => void }) {
+export function DayView({ date, tab, onTab, sync, onDirty }: { date: string; tab: DayTab; onTab: (tab: DayTab) => void; sync: SyncStatus | undefined; onDirty: (dirty: boolean) => void }) {
   const today = warsawToday(), isToday = date === today, read = date >= firstDay;
   const [zoom, setZoom] = useState<Zoom | null>(null);
   const [refresh, setRefresh] = useState(0);
@@ -50,7 +50,7 @@ export function DayView({ date, tab, onTab, onDate, sync, onDirty }: { date: str
     <div className="tabs" role="tablist" aria-label="Widok dnia">{tabs.map(([key, label, stage]) => <button type="button" role="tab" key={key} aria-selected={tab === key} onClick={() => onTab(key)}>{label}{stage && <span className={`tag ${key === 'jedzenie' ? 'food' : ''}`}>{stage}</span>}</button>)}</div></>;
   const legacy = snapshot?.energy?.model === 'legacy';
   const loading = (read && total.data === undefined && !total.error) || !day.data;
-  const zoomed = zoom && <DayZoom zoom={zoom} setZoom={setZoom} date={date} onDate={tab === 'przebieg' ? onDate : undefined} snapshot={snapshot} hours={hours} legacy={legacy} seriesRead={!!total.data} loading={loading} forecast={fc} hrToday={hrToday} />;
+  const zoomed = zoom && <DayZoom zoom={zoom} setZoom={setZoom} snapshot={snapshot} hours={hours} legacy={legacy} seriesRead={!!total.data} loading={loading} forecast={fc} hrToday={hrToday} />;
   if (day.error || range.error) return <>{head}<p role="alert">Nie udało się odczytać wyniku dnia. Sprawdź, czy serwer działa.</p>{zoomed}</>;
   if (!day.data) return <>{head}<Loading />{zoomed}</>;
   if (day.data.state === 'not_ready') return <>{head}<p>Wyniki dzienne nie są jeszcze przygotowane. Oryginalne dane znajdziesz w „Źródła danych”.</p>{zoomed}</>;
@@ -138,17 +138,16 @@ function DayHoursTable({ hours }: { hours: DayHours }) {
   </section>;
 }
 
-function DayZoom({ zoom, setZoom, date, onDate, snapshot, hours, legacy, seriesRead, loading, forecast, hrToday }: { zoom: Zoom; setZoom: (zoom: Zoom | null) => void; date: string; onDate?: (date: string) => void; snapshot: Snapshot | null; hours: DayHours; legacy: boolean; seriesRead: boolean; loading: boolean; forecast: Forecast; hrToday: ReturnType<typeof hrOf> }) {
+function DayZoom({ zoom, setZoom, snapshot, hours, legacy, seriesRead, loading, forecast, hrToday }: { zoom: Zoom; setZoom: (zoom: Zoom | null) => void; snapshot: Snapshot | null; hours: DayHours; legacy: boolean; seriesRead: boolean; loading: boolean; forecast: Forecast; hrToday: ReturnType<typeof hrOf> }) {
   const { W, H } = zoomSize(), close = () => setZoom(null);
-  const dates = onDate ? <DateControl date={date} onDate={onDate} /> : null;
   if (zoom.type === 'hour') {
     const none = !seriesRead || (legacy && (zoom.key === 'total' || zoom.key === 'active')) || hours.hours.every((hour) => hour[zoom.key] === null);
     const total = dayTotal(snapshot, zoom.key, hours.hours);
     const title = `${zoom.name} · ${hourMetricLabel(zoom.key)}${total ? `: ${total.text}${total.computed ? ' (suma godzin)' : ''}` : ''}${zoom.key === 'total' && forecast ? ` · prognoza ${nf(forecast.forecastKcal)} kcal` : ''}`;
     return <ZoomDialog title={title} onClose={close}
-      controls={<>{dates}<Segmented label="Metryka" items={hourOptions} value={zoom.key} onChange={(key) => setZoom({ ...zoom, key })} /></>}
+      controls={<Segmented label="Metryka" items={hourOptions} value={zoom.key} onChange={(key) => setZoom({ ...zoom, key })} />}
       legend={none ? null : <>{zoom.key === 'total' && <EnergyLegend forecast={!!forecast} />}{hours.hr.length > 0 && <span><i style={{ background: 'var(--c-band)' }} />tętno, prawa oś (bpm)</span>}</>}>
       {loading ? <Loading /> : none ? <p className="sub">Brak rozkładu godzinowego dla tej doby.</p> : <HourChart windows={hours.windows} hours={hours.hours} metric={zoom.key} height={H} width={W} hr={hours.hr} />}</ZoomDialog>;
   }
-  return <ZoomDialog title={`Tętno${hrToday ? `: śr. ${nf(hrToday.avg)} · ${nf(hrToday.min)}–${nf(hrToday.max)} bpm` : ''}`} controls={dates} legend={HR_LEGEND} onClose={close}>
+  return <ZoomDialog title={`Tętno${hrToday ? `: śr. ${nf(hrToday.avg)} · ${nf(hrToday.min)}–${nf(hrToday.max)} bpm` : ''}`} legend={HR_LEGEND} onClose={close}>
     {loading ? <Loading /> : <HrDayChart windows={hours.hr} slots={hours.slots} hours={hours.hours} height={H} width={W} />}</ZoomDialog>;}

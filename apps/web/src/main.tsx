@@ -101,7 +101,7 @@ function Shell() {
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && addOpen) { setAddOpen(false); return; }
-      if (route.view !== 'dzien' || document.querySelector('.drawer') || (document.querySelector('.zoom') && !document.querySelector('.zoom .datectl')) || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (route.view !== 'dzien' || event.ctrlKey || event.metaKey || event.altKey) return;
       if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable]')) return;
       if (event.key === 'ArrowLeft') setDay(addDays(date, -1));
       else if (event.key === 'ArrowRight') setDay(addDays(date, 1));
@@ -124,7 +124,7 @@ function Shell() {
   if (route.view === 'trendy') context = <><TableRange prefs={trendPrefs} earliest={trendEarliest} onChange={setTrendPrefs} /><Segmented className="hide-sm" label="Agregacja" items={aggregations} value={trendAgg} onChange={setTrendAgg} /></>;
 
   let content: ReactNode;
-  if (route.view === 'dzien') content = <DayView date={date} tab={dayTab} onTab={(tab) => setDay(date, tab)} onDate={(next) => setDay(next)} sync={syncData} onDirty={(value) => { dirty.current = value; }} />;
+  if (route.view === 'dzien') content = <DayView date={date} tab={dayTab} onTab={(tab) => setDay(date, tab)} sync={syncData} onDirty={(value) => { dirty.current = value; }} />;
   else if (route.view === 'tabela') content = <TableView {...tableBounds(prefs, tableEarliest)} cols={prefs.cols} onCols={(cols) => setPrefs({ cols: { ...prefs.cols, ...cols } })} onOpenDay={(next) => openDay(next)} onOpenMetric={(next) => openDay(next)} />;
   else if (route.view === 'trendy') content = <TrendsView earliest={earliestAll} prefs={trendPrefs} agg={trendAgg} onPrefs={setTrendPrefs} onAgg={setTrendAgg} />;
   else if (route.view === 'treningi') content = <WorkoutsView />;
