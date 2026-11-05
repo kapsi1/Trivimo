@@ -7,6 +7,7 @@ import { addDays, fmtD, fmtDL, formatRational, maxDate, nf, timeOf, warsawToday,
 import { Placeholder } from './placeholders.tsx';
 import { DateControl, Segmented, ZoomDialog, zoomSize } from './zoom.tsx';
 import type { z } from 'zod';
+import { Loading } from './logo.tsx';
 
 export type DayTab = 'podsumowanie' | 'przebieg' | 'pochodzenie' | 'jedzenie' | 'treningi';
 type Zoom = { type: 'day'; key: MetricKey; len: number } | { type: 'hrdays'; len: number } | { type: 'hour'; key: HourKey; name: string } | { type: 'hrday' };
@@ -47,7 +48,7 @@ export function DayView({ date, tab, onTab, onDate, sync, onDirty, onDrawer }: {
   const zoomed = zoom && <DayZoom zoom={zoom} setZoom={setZoom} date={date} onDate={tab === 'przebieg' ? onDate : undefined} rows={rows} snapshot={snapshot} hours={hours} legacy={legacy} seriesRead={!!total.data} loading={loading} forecast={fc} hrSummaries={hrSummaries} hrToday={hrToday}
     onInfo={() => zoom.type === 'day' ? onDrawer({ type: 'cell', date, key: zoom.key }) : zoom.type === 'hour' ? openHourInfo(zoom.key) : openHrInfo()} />;
   if (day.error || range.error) return <>{head}<p role="alert">Nie udało się odczytać wyniku dnia. Sprawdź, czy serwer działa.</p>{zoomed}</>;
-  if (!day.data) return <>{head}<p>Ładowanie…</p>{zoomed}</>;
+  if (!day.data) return <>{head}<Loading />{zoomed}</>;
   if (day.data.state === 'not_ready') return <>{head}<p>Wyniki dzienne nie są jeszcze przygotowane. Oryginalne dane znajdziesz w „Źródła danych”.</p>{zoomed}</>;
 
   let body;
@@ -148,7 +149,7 @@ function DayHourly({ date, hours, snapshot, legacy, seriesRead, loading, forecas
     <section className="panel"><header><h3 className="num">{hourMetricLabel(key)}{total && <>: {total.text} {total.computed && <span className="sub">(suma godzin, brak wartości producenta)</span>}</>}{key === 'total' && forecast && <span className="k-fc">Prognoza: <b>{nf(forecast.forecastKcal)}</b> kcal</span>}</h3>
       <div className="hdr-r"><Segmented label="Metryka" items={hourOptions} value={key} onChange={setKey} /><InfoButton label="Przebieg doby" onClick={() => onInfo(key)} /></div></header>
       {key === 'total' && !none && <div className="legend" style={{ marginBottom: 6 }}><EnergyLegend forecast={!!forecast} /></div>}
-      {loading ? <p>Ładowanie…</p> : none ? <div className="empty" style={{ padding: 22 }}><h3>Brak rozkładu godzinowego</h3><p>{!seriesRead ? 'Brak zapisanego odczytu okien 10-minutowych dla tej doby.' : legacy && (key === 'total' || key === 'active') ? 'W starszym modelu producent zapisywał kalorie w kilku długich przedziałach na dobę. Wartość dobowa jest w tabeli, ale nie da się jej uczciwie rozłożyć na godziny.' : 'Zapisany odczyt okien tej metryki nie ma wartości dla tej doby.'}</p></div>
+      {loading ? <Loading /> : none ? <div className="empty" style={{ padding: 22 }}><h3>Brak rozkładu godzinowego</h3><p>{!seriesRead ? 'Brak zapisanego odczytu okien 10-minutowych dla tej doby.' : legacy && (key === 'total' || key === 'active') ? 'W starszym modelu producent zapisywał kalorie w kilku długich przedziałach na dobę. Wartość dobowa jest w tabeli, ale nie da się jej uczciwie rozłożyć na godziny.' : 'Zapisany odczyt okien tej metryki nie ma wartości dla tej doby.'}</p></div>
         : <Zoomable label="przebieg doby" onZoom={() => onZoom({ type: 'hour', key, name: 'Przebieg doby' })}><HourChart hours={hours.hours} metric={key} height={190} /></Zoomable>}
       <details className="diag" style={{ marginTop: 12 }}><summary>Tabela danych godzinowych</summary><div className="tw"><table className="simple"><thead><tr><th>Godzina</th><th>Spalone kcal</th><th>Aktywne kcal</th><th>Kroki</th><th>Dystans km</th><th>Okna z tętnem</th>{forecast && <th>Prognoza kcal</th>}</tr></thead>
         <tbody>{hours.hours.map((hour) => <tr key={hour.start}><td className="mono">{hour.range}</td><td>{hour.total === null ? '—' : nf(hour.total)}</td><td>{hour.active === null ? '—' : nf(hour.active)}</td><td>{hour.steps === null ? '—' : nf(hour.steps)}</td><td>{hour.distance === null ? '—' : nf(hour.distance, 2)}</td><td>{hour.future || hour.hrWindows === null ? '—' : `${hour.hrWindows} z 6`}</td>{forecast && <td>{hour.fc === null ? '—' : nf(hour.fc)}</td>}</tr>)}</tbody></table></div></details>
@@ -173,7 +174,7 @@ function DayProvenance({ date, snapshot, slots }: { date: string; snapshot: Snap
   const role = (name: string) => name.startsWith('Opaska') ? 'urządzenie; producent wybiera je dla kroków, gdy mierzyło' : name.startsWith('Health Connect') || name.includes('(Health Connect)') ? 'kopia przez Health Connect, uzgadniana przez producenta' : 'źródło telefonu, uzgadniane przez producenta';
   return <div className="cols2">
     <section className="panel"><header><h3>Kto zapisał dane tego dnia</h3><span className="sub">liczba wpisów z najnowszego pełnego odczytu</span></header>
-      {sources.error ? <p role="alert">Nie udało się odczytać źródeł.</p> : !read ? <p className="sub">Doba sprzed zakresu odczytów.</p> : !sources.data ? <p>Ładowanie…</p> : <div className="tw"><table className="simple"><thead><tr><th>Źródło</th><th>Kroki</th><th>Kalorie aktywne</th><th>Rola</th></tr></thead><tbody>
+      {sources.error ? <p role="alert">Nie udało się odczytać źródeł.</p> : !read ? <p className="sub">Doba sprzed zakresu odczytów.</p> : !sources.data ? <Loading /> : <div className="tw"><table className="simple"><thead><tr><th>Źródło</th><th>Kroki</th><th>Kalorie aktywne</th><th>Rola</th></tr></thead><tbody>
         {day?.steps === null && day?.activeEnergy === null ? <tr><td colSpan={4}>Brak odczytu listy źródeł dla tej doby.</td></tr> : names.size === 0 ? <tr><td colSpan={4}>Odczyt nie zawiera wpisów.</td></tr>
           : [...names.values()].sort((a, b) => (b.steps ?? 0) + (b.active ?? 0) - (a.steps ?? 0) - (a.active ?? 0)).map((item) => <tr key={item.name}><td>{item.name}{item.name.startsWith('Opaska') && <> <span className="tag">urządzenie</span></>}</td><td className="num">{day?.steps === null ? 'nie odczytano' : item.steps ?? '—'}</td><td className="num">{day?.activeEnergy === null ? 'nie odczytano' : item.active ?? '—'}</td><td>{role(item.name)}</td></tr>)}
       </tbody></table></div>}
@@ -185,7 +186,7 @@ function DayProvenance({ date, snapshot, slots }: { date: string; snapshot: Snap
       <dt>Aktywność</dt><dd className="mono">{ruleOf(snapshot, 'activity')}</dd><dt>Ciało</dt><dd className="mono">{ruleOf(snapshot, 'body')}</dd>
       <dt>Rewizja wyniku</dt><dd className="mono">{snapshot ? `r-${snapshot.revision}` : 'brak wyniku'}</dd><dt>Doba</dt><dd>{slots} okien 10-min · {date} 00:00 – następny dzień 00:00</dd></dl>
       <header style={{ marginTop: 16 }}><h3>Historia odczytów doby</h3><span className="sub">kalorie total, suma dobowa</span></header>
-      {reads.error ? <p role="alert">Nie udało się odczytać historii.</p> : !read ? <p className="sub">—</p> : !reads.data ? <p>Ładowanie…</p> : reads.data.rows.length === 0 ? <ul className="timeline"><li><span>—</span><span>Brak odczytu. Uzupełnianie historii nadrobi tę dobę.</span></li></ul>
+      {reads.error ? <p role="alert">Nie udało się odczytać historii.</p> : !read ? <p className="sub">—</p> : !reads.data ? <Loading /> : reads.data.rows.length === 0 ? <ul className="timeline"><li><span>—</span><span>Brak odczytu. Uzupełnianie historii nadrobi tę dobę.</span></li></ul>
         : <ul className="timeline">{reads.data.rows.map((row, index) => <li key={index}><span>{whenOf(row.receivedAt)}</span><span>{row.converted ? `${nf(Number(row.converted.value))} ${row.converted.unit}` : row.originalValue}{index === 0 ? ' · najnowszy, użyty' : ' · wcześniejszy, zachowany'}</span></li>)}</ul>}
     </section>
   </div>;
@@ -201,10 +202,10 @@ function DayZoom({ zoom, setZoom, date, onDate, rows, snapshot, hours, legacy, s
     return <ZoomDialog title={title} sub={fmtDL(date)} onClose={close} onInfo={onInfo}
       controls={<>{dates}<Segmented label="Metryka" items={hourOptions} value={zoom.key} onChange={(key) => setZoom({ ...zoom, key })} /></>}
       legend={none ? null : <>{zoom.key === 'total' && <EnergyLegend forecast={!!forecast} />}{hours.hr.length > 0 && <span><i style={{ background: 'var(--c-band)' }} />tętno, prawa oś (bpm)</span>}</>}>
-      {loading ? <p className="sub">Ładowanie…</p> : none ? <p className="sub">Brak rozkładu godzinowego dla tej doby.</p> : <HourChart hours={hours.hours} metric={zoom.key} height={H} width={W} hr={hours.hr} />}</ZoomDialog>;
+      {loading ? <Loading /> : none ? <p className="sub">Brak rozkładu godzinowego dla tej doby.</p> : <HourChart hours={hours.hours} metric={zoom.key} height={H} width={W} hr={hours.hr} />}</ZoomDialog>;
   }
   if (zoom.type === 'hrday') return <ZoomDialog title={`Tętno${hrToday ? `: śr. ${nf(hrToday.avg)} · ${nf(hrToday.min)}–${nf(hrToday.max)} bpm` : ''}`} sub={fmtDL(date)} controls={dates} legend={HR_LEGEND} onClose={close} onInfo={onInfo}>
-    {loading ? <p className="sub">Ładowanie…</p> : <HrDayChart windows={hours.hr} slots={hours.slots} hours={hours.hours} height={H} width={W} />}</ZoomDialog>;
+    {loading ? <Loading /> : <HrDayChart windows={hours.hr} slots={hours.slots} hours={hours.hours} height={H} width={W} />}</ZoomDialog>;
   const from = addDays(date, -(zoom.len - 1)), sub = `${fmtD(from)} – ${fmtD(date)} · wyróżniony wybrany dzień`;
   const controls = <>{dates}<Segmented label="Zakres" items={lengths} value={zoom.len} onChange={(len) => setZoom({ ...zoom, len })} /></>;
   if (zoom.type === 'hrdays') {

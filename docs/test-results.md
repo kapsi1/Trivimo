@@ -1,5 +1,12 @@
 # Raport weryfikacji
 
+## 2026-11-04 — logo, ikony aplikacji i animacja ładowania
+
+- `npx tsc --noEmit`: poprawny. Testów automatycznych nie dodano (zmiana tylko wizualna).
+- Przeglądarka aplikacji (serwer dev na porcie 5173): `favicon.ico`, `favicon.svg`, `apple-touch-icon.png`, trzy ikony PWA i `manifest.webmanifest` zwracają 200 z poprawnym typem. Znak w nagłówku panelu ma kolory logo; w zwiniętym panelu stoi nad przyciskiem rozwijania. Animacja ładowania w trzech rozmiarach (strona startowa, blok, w linii tekstu): puls rysuje się od lewej i znika w prawo, jabłko uderza raz na cykl. Konsola bez błędów.
+- 2026-11-05, wskaźnik ładowania powiększony do 100 × 100 px (ekran startowy i bloki), z dopasowaniem do szerokości miejsca. Pomiar w przeglądarce: kontener 400 px → 100 px, kontener 60 px → 60 px, wariant w linii tekstu bez zmian (16 px). Podgląd w panelu widoku Dzień. Nie sprawdzono: każdego miejsca ładowania osobno (dane wczytują się za szybko).
+- Nie sprawdzono: wariantu `prefers-reduced-motion: reduce`, ikony na ekranie głównym telefonu ani przycięcia ikony maskable.
+
 ## 2026-11-04 — postęp uzupełniania z ETA, import Takeout z pliku ZIP
 
 - `npm test`: 127 testów zaliczonych (nowe: lista i rozpakowanie tylko folderu Google Health, odmowa nadpisania, odrzucenie `..`, ścieżki z dyskiem, dowiązania, złej CRC i „bomby” kompresji; wysłanie → rozpakowanie → podgląd → zapis z usunięciem archiwum i rozpakowanych plików). `npm run build`: poprawny.

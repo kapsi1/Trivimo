@@ -5,6 +5,7 @@ import { StatusChip, type DrawerState } from './details.tsx';
 import { addDays, dow, fmtD, formatRational, isoWeek, maxDate, mondayOf, nf, warsawToday, WDS , firstDay } from './format.ts';
 import { compareDailyRows } from './sort-days.ts';
 import { Segmented } from './zoom.tsx';
+import { Loading } from './logo.tsx';
 
 type Columns = Record<Group | 'food' | 'ctx', boolean>;
 const storeKey = 'trivimo-table';
@@ -88,7 +89,7 @@ export function TableView({ from, to, cols, onCols, onDrawer, onOpenDay }: { fro
   const bandBy = useMemo(() => new Map((band.data ?? []).map((item) => [item.date, item])), [band.data]);
   const sourcesBy = useMemo(() => new Map((sources.data ?? []).map((item) => [item.date, item])), [sources.data]);
   if (result.error) return <p role="alert">Nie udało się odczytać tabeli. Sprawdź, czy serwer działa.</p>;
-  if (!result.data) return <p>Ładowanie…</p>;
+  if (!result.data) return <Loading />;
   if (result.data.state === 'not_ready') return <p>Wyniki dzienne nie są jeszcze przygotowane.</p>;
   const all = result.data.days;
   const rows = all.filter((row) => !onlyNotes || rowNotes(row, today).length > 0).sort((a, b) => compareDailyRows(a, b, sort.key, sort.desc));

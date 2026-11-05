@@ -5,6 +5,7 @@ import { coverageSchema, post, useJson, type SyncStatus } from './api.ts';
 import { addDays, diffDays, firstDay, MON, mondayOf, warsawToday, whenOf } from './format.ts';
 import { Segmented } from './zoom.tsx';
 import { CsvImport } from './csv-import.tsx';
+import { Loading } from './logo.tsx';
 
 export type SourcesTab = 'polaczenia' | 'pokrycie' | 'importy' | 'diagnostyka';
 const googleStatusSchema = z.discriminatedUnion('configured', [
@@ -90,7 +91,7 @@ function CoverageYears() {
 function Coverage({ year: selected }: { year: number }) {
   const coverage = useJson(`/api/google/coverage?year=${selected}`, coverageSchema);
   if (coverage.error) return <section className="panel"><p role="alert">Nie udało się odczytać pokrycia historii (magazyn niedostępny lub Google nie jest skonfigurowany).</p></section>;
-  if (!coverage.data) return <section className="panel"><p>Ładowanie…</p></section>;
+  if (!coverage.data) return <section className="panel"><Loading /></section>;
   const { days, kinds } = coverage.data, today = warsawToday(), year = coverage.data.from.slice(0, 4);
   const byDate = new Map(days.map((day) => [day.date, day.covered]));
   const start = mondayOf(`${year}-01-01`), end = `${year}-12-31`, weeks = Math.ceil((diffDays(start, end) + 1) / 7), cs = 12, gp = 2, W = 24 + weeks * (cs + gp);
@@ -112,7 +113,7 @@ function Coverage({ year: selected }: { year: number }) {
 
 function SyncKinds({ sync }: { sync: SyncStatus | undefined }) {
   return <section className="panel"><header><h3>Odczyty według rodzaju</h3><span className="sub">{syncText(sync)}</span></header>
-    {!sync ? <p>Ładowanie…</p> : <div className="tw"><table className="simple"><thead><tr><th>Rodzaj</th><th>Ostatni odczyt</th><th>Pokryte do</th></tr></thead><tbody>
+    {!sync ? <Loading /> : <div className="tw"><table className="simple"><thead><tr><th>Rodzaj</th><th>Ostatni odczyt</th><th>Pokryte do</th></tr></thead><tbody>
       {sync.kinds.map((item) => <tr key={item.kind}><td>{syncLabels[item.kind] ?? item.kind}</td><td>{item.lastReadAt ? whenOf(item.lastReadAt) : 'brak zapisanego odczytu'}</td><td className="mono">{item.coveredThrough ?? '—'}</td></tr>)}</tbody></table></div>}</section>;
 }
 const googleJobSchema = z.object({ id: z.uuid(), kind: z.enum(['weight', 'body-fat', 'steps', 'distance', 'total-calories', 'active-energy-burned', 'heart-rate-10m', 'active-energy-10m', 'total-calories-10m', 'steps-10m', 'distance-10m', 'steps-sources', 'active-energy-sources']), start: z.string().max(40), end: z.string().max(40), state: z.enum(['running', 'complete']), createdAt: z.iso.datetime(), pages: z.number().int().nonnegative() });
@@ -189,7 +190,7 @@ function GoogleBackfill() {
     : /^google_(identity_)?http_5\d\d$/.test(code) || code === 'google_read_failed' ? 'błąd serwera' : code === 'migration_required' || code === 'store_unavailable' ? 'magazyn niedostępny' : 'błąd';
   const line = error === 'load' ? <>Nie udało się odczytać stanu uzupełniania. Spróbuj ponownie</>
     : error ? <>Nie udało się {error === 'stop' ? 'zatrzymać' : 'uruchomić'} uzupełniania. Spróbuj ponownie</>
-      : !status ? <>Ładowanie…</>
+      : !status ? <Loading size="inline" />
         : status.state === 'error' ? <>Przerwano - {reason(status.code)}{status.code ? ` (kod: ${status.code})` : ''}. Spróbuj ponownie</>
           : active && status.retrying ? <>Pobieranie od {status.from} · {reason(status.retrying.code)} (kod: {status.retrying.code}), ponowienie {whenOf(status.retrying.at)} (próba {status.retrying.attempt} z {status.retrying.of})</>
             : active ? <>Pobieranie od {status.from}{percent !== null ? <> · <b>{percent} %</b></> : null}{eta !== null ? <span className="faint"> · zostało {durationText(eta)}</span> : null}{status.retryAt ? <span className="faint"> · limit Google do {whenOf(status.retryAt)}</span> : null}</>
@@ -393,7 +394,7 @@ function SourceRecords() {
     </select></label>
     <label className="date-filter">Data w eksporcie <input type="date" value={sourceDate} onChange={(event) => { setSourceDate(event.target.value); setCursor(0); setHistory([]); setPage(null); }} /></label>
     <p>Filtr porównuje datę zapisaną w czasie źródłowym, bez przeliczania strefy dnia aplikacji.</p>
-    {error ? <div role="alert"><p>Nie udało się otworzyć bazy Takeout. Jeśli dane nie były jeszcze importowane, wybierz „Import Takeout”. W przeciwnym razie uruchom aplikację poza środowiskiem izolowanym i spróbuj ponownie.</p><button type="button" onClick={() => setAttempt(attempt + 1)}>Spróbuj ponownie</button></div> : loading || !page ? <p>Ładowanie…</p> : page.rows.length === 0 ? <p>{sourceDate ? 'Brak wierszy dla wybranej daty.' : 'Brak wierszy tego typu w imporcie.'}</p> : <>
+    {error ? <div role="alert"><p>Nie udało się otworzyć bazy Takeout. Jeśli dane nie były jeszcze importowane, wybierz „Import Takeout”. W przeciwnym razie uruchom aplikację poza środowiskiem izolowanym i spróbuj ponownie.</p><button type="button" onClick={() => setAttempt(attempt + 1)}>Spróbuj ponownie</button></div> : loading || !page ? <Loading /> : page.rows.length === 0 ? <p>{sourceDate ? 'Brak wierszy dla wybranej daty.' : 'Brak wierszy tego typu w imporcie.'}</p> : <>
       <div className="table-wrap"><table><thead><tr><th>Czas źródła</th><th>Oryginał ({unit})</th><th>Po przeliczeniu</th><th>Źródło według eksportu</th></tr></thead>
         <tbody>{page.rows.map((row, index) => <tr key={`${cursor}-${index}`}><td>{row.timestamp || '—'}</td><td>{row.value || '—'}</td><td>{row.converted.status === 'parsed' ? `${row.converted.value.replace('.', ',')} ${row.converted.unit}` : row.converted.status === 'unsupported' ? 'Niepotwierdzona jednostka' : 'Nie można przeliczyć wartości'}</td><td>{row.source || '—'}</td></tr>)}</tbody></table></div>
       {history.length > 0 && <button type="button" onClick={() => { setCursor(history.at(-1)!); setHistory(history.slice(0, -1)); }}>Poprzednie</button>}

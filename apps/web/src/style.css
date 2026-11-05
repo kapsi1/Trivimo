@@ -1,6 +1,8 @@
 /* Projekt UI z docs/design/ui.md (prototyp docs/design/ui-prototype.html): powłoka z lewą nawigacją, ciemny motyw. */
 :root {
   color-scheme: dark;
+  --logo-apple: #d63c4f; /* znak Trivimo: wiśnia */
+  --logo-leaf: #4fb069;  /* znak Trivimo: bazylia */
   --bg: #0e1317;        /* tło aplikacji */
   --panel: #141b21;     /* nawigacja, karty */
   --raised: #1a232a;    /* elementy aktywne, wiersze tygodni */
@@ -319,6 +321,33 @@ svg .hit:hover { fill: color-mix(in srgb, var(--fg) 8%, transparent); }
 .app.collapsed .sync .dot { margin-top: 0; }
 
 .boot { padding: 40px 28px; color: var(--muted); }
+
+/* ---------- logo i ładowanie (docs/design/logo/) ---------- */
+.logo-apple { fill: var(--logo-apple); }
+.logo-leaf { fill: var(--logo-leaf); }
+.logo-stem { stroke: var(--logo-leaf); }
+.brand-mark { flex: none; align-self: center; width: 26px; height: 26px; margin: -3px -2px 0 -4px; }
+.app.collapsed .brand { flex-direction: column; align-items: center; gap: 10px; }
+.app.collapsed .brand-mark { margin: 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.loading { display: flex; justify-content: center; align-items: center; padding: 28px 0; }
+.loading svg { width: 100px; max-width: 100%; height: auto; aspect-ratio: 1; }
+.loading.inline { display: inline-flex; padding: 0; vertical-align: -3px; }
+.loading.inline svg { width: 16px; height: 16px; }
+.loading.page { min-height: 100vh; padding: 0; }
+/* puls rysuje się od lewej (jak zapis EKG) i znika w prawo; jabłko uderza raz, gdy kreślony jest szczyt */
+@media (prefers-reduced-motion: no-preference) {
+  .loading { animation: loading-in .2s ease-out .15s both; }
+  .loading .logo-trace { stroke-dasharray: 100 100; animation: logo-trace 1.8s cubic-bezier(.45, 0, .3, 1) infinite; }
+  .loading .logo-body { transform-box: fill-box; transform-origin: 50% 80%; animation: logo-beat 1.8s ease-in-out infinite; }
+  @keyframes loading-in { from { opacity: 0; } }
+  @keyframes logo-trace { 0% { stroke-dashoffset: 100; } 55%, 70% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -100; } }
+  @keyframes logo-beat { 0%, 16%, 30%, 40%, 100% { transform: scale(1); } 23% { transform: scale(1.07); } 35% { transform: scale(1.03); } }
+}
+@media (prefers-reduced-motion: reduce) {
+  .loading svg { animation: logo-breathe 2.4s ease-in-out infinite; }
+  @keyframes logo-breathe { 50% { opacity: .5; } }
+}
 .faint { color: var(--faint); }
 .muted { color: var(--muted); }
 .sep { color: var(--line-strong); }

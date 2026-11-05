@@ -5,7 +5,8 @@ import { Tooltip } from './charts.tsx';
 import { DayView, type DayTab } from './day.tsx';
 import { Drawer, type DrawerState } from './details.tsx';
 import { addDays, warsawToday, whenOf , firstDay } from './format.ts';
-import { FoodView, WorkoutsView } from './placeholders.tsx';
+import { Loading, LogoMark } from './logo.tsx';
+import { FoodView, WorkoutsView, type FoodTab } from './placeholders.tsx';
 import { SettingsView } from './settings.tsx';
 import { SourcesView, type SourcesTab } from './sources.tsx';
 import { TableRange, TableView, tableBounds, useTablePrefs } from './table.tsx';
@@ -17,13 +18,23 @@ import './style.css';
 const views = ['dzien', 'tabela', 'trendy', 'treningi', 'jedzenie', 'zrodla', 'ustawienia'] as const;
 type View = (typeof views)[number];
 const titles: Record<View, string> = { dzien: 'Dzień', tabela: 'Tabela dni', trendy: 'Trendy', treningi: 'Treningi', jedzenie: 'Jedzenie', zrodla: 'Źródła danych', ustawienia: 'Ustawienia' };
-interface Route { view: View; param: string }
-/** Views are addressed by hash (#dzien, #dzien/2026-11-03, #tabela, …) so a specific view can be reopened. */
+const dayTabs = ['przebieg', 'podsumowanie', 'pochodzenie', 'jedzenie', 'treningi'] as const satisfies readonly DayTab[];
+const srcTabs = ['polaczenia', 'pokrycie', 'importy', 'diagnostyka'] as const satisfies readonly SourcesTab[];
+const foodTabs = ['dziennik', 'produkty', 'planer', 'importy'] as const satisfies readonly FoodTab[];
+interface Route { view: View; day: string; tab: string }
+/**
+ * Views and their sub-tabs are addressed by hash so a specific place can be reopened:
+ * #dzien[/YYYY-MM-DD][/tab], #zrodla[/tab], #jedzenie[/tab], #tabela, … The default tab is left out of the address.
+ */
 function parseHash(hash: string): Route {
-  const [view = '', param = ''] = hash.replace(/^#/, '').split('/');
-  return { view: (views as readonly string[]).includes(view) ? view as View : 'dzien', param };
+  const [view = '', ...rest] = hash.replace(/^#/, '').split('/');
+  const day = rest[0] && /^\d{4}-\d{2}-\d{2}$/.test(rest[0]) ? rest.shift()! : '';
+  return { view: (views as readonly string[]).includes(view) ? view as View : 'dzien', day, tab: rest[0] ?? '' };
 }
+const pick = <T extends string>(list: readonly T[], value: string): T => list.find((item) => item === value) ?? list[0]!;
 const validDay = (param: string, today: string) => /^\d{4}-\d{2}-\d{2}$/.test(param) && param >= firstDay && param <= today && !Number.isNaN(Date.parse(param)) ? param : today;
+const tabHash = (view: View, tab: string, list: readonly string[]) => tab === list[0] ? view : `${view}/${tab}`;
+const dayHash = (day: string, tab: DayTab) => ['dzien', day === warsawToday() ? '' : day, tab === dayTabs[0] ? '' : tab].filter(Boolean).join('/');
 
 const icon = (path: ReactNode) => <svg viewBox="0 0 24 24" aria-hidden="true">{path}</svg>;
 const I = {
@@ -43,15 +54,13 @@ const I = {
 function App() {
   const [session, setSession] = useState<'loading' | 'ok' | 'error'>('loading');
   useEffect(() => { fetch('/api/session').then((response) => setSession(response.ok ? 'ok' : 'error'), () => setSession('error')); }, []);
-  if (session === 'loading') return <p className="boot">Ładowanie…</p>;
+  if (session === 'loading') return <Loading size="page" />;
   if (session === 'error') return <p className="boot" role="alert">Nie udało się połączyć z lokalnym serwerem Trivimo. Sprawdź, czy serwer działa (npm run dev).</p>;
   return <Shell />;
 }
 
 function Shell() {
   const [route, setRoute] = useState(() => parseHash(location.hash));
-  const [dayTab, setDayTab] = useState<DayTab>('przebieg');
-  const [srcTab, setSrcTab] = useState<SourcesTab>('polaczenia');
   const [trendLength, setTrendLength] = useState<TrendLength>(90);
   const [trendAgg, setTrendAgg] = useState<'day' | 'week'>('day');
   const [prefs, setPrefs] = useTablePrefs();
@@ -63,7 +72,8 @@ function Shell() {
   const dirty = useRef(false);
   const current = useRef(location.hash);
   const today = warsawToday();
-  const date = validDay(route.param, today);
+  const date = validDay(route.day, today);
+  const dayTab = pick(dayTabs, route.tab), srcTab = pick(srcTabs, route.tab), foodTab = pick(foodTabs, route.tab);
   const sync = useJson('/api/google/sync-status', syncStatusSchema, syncTick);
   // poll often while a refresh runs, so the day in progress updates as soon as its new snapshot is published
   const running = sync.data?.running ?? false;
@@ -73,7 +83,7 @@ function Shell() {
   useEffect(() => {
     const change = () => {
       const next = parseHash(location.hash), previous = parseHash(current.current);
-      const leaving = previous.view === 'dzien' && (next.view !== 'dzien' || validDay(next.param, warsawToday()) !== validDay(previous.param, warsawToday()));
+      const leaving = previous.view === 'dzien' && (next.view !== 'dzien' || validDay(next.day, warsawToday()) !== validDay(previous.day, warsawToday()));
       if (leaving && dirty.current && !window.confirm('Notatka ma niezapisane zmiany. Opuścić ten dzień?')) { history.replaceState(null, '', current.current || '#dzien'); return; }
       if (leaving) dirty.current = false;
       current.current = location.hash; setRoute(next); setDrawer(null); setAddOpen(false);
@@ -83,8 +93,8 @@ function Shell() {
     return () => { window.removeEventListener('hashchange', change); window.removeEventListener('beforeunload', unload); };
   }, []);
   const go = useCallback((hash: string) => { if (location.hash === `#${hash}`) return; location.hash = hash; }, []);
-  const setDay = (next: string) => { if (next < firstDay || next > warsawToday()) return; go(next === warsawToday() ? 'dzien' : `dzien/${next}`); };
-  const openDay = (next: string, tab: DayTab = 'przebieg') => { setDayTab(tab); setDrawer(null); setDay(next); if (route.view === 'dzien' && next === date) setRoute({ ...route }); };
+  const setDay = (next: string, tab: DayTab = route.view === 'dzien' ? dayTab : dayTabs[0]) => { if (next < firstDay || next > warsawToday()) return; go(dayHash(next, tab)); };
+  const openDay = (next: string, tab: DayTab = dayTabs[0]) => { setDrawer(null); setDay(next, tab); };
 
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
@@ -103,7 +113,7 @@ function Shell() {
   const syncData = sync.data;
   const lastOk = syncData?.last?.result === 'ok' ? syncData.last.at : syncData?.kinds.map((kind) => kind.lastReadAt).filter((at): at is string => !!at).sort().at(-1);
   const syncBad = sync.error || (syncData?.last && syncData.last.result !== 'ok');
-  const nav = (view: View, ic: ReactNode, label: string, extra?: ReactNode, hash: string = view, soon = false) => <a className={`nav ${soon ? 'is-soon' : ''}`} href={`#${hash}`} aria-current={route.view === view && (hash === view || route.param === hash.split('/')[1]) ? 'page' : undefined}>{ic}<span>{label}</span>{extra}</a>;
+  const nav = (view: View, ic: ReactNode, label: string, extra?: ReactNode, hash: string = view, soon = false) => <a className={`nav ${soon ? 'is-soon' : ''}`} href={`#${hash}`} aria-current={route.view === view && (hash === view || (view === 'jedzenie' ? foodTab : route.tab) === hash.split('/')[1]) ? 'page' : undefined}>{ic}<span>{label}</span>{extra}</a>;
   const bottom = (view: View, ic: ReactNode, label: string) => <button type="button" aria-current={route.view === view ? 'page' : undefined} onClick={() => go(view)}>{ic}<span>{label}</span></button>;
 
   let context: ReactNode = null;
@@ -112,17 +122,17 @@ function Shell() {
   if (route.view === 'trendy') context = <><Segmented label="Okres" items={trendRanges} value={trendLength} onChange={setTrendLength} /><Segmented className="hide-sm" label="Agregacja" items={aggregations} value={trendAgg} onChange={setTrendAgg} /></>;
 
   let content: ReactNode;
-  if (route.view === 'dzien') content = <DayView date={date} tab={dayTab} onTab={setDayTab} onDate={setDay} sync={syncData} onDirty={(value) => { dirty.current = value; }} onDrawer={setDrawer} />;
+  if (route.view === 'dzien') content = <DayView date={date} tab={dayTab} onTab={(tab) => setDay(date, tab)} onDate={(next) => setDay(next)} sync={syncData} onDirty={(value) => { dirty.current = value; }} onDrawer={setDrawer} />;
   else if (route.view === 'tabela') content = <TableView {...tableBounds(prefs)} cols={prefs.cols} onCols={(cols) => setPrefs({ cols: { ...prefs.cols, ...cols } })} onDrawer={setDrawer} onOpenDay={(next) => openDay(next)} />;
   else if (route.view === 'trendy') content = <TrendsView length={trendLength} agg={trendAgg} onLength={setTrendLength} onAgg={setTrendAgg} onDrawer={setDrawer} />;
   else if (route.view === 'treningi') content = <WorkoutsView />;
-  else if (route.view === 'jedzenie') content = <FoodView key={route.param} initial={(['dziennik', 'produkty', 'planer', 'importy'] as const).find((tab) => tab === route.param)} />;
-  else if (route.view === 'zrodla') content = <SourcesView tab={srcTab} onTab={setSrcTab} sync={syncData} onSyncChanged={() => setSyncTick((value) => value + 1)} />;
+  else if (route.view === 'jedzenie') content = <FoodView tab={foodTab} onTab={(tab) => go(tabHash('jedzenie', tab, foodTabs))} />;
+  else if (route.view === 'zrodla') content = <SourcesView tab={srcTab} onTab={(tab) => go(tabHash('zrodla', tab, srcTabs))} sync={syncData} onSyncChanged={() => setSyncTick((value) => value + 1)} />;
   else content = <SettingsView />;
 
   return <div className={`app ${collapsed ? 'collapsed' : ''}`}>
     <aside className="side" aria-label="Nawigacja główna">
-      <div className="brand"><b>Trivimo</b><span>lokalnie</span><button type="button" className="sidetoggle" aria-expanded={!collapsed} aria-label={collapsed ? 'Rozwiń panel nawigacji' : 'Zwiń panel do ikon'} title={collapsed ? 'Rozwiń panel' : 'Zwiń panel'} onClick={toggleSide}>{collapsed ? I.right : I.left}</button></div>
+      <div className="brand"><LogoMark className="brand-mark" /><b>Trivimo</b><span>lokalnie</span><button type="button" className="sidetoggle" aria-expanded={!collapsed} aria-label={collapsed ? 'Rozwiń panel nawigacji' : 'Zwiń panel do ikon'} title={collapsed ? 'Rozwiń panel' : 'Zwiń panel'} onClick={toggleSide}>{collapsed ? I.right : I.left}</button></div>
       <nav className="navgroup" aria-label="Dane"><h4>Dane</h4>{nav('dzien', I.day, 'Dzień')}{nav('tabela', I.table, 'Tabela dni')}{nav('trendy', I.trend, 'Trendy')}{nav('treningi', I.run, 'Treningi', <span className="tag soon">M2</span>, 'treningi', true)}</nav>
       <nav className="navgroup" aria-label="Jedzenie"><h4>Jedzenie</h4>{nav('jedzenie', I.book, 'Dziennik', <span className="tag soon food">M3</span>, 'jedzenie/dziennik', true)}{nav('jedzenie', I.food, 'Produkty i przepisy', <span className="tag soon food">M3</span>, 'jedzenie/produkty', true)}{nav('jedzenie', I.plan, 'Planer', <span className="tag soon food">M4</span>, 'jedzenie/planer', true)}</nav>
       <nav className="navgroup" aria-label="System"><h4>System</h4>{nav('zrodla', I.src, 'Źródła danych')}{nav('ustawienia', I.gear, 'Ustawienia')}</nav>
@@ -131,7 +141,7 @@ function Shell() {
     <div className="main">
       <header className="topbar"><h1>{titles[route.view]}</h1>{context}
         <div className="menuwrap"><button type="button" className="btn primary" aria-haspopup="menu" aria-expanded={addOpen} onClick={() => setAddOpen(!addOpen)}>{I.plus}<span className="hide-sm">Dodaj</span></button>
-          {addOpen && <div className="menu" role="menu"><button type="button" role="menuitem" onClick={() => { setAddOpen(false); go(route.view === 'dzien' ? location.hash.slice(1) || 'dzien' : 'dzien'); setDayTab('podsumowanie'); setTimeout(() => document.getElementById('usernote')?.focus(), 150); }}>Notatka do dnia</button>
+          {addOpen && <div className="menu" role="menu"><button type="button" role="menuitem" onClick={() => { setAddOpen(false); setDay(route.view === 'dzien' ? date : warsawToday(), 'podsumowanie'); setTimeout(() => document.getElementById('usernote')?.focus(), 150); }}>Notatka do dnia</button>
             <button type="button" role="menuitem" disabled>Posiłek <span className="tag food">M3</span></button><button type="button" role="menuitem" disabled>Pomiar wagi <span className="tag">M7</span></button></div>}</div></header>
       <main className="content">{content}</main>
     </div>

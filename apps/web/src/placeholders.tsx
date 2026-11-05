@@ -1,5 +1,3 @@
-import { useState } from 'react';
-
 /** Scope of a future stage with its label; not a design, so it makes no promise beyond the plan. */
 export function Placeholder({ title, text, list, stage }: { title: string; text: string; list?: string[]; stage: string }) {
   return <div className="empty"><span className={`tag ${stage.startsWith('M3') || stage.startsWith('M4') ? 'food' : ''}`}>Etap {stage} · jeszcze nie zaprojektowane</span><h3>{title}</h3><p>{text}</p>{list && <ul>{list.map((item) => <li key={item}>{item}</li>)}</ul>}</div>;
@@ -9,9 +7,8 @@ export function WorkoutsView() {
   return <Placeholder title="Treningi" stage="M2" text="Lista sesji z filtrem sportu, źródła i zakresu oraz szczegóły treningu: przebieg tętna, strefy, tempo, przerwy i mapa trasy." list={['Lista sesji (paginowana)', 'Szczegóły sesji z osią czasu i mapą', 'Intensywność: poziomy aktywności, strefy HR i AZM osobno']} />;
 }
 
-type FoodTab = 'dziennik' | 'produkty' | 'planer' | 'importy';
-export function FoodView({ initial }: { initial?: FoodTab }) {
-  const [tab, setTab] = useState<FoodTab>(initial ?? 'dziennik');
+export type FoodTab = 'dziennik' | 'produkty' | 'planer' | 'importy';
+export function FoodView({ tab, onTab: setTab }: { tab: FoodTab; onTab: (tab: FoodTab) => void }) {
   const tabs: [FoodTab, string, string][] = [['dziennik', 'Dziennik', 'M3'], ['produkty', 'Produkty i przepisy', 'M3'], ['planer', 'Planer', 'M4'], ['importy', 'Importy', 'M3–M4']];
   const body = {
     dziennik: <Placeholder title="Dziennik posiłków" stage="M3" text="Posiłki dnia, szybkie dodawanie i korekta, suma dnia z oznaczeniem wpisów niepełnych. Ten sam formularz posłuży na telefonie." />,

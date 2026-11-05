@@ -22,7 +22,7 @@ Stała lewa nawigacja zastępuje prowizoryczne zakładki (w tym „Przykład”)
 
 Stopka nawigacji pokazuje stan synchronizacji (ostatnie odświeżenie, harmonogram) i ostatnią kopię zapasową. Kliknięcie prowadzi do „Źródeł danych”. Globalny błąd sieci jest stanem synchronizacji, nie uwagą przy każdym dniu.
 
-Pasek górny ma tytuł widoku, kontekst daty lub okresu danego widoku oraz przycisk „Dodaj” (notatka do dnia; „Posiłek” M3 i „Pomiar wagi” M7 jako nieaktywne pozycje). Adresy widoków przez hash (`#dzien`, `#tabela`, …), żeby dało się wrócić do konkretnego widoku.
+Pasek górny ma tytuł widoku, kontekst daty lub okresu danego widoku oraz przycisk „Dodaj” (notatka do dnia; „Posiłek” M3 i „Pomiar wagi” M7 jako nieaktywne pozycje). Adresy widoków i ich zakładek przez hash (`#dzien`, `#dzien/podsumowanie`, `#dzien/2026-11-03/pochodzenie`, `#zrodla/importy`, `#jedzenie/planer`, `#tabela`, …), żeby dało się wrócić do konkretnego miejsca; domyślna zakładka nie jest zapisywana w adresie, a zmiana dnia zachowuje bieżącą zakładkę.
 
 ## Widoki
 

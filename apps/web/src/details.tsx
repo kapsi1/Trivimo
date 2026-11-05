@@ -3,6 +3,7 @@ import { bodyReviewSchema } from '../../../packages/contracts/source-records.ts'
 import { bandShareSchema, dailyReviewSchema, dayResponseSchema, energyModels, energySource, forecastSchema, metricOf, quality, reasonsOf, ruleOf, useJson, type Forecast, type MetricKey, type MetricValue } from './api.ts';
 import type { AxisEvent, HourKey } from './charts.tsx';
 import { fmtD, fmtDL, fmtRange, formatRational, nf, plural, warsawToday, whenOf , firstDay } from './format.ts';
+import { Loading } from './logo.tsx';
 
 export type DrawerState =
   | { type: 'cell'; date: string; key: MetricKey }
@@ -55,7 +56,7 @@ function CellBody({ date, metricKey, onOpenDay }: { date: string; metricKey: Met
   const googleBody = useJson(bodyKind && date >= firstDay ? `/api/google/body-candidates?kind=${bodyKind}&date=${date}` : null, bodyReviewSchema);
   const takeoutBody = useJson(bodyKind ? `/api/body-candidates?kind=${bodyKind}&date=${date}` : null, bodyReviewSchema);
   if (day.error) return <p role="alert">Nie udało się odczytać wyniku dnia.</p>;
-  if (!day.data) return <p>Ładowanie…</p>;
+  if (!day.data) return <Loading />;
   if (day.data.state === 'not_ready') return <p>Wyniki dzienne nie są jeszcze przygotowane.</p>;
   const snapshot = day.data.snapshot, value = snapshot?.metrics[metricKey], reasons = reasonsOf(snapshot, metricKey);
   const chip = value ? ({ valid: 'prov', provisional: 'prov', incomparable: 'inc', conflict: 'conf', missing: 'miss' } as Record<string, string>)[value.status] ?? 'bad' : 'miss';
@@ -87,9 +88,9 @@ function CellBody({ date, metricKey, onOpenDay }: { date: string; metricKey: Met
       ? <p>Z importu CSV ({snapshot.csv.imports.length} {plural(snapshot.csv.imports.length, 'plik', 'pliki', 'plików')}), bo dane Google tej doby nie mają wartości tej metryki. {group === 'body' ? 'Średnia unikalnych pomiarów doby z pliku.' : 'Wartość dobowa z pliku według wybranego mapowania.'} Reguła <span className="mono">{snapshot.csv.rule}</span>; import można wykluczyć w „Źródła danych” → „Importy plików”.</p>
       : <p>{group === 'body' ? 'Średnia unikalnych pomiarów doby warszawskiej z Google Health API.' : 'Suma dobowa producenta z Google Health API, wszystkie źródła.'} Reguła <span className="mono">{ruleOf(snapshot, group)}</span>.</p>}</div>
     {specific}
-    <div className="dsec"><h4>Odczyty</h4>{reads.error || googleBody.error ? <p>Nie udało się odczytać historii odczytów.</p> : readsLoading ? <p>Ładowanie…</p> : readList.length ? <ul className="timeline">{readList}</ul> : <p>Brak zapisanego odczytu tej doby.</p>}
+    <div className="dsec"><h4>Odczyty</h4>{reads.error || googleBody.error ? <p>Nie udało się odczytać historii odczytów.</p> : readsLoading ? <Loading /> : readList.length ? <ul className="timeline">{readList}</ul> : <p>Brak zapisanego odczytu tej doby.</p>}
       {reads.data && reads.data.rows.length > 1 && <p style={{ marginTop: 6 }}>Każde pobranie zachowuje swój oryginał; odczyty nie są sumowane, najnowszy jest pierwszy.</p>}</div>
-    <div className="dsec"><h4>Porównanie z Takeout</h4>{bodyKind ? (takeoutBody.error ? <p>Brak zaimportowanego Takeout albo nie udało się go odczytać.</p> : !takeoutBody.data ? <p>Ładowanie…</p> : takeoutBody.data.rows.length === 0 ? <p>Takeout nie ma pomiarów tej doby (kompletność eksportu jest nieznana).</p>
+    <div className="dsec"><h4>Porównanie z Takeout</h4>{bodyKind ? (takeoutBody.error ? <p>Brak zaimportowanego Takeout albo nie udało się go odczytać.</p> : !takeoutBody.data ? <Loading /> : takeoutBody.data.rows.length === 0 ? <p>Takeout nie ma pomiarów tej doby (kompletność eksportu jest nieznana).</p>
       : <><p>Takeout jest punktem odniesienia i nie jest łączony z API.</p><div className="tw"><table className="simple"><thead><tr><th>Czas źródła</th><th>Wartość</th><th>Źródło</th></tr></thead><tbody>{takeoutBody.data.rows.map((row, index) => <tr key={index}><td className="mono">{row.timestamp}</td><td>{row.converted.status === 'parsed' ? `${row.converted.value.replace('.', ',')} ${row.converted.unit}` : '—'}</td><td>{row.origin || 'nieznane'}</td></tr>)}</tbody></table></div></>)
       : <p>Porównanie sum dobowych z Takeout nie jest jeszcze wyliczane. Oryginalne wiersze eksportu są w „Źródła danych” → „Importy plików”.</p>}</div>
     {snapshot && snapshot.notes.length > 0 && <div className="dsec"><h4>Uwagi dnia</h4><ul className="notes">{snapshot.notes.map((note) => <li key={note}>{note}</li>)}</ul></div>}

@@ -5,6 +5,7 @@ import { axisEvents, heartTrend, lastMeasured, meanValid, metricTrend, valueOf }
 import type { DrawerState } from './details.tsx';
 import { addDays, fmtD, fmtRange, maxDate, nf, warsawToday , firstDay } from './format.ts';
 import { Segmented, ZoomDialog, zoomSize } from './zoom.tsx';
+import { Loading } from './logo.tsx';
 
 export type TrendLength = 30 | 90 | 365 | 0;
 export const trendRanges: [TrendLength, string][] = [[30, '30 dni'], [90, '90 dni'], [365, 'Rok'], [0, 'Od 1 sty']];
@@ -21,7 +22,7 @@ export function TrendsView({ length, agg, onLength, onAgg, onDrawer }: { length:
   const hr = useJson(today >= firstDay ? `/api/google/heart-rate-range?from=${maxDate(firstDay, history)}&to=${today}` : null, heartRateRangeSchema);
   const forecast = useJson(`/api/google/energy-forecast?date=${today}`, forecastSchema);
   if (result.error) return <p role="alert">Nie udało się odczytać trendów.</p>;
-  if (!result.data) return <p>Ładowanie…</p>;
+  if (!result.data) return <Loading />;
   if (result.data.state === 'not_ready') return <p>Wyniki dzienne nie są jeszcze przygotowane.</p>;
   const all = result.data.days, rows = all.filter((row) => row.date >= from);
   const fc = forecast.data && agg === 'day' ? { now: valueOf(rows.at(-1)?.snapshot, 'total_energy') ?? 0, total: forecast.data.forecastKcal } : null;

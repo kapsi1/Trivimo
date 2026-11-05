@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { csvDateFormats, csvMetrics, csvUnits, type CsvMapping, type CsvMetric } from '../../../packages/contracts/csv-import.ts';
 import { post } from './api.ts';
 import { whenOf } from './format.ts';
+import { Loading } from './logo.tsx';
 
 const inspectSchema = z.object({ delimiter: z.enum([',', ';', '\t']), columns: z.number().int().positive(), rows: z.number().int().nonnegative(), head: z.array(z.array(z.string())) });
 const stat = z.object({ values: z.number(), days: z.number(), fills: z.number(), keepsGoogle: z.number() });
@@ -141,7 +142,7 @@ export function CsvImport() {
     {error && <p role="alert">{error}</p>}
     {done && <p role="status">{done}</p>}
     <h3>Zaimportowane pliki CSV</h3>
-    {listError ? <p role="alert">Nie udało się odczytać listy importów CSV (magazyn niedostępny lub wymaga migracji do wersji 11).</p> : !imports ? <p>Ładowanie…</p> : imports.length === 0 ? <p className="sub">Brak importów CSV.</p> :
+    {listError ? <p role="alert">Nie udało się odczytać listy importów CSV (magazyn niedostępny lub wymaga migracji do wersji 11).</p> : !imports ? <Loading /> : imports.length === 0 ? <p className="sub">Brak importów CSV.</p> :
       <div className="tw"><table className="simple"><thead><tr><th className="l">Plik</th><th className="l">Zaimportowano</th><th className="l">Doby</th><th className="l">Metryki</th><th>Wartości</th><th>Odrzucone</th><th className="l">Stan</th><th /></tr></thead><tbody>
         {imports.map((item) => <tr key={item.id}><td className="l">{item.fileName}</td><td className="l">{whenOf(item.createdAt)}</td><td className="l mono">{item.first ? `${item.first} – ${item.last}` : '—'}</td><td className="l">{item.metrics.map((metric) => metricLabels[metric as CsvMetric] ?? metric).join(', ')}</td><td>{item.values}</td><td>{item.rejected}</td>
           <td className="l">{item.state === 'included' ? 'w tabeli (uzupełnia braki)' : 'wykluczony'}</td>
