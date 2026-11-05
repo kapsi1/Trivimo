@@ -1,16 +1,16 @@
 import { useState } from 'react';
 import type { z } from 'zod';
 import { forecastSchema, groups, heartRateRangeSchema, metricOf, metrics, rangeSchema, useChunkedJson, useJson, earliestOf, type Earliest, type Loaded, type MetricKey } from './api.ts';
-import { HR_LEGEND, HrTrendChart, TrendChart, Zoomable } from './charts.tsx';
-import { axisEvents, heartTrend, lastMeasured, meanValid, metricTrend, valueOf } from './derive.ts';
-import { addDays, fmtD, fmtRange, maxDate, nf, warsawToday , firstDay } from './format.ts';
-import { TableRange, tableBounds, type RangePrefs } from './table.tsx';
-import { Segmented, ZoomDialog, zoomSize } from './zoom.tsx';
+import { HR_LEGEND, HrTrendChart, TrendChart, Zoomable, tip } from './charts.tsx';
+import { axisEvents, heartTrend, meanValid, metricTrend, valueOf } from './derive.ts';
+import { addDays, fmtRange, maxDate, nf, warsawToday , firstDay } from './format.ts';
+import { tableBounds, type RangePrefs } from './table.tsx';
+import { ZoomDialog, zoomSize } from './zoom.tsx';
 import { Loading } from './logo.tsx';
 
 export const aggregations: ['day' | 'week', string][] = [['day', 'Dni'], ['week', 'Tygodnie']];
 /** Trends of the six M1 metrics and heart rate, from the same day snapshots as the table, with events on the axis. */
-export function TrendsView({ earliest, prefs, agg, onPrefs, onAgg }: { earliest: Loaded<Earliest>; prefs: RangePrefs; agg: 'day' | 'week'; onPrefs: (next: Partial<RangePrefs>) => void; onAgg: (agg: 'day' | 'week') => void }) {
+export function TrendsView({ earliest, prefs, agg }: { earliest: Loaded<Earliest>; prefs: RangePrefs; agg: 'day' | 'week' }) {
   const [zoom, setZoom] = useState<MetricKey | 'hr' | null>(null);
   // "Od początku": on the dashboard the first day of any chart, in a chart's zoom the first day of that chart only
   const first = earliestOf(earliest, zoom ? [zoom] : [...metrics.map((metric) => metric.key), 'hr']);
@@ -35,18 +35,17 @@ export function TrendsView({ earliest, prefs, agg, onPrefs, onAgg }: { earliest:
   return <>
     <div className="events"><span className="event"><i className="ev-legacy" />starszy model kalorii</span><span className="event"><i className="ev-hatch" />okres nieporównywalny</span>{fc && <span className="event"><i className="ev-fc" />prognoza do 24:00</span>}{agg === 'week' && <span className="event">Słupek bledszy = mniej dób z wartością w tygodniu</span>}</div>
     <div className="tgrid">
-      {metrics.map((metric) => { const a = meanValid(rows, metric.key, from, to), body = metric.group === 'body', last = body ? lastMeasured(rows, metric.key, to) : null;
+      {metrics.map((metric) => { const body = metric.group === 'body', a = meanValid(rows, metric.key, from, to, body);
         return <section key={metric.key} className="panel tcard"><header><h3 className="th"><i style={{ background: groups[metric.group].color }} />{metric.label}{metric.unit && <span className="sub"> {metric.unit}</span>}</h3>
-          <span className="stat">{body && last ? <>ostatni <b>{nf(last.value, metric.decimals)}</b> · {fmtD(last.date)} · </> : null}śr. {body ? '' : 'dzienna '}<b>{a.mean === null ? '—' : nf(a.mean, metric.decimals)}</b> · {a.n} z {a.total} dób</span></header>
+          <span className="stat" {...(!body && to === today ? tip(['Dzisiejsza doba nie jest brana pod uwagę do średniej, bo jeszcze trwa']) : {})}>śr. <b>{a.mean === null ? '—' : nf(a.mean, metric.decimals)}</b></span></header>
           <Zoomable label={metric.label} onZoom={() => setZoom(metric.key)}>{chart(metric.key)}</Zoomable></section>; })}
       <section className="panel tcard"><header><h3 className="th"><i style={{ background: 'var(--c-band)' }} />Tętno<span className="sub"> bpm</span></h3>
-        <span className="stat">śr. okien <b>{hrMean === null ? '—' : nf(hrMean)}</b> · {hrDays.length} z {hrPoints('day').length} dób z pomiarem</span></header>
+        <span className="stat">śr. <b>{hrMean === null ? '—' : nf(hrMean)}</b></span></header>
         {hr.error ? <p role="alert">Nie udało się odczytać tętna.</p> : <Zoomable label="tętno" onZoom={() => setZoom('hr')}><HrTrendChart points={hrPoints(agg)} events={events('hr')} agg={agg} /></Zoomable>}</section>
       <section className="panel tcard future"><header><h3>Tętno spoczynkowe</h3><span className="tag">M2</span></header><p className="sub" style={{ margin: 0 }}>Osobny typ z Google Health API. Nie jest minimum ani średnią tętna dnia, więc nie wyliczamy go z okien.</p></section>
     </div>
     <section className="panel"><header><h3>Porównania i korelacje</h3><span className="tag">M2+</span></header><p className="sub" style={{ margin: 0 }}>Obciążenie tygodnia, sen a aktywność, spożycie a wydatek. Opis korelacji osobno od wniosków przyczynowych.</p></section>
-    {zoom && <ZoomDialog title={zoom === 'hr' ? 'Tętno' : metricOf(zoom).label} sub={sub} legend={zoom === 'hr' ? HR_LEGEND : null} onClose={() => setZoom(null)}
-      controls={<><TableRange prefs={prefs} earliest={first} onChange={onPrefs} /><Segmented label="Agregacja" items={aggregations} value={agg} onChange={onAgg} /></>}>
+    {zoom && <ZoomDialog title={zoom === 'hr' ? 'Tętno' : metricOf(zoom).label} sub={sub} legend={zoom === 'hr' ? HR_LEGEND : null} onClose={() => setZoom(null)}>
       {zoom === 'hr' ? <HrTrendChart points={hrPoints(agg)} events={events('hr')} agg={agg} width={W} height={H} /> : chart(zoom, { W, H })}</ZoomDialog>}
   </>;
 }

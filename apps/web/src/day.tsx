@@ -11,7 +11,7 @@ import { Loading } from './logo.tsx';
 
 
 export type DayTab = 'przebieg' | 'godzinowe' | 'jedzenie' | 'treningi';
-type Zoom = { type: 'hour'; key: HourKey; name: string } | { type: 'hrday' };
+type Zoom = { type: 'hour'; key: HourKey } | { type: 'hrday' };
 /** Days of the loaded window: the 90 days of the view plus 60 to move through before the next request. */
 const windowDays = 150;
 const windowEnd = (date: string, today: string) => { const later = addDays(date, 30); return later < today ? later : today; };
@@ -19,6 +19,7 @@ const windowEnd = (date: string, today: string) => { const later = addDays(date,
 export function DayView({ date, tab, onTab, sync, onDirty }: { date: string; tab: DayTab; onTab: (tab: DayTab) => void; sync: SyncStatus | undefined; onDirty: (dirty: boolean) => void }) {
   const today = warsawToday(), isToday = date === today, read = date >= firstDay;
   const [zoom, setZoom] = useState<Zoom | null>(null);
+  const [showHr, setShowHr] = useState(true); // heart-rate line in the zoomed hourly chart; kept between zooms
   const [refresh, setRefresh] = useState(0);
   const day = useJson(`/api/day?date=${date}`, dayResponseSchema, refresh);
   // the 90 days up to the shown day come from a wider window that stays while moving day by day (no request, no flicker)
@@ -50,7 +51,7 @@ export function DayView({ date, tab, onTab, sync, onDirty }: { date: string; tab
     <div className="tabs" role="tablist" aria-label="Widok dnia">{tabs.map(([key, label, stage]) => <button type="button" role="tab" key={key} aria-selected={tab === key} onClick={() => onTab(key)}>{label}{stage && <span className={`tag ${key === 'jedzenie' ? 'food' : ''}`}>{stage}</span>}</button>)}</div></>;
   const legacy = snapshot?.energy?.model === 'legacy';
   const loading = (read && total.data === undefined && !total.error) || !day.data;
-  const zoomed = zoom && <DayZoom zoom={zoom} setZoom={setZoom} snapshot={snapshot} hours={hours} legacy={legacy} seriesRead={!!total.data} loading={loading} forecast={fc} hrToday={hrToday} />;
+  const zoomed = zoom && <DayZoom zoom={zoom} setZoom={setZoom} showHr={showHr} onShowHr={setShowHr} snapshot={snapshot} hours={hours} legacy={legacy} seriesRead={!!total.data} loading={loading} forecast={fc} hrToday={hrToday} />;
   if (day.error || range.error) return <>{head}<p role="alert">Nie udało się odczytać wyniku dnia. Sprawdź, czy serwer działa.</p>{zoomed}</>;
   if (!day.data) return <>{head}<Loading />{zoomed}</>;
   if (day.data.state === 'not_ready') return <>{head}<p>Wyniki dzienne nie są jeszcze przygotowane. Oryginalne dane znajdziesz w „Źródła danych”.</p>{zoomed}</>;
@@ -74,14 +75,14 @@ function KpiCard({ date, rows, snapshot, metricKey, forecast, onZoom, mini, quie
   else cmp = avg.mean !== null ? `śr. ${week}: ${nf(avg.mean, metric.decimals)} · ${avg.n} z 7 dób` : metric.group === 'body' ? 'brak pomiarów w 7 dniach' : 'brak potwierdzonych dób w 7 dniach';
   const fc = metricKey === 'total_energy' && forecast && value?.value ? { now: valueOf(snapshot, metricKey) ?? 0, total: forecast.forecastKcal } : null;
   return <div className={`kcard ${className ?? ''}`} data-zoom={onZoom ? '' : undefined} onClick={onZoom}>
-    <span className="k-label"><span>{metric.label}</span><span className="k-right">{!(quiet && value?.status === 'provisional') && <StatusChip value={value} compact />}</span></span>
+    <span className="k-label"><h3 className="th"><i style={{ background: groups[metric.group].color }} />{metric.label}</h3><span className="k-right">{!(quiet && value?.status === 'provisional') && <StatusChip value={value} compact />}</span></span>
     <span className={`k-value ${value?.value ? value.status === 'provisional' ? 'prov' : '' : 'none'}`}>{value?.value ? formatRational(value.value, metric.decimals) : '—'}{value?.value && metric.unit ? <small>{metric.unit}</small> : null}{fc && <span className="k-fc">Prognoza: <b>{nf(fc.total)}</b> kcal</span>}</span>
     {!(bare && value?.value) && <span className="k-cmp">{cmp}</span>}
     {onZoom && mini !== null && <button type="button" className="chartbtn" aria-label={`Powiększ wykres: ${metric.label}`} onClick={(event) => { event.stopPropagation(); onZoom(); }}>{mini}</button>}</div>;
 }
 
 function HrCard({ onZoom, chart }: { onZoom: () => void; chart: ReactNode }) {
-  return <div className="kcard tall chartonly" data-zoom onClick={onZoom}><span className="k-label"><span>Tętno</span></span><button type="button" className="chartbtn" aria-label="Powiększ wykres: Tętno" onClick={(event) => { event.stopPropagation(); onZoom(); }}>{chart}</button></div>;
+  return <div className="kcard tall chartonly" data-zoom onClick={onZoom}><span className="k-label"><h3 className="th"><i style={{ background: 'var(--c-band)' }} />Tętno</h3></span><button type="button" className="chartbtn" aria-label="Powiększ wykres: Tętno" onClick={(event) => { event.stopPropagation(); onZoom(); }}>{chart}</button></div>;
 }
 
 function UserNoteEditor({ date, initial, onDirty }: { date: string; initial: z.infer<typeof userNoteSchema> | null; onDirty: (dirty: boolean) => void }) {
@@ -117,12 +118,12 @@ function DayFlow({ date, rows, hours, snapshot, legacy, seriesRead, loading, for
   const card = (key: MetricKey) => {
     const hk = hourKeyOf[key];
     return <KpiCard key={key} date={date} rows={rows} snapshot={snapshot} metricKey={key} forecast={forecast} quiet bare className={hk ? 'tall' : 'sq'}
-      onZoom={hk ? () => onZoom({ type: 'hour', key: hk, name: 'Przebieg doby' }) : undefined}
+      onZoom={hk ? () => onZoom({ type: 'hour', key: hk }) : undefined}
       mini={hk ? <DayMini hours={loading || empty(hk) ? [] : hours.hours} metric={hk} /> : undefined} />;
   };
   return <>
     <div className="kpis kpis-3">
-      {(['energy', 'activity', 'body'] as const).map((group) => <section key={group} className="kgroup" style={{ '--gc': groups[group].color } as React.CSSProperties}><h3>{groups[group].label}</h3>
+      {(['energy', 'activity', 'body'] as const).map((group) => <section key={group} className="kgroup">
         {group === 'body' ? <div className="kpair">{metrics.filter((metric) => metric.group === group).map((metric) => card(metric.key))}</div> : metrics.filter((metric) => metric.group === group).map((metric) => card(metric.key))}
         {group === 'body' && <HrCard onZoom={() => onZoom({ type: 'hrday' })} chart={<HrDayMini windows={hours.hr} hours={hours.hours.length} />} />}
       </section>)}
@@ -138,16 +139,16 @@ function DayHoursTable({ hours }: { hours: DayHours }) {
   </section>;
 }
 
-function DayZoom({ zoom, setZoom, snapshot, hours, legacy, seriesRead, loading, forecast, hrToday }: { zoom: Zoom; setZoom: (zoom: Zoom | null) => void; snapshot: Snapshot | null; hours: DayHours; legacy: boolean; seriesRead: boolean; loading: boolean; forecast: Forecast; hrToday: ReturnType<typeof hrOf> }) {
+function DayZoom({ zoom, setZoom, showHr, onShowHr, snapshot, hours, legacy, seriesRead, loading, forecast, hrToday }: { zoom: Zoom; setZoom: (zoom: Zoom | null) => void; showHr: boolean; onShowHr: (show: boolean) => void; snapshot: Snapshot | null; hours: DayHours; legacy: boolean; seriesRead: boolean; loading: boolean; forecast: Forecast; hrToday: ReturnType<typeof hrOf> }) {
   const { W, H } = zoomSize(), close = () => setZoom(null);
   if (zoom.type === 'hour') {
     const none = !seriesRead || (legacy && (zoom.key === 'total' || zoom.key === 'active')) || hours.hours.every((hour) => hour[zoom.key] === null);
     const total = dayTotal(snapshot, zoom.key, hours.hours);
-    const title = `${zoom.name} · ${hourMetricLabel(zoom.key)}${total ? `: ${total.text}${total.computed ? ' (suma godzin)' : ''}` : ''}${zoom.key === 'total' && forecast ? ` · prognoza ${nf(forecast.forecastKcal)} kcal` : ''}`;
+    const title = `${hourMetricLabel(zoom.key)}${total ? `: ${total.text}${total.computed ? ' (suma godzin)' : ''}` : ''}${zoom.key === 'total' && forecast ? ` · prognoza ${nf(forecast.forecastKcal)} kcal` : ''}`;
     return <ZoomDialog title={title} onClose={close}
-      controls={<Segmented label="Metryka" items={hourOptions} value={zoom.key} onChange={(key) => setZoom({ ...zoom, key })} />}
-      legend={none ? null : <>{zoom.key === 'total' && <EnergyLegend forecast={!!forecast} />}{hours.hr.length > 0 && <span><i style={{ background: 'var(--c-band)' }} />tętno, prawa oś (bpm)</span>}</>}>
-      {loading ? <Loading /> : none ? <p className="sub">Brak rozkładu godzinowego dla tej doby.</p> : <HourChart windows={hours.windows} hours={hours.hours} metric={zoom.key} height={H} width={W} hr={hours.hr} />}</ZoomDialog>;
+      controls={<><Segmented label="Metryka" items={hourOptions} value={zoom.key} onChange={(key) => setZoom({ ...zoom, key })} />{hours.hr.length > 0 && <div className="seg" role="group" aria-label="Wykres tętna"><button type="button" aria-pressed={showHr} onClick={() => onShowHr(!showHr)}>Tętno</button></div>}</>}
+      legend={none ? null : <>{zoom.key === 'total' && <EnergyLegend forecast={!!forecast} />}{showHr && hours.hr.length > 0 && <span><i style={{ background: 'var(--c-band)' }} />tętno, prawa oś (bpm)</span>}</>}>
+      {loading ? <Loading /> : none ? <p className="sub">Brak rozkładu godzinowego dla tej doby.</p> : <HourChart windows={hours.windows} hours={hours.hours} metric={zoom.key} height={H} width={W} hr={showHr ? hours.hr : undefined} />}</ZoomDialog>;
   }
   return <ZoomDialog title={`Tętno${hrToday ? `: śr. ${nf(hrToday.avg)} · ${nf(hrToday.min)}–${nf(hrToday.max)} bpm` : ''}`} legend={HR_LEGEND} onClose={close}>
     {loading ? <Loading /> : <HrDayChart windows={hours.hr} slots={hours.slots} hours={hours.hours} height={H} width={W} />}</ZoomDialog>;}

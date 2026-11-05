@@ -9,14 +9,17 @@ export function valueOf(snapshot: Snapshot | null | undefined, key: MetricKey): 
   const item = snapshot?.metrics[key];
   return item?.value && (item.status === 'valid' || item.status === 'provisional') ? toNumber(item.value) : null;
 }
-/** Mean over confirmed days of [from, to] with how many had a value: never a mean that treats gaps as zeros. */
-export function meanValid(rows: readonly DayRow[], key: MetricKey, from: string, to: string) {
+/**
+ * Mean over confirmed days of [from, to] with how many had a value: never a mean that treats gaps as zeros.
+ * With `provisional` a day in progress counts too (body measurements: the day's mean exists as soon as there is a measurement).
+ */
+export function meanValid(rows: readonly DayRow[], key: MetricKey, from: string, to: string, provisional = false) {
   let sum = 0, n = 0, total = 0;
   for (const row of rows) {
     if (row.date < from || row.date > to) continue;
     total++;
     const item = row.snapshot?.metrics[key];
-    if (item?.status === 'valid' && item.value) { sum += toNumber(item.value); n++; }
+    if ((item?.status === 'valid' || (provisional && item?.status === 'provisional')) && item.value) { sum += toNumber(item.value); n++; }
   }
   return { mean: n ? sum / n : null, n, total };
 }

@@ -73,7 +73,8 @@ export function HourChart({ windows, hours, metric, height = 150, width = 640, h
   const win = hr ?? [], R = win.length ? 40 : 0, PW = W - R, stacked = metric === 'total';
   const values = windows.flatMap((h) => [h[metric], stacked && h.fc !== null ? (h.total ?? 0) + h.fc : null]).filter((v): v is number => v !== null);
   if (!values.length) return <p className="sub">Brak danych 10-minutowych.</p>;
-  const ticks = niceTicks(0, Math.max(...values, 1), big ? 4 : 2), top = ticks.at(-1)!;
+  // the axis ends just above the highest bar (not at the next round tick), so the plot is not left half empty
+  const peak = Math.max(...values, 1), top = peak * 1.05, ticks = niceTicks(0, peak, big ? 4 : 2).filter((t) => t <= top);
   const n = windows.length, step = (PW - L) / n, base = H - B, y = (v: number) => T + (base - T) * (1 - v / top);
   const unit = hourUnits[metric];
   let hrMarks: ReactNode = null;
