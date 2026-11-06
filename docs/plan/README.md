@@ -21,9 +21,9 @@ Etapy nie są harmonogramem. Pełny katalog API nie warunkuje tabeli, Android ni
 
 Działa i jest sprawdzone (syntetycznie i na koncie użytkownika): autoryzacja Google z trwałym tokenem, magazyn v13, sześć metryk zakwalifikowanych z danych Google od 2026-01-01 (i na żądanie wcześniej), odświeżanie automatyczne z polityką odczytów, uzupełnianie historii, import Takeout (katalog i ZIP) i CSV, interfejs według [projektu UI](../design/ui.md), kopia i odtworzenie. Szczegóły: [M1 — wykonane](../completed/02-m1.md), [raport testów](../test-results.md).
 
-Pozostałe punkty: [plan MVP](01-foundation-mvp.md) — najważniejsze to testy odbioru (powtórny import, niezależność od porcji, DST, paginacja), strefy czasowe, eksport CSV i kopia z UI. Porównanie z aplikacją Health jest wstrzymane decyzją użytkownika (2026-11-04).
+Pozostałe punkty: [plan MVP](01-foundation-mvp.md) — najważniejsze to testy odbioru (powtórny import, niezależność od porcji, DST, paginacja), eksport CSV i kopia z UI. Strefy czasowe są w [etapie Q](09-quality-operations.md#strefy-czasowe).
 
-Nierozstrzygnięte: nagłówek Health wyższy o ok. 0,55 % od API dla jednej doby; rola źródła „Phone Health Connect” ([obserwacje](../completed/03-data-findings.md)); zachowanie polityki odczytów po wielu przebiegach (starsze odczyty bez znacznika „automatyczny” nie są porządkowane); praca w tle po wielu godzinach i restarcie komputera.
+Nierozstrzygnięte: rola źródła „Phone Health Connect” ([obserwacje](../completed/03-data-findings.md)); zachowanie polityki odczytów po wielu przebiegach (starsze odczyty bez znacznika „automatyczny” nie są porządkowane); praca w tle po wielu godzinach i restarcie komputera.
 
 ## Bramy jakości
 
@@ -39,7 +39,6 @@ Decyzja użytkownika z 2026-11-03: gdy potrzebna jest rzeczywista wartość, ksz
 - Takeout leży w `test-data/` (w `.gitignore`). Poza nim, bazą aplikacji i API nie szukaj danych zdrowotnych po dysku.
 - Czytaj najmniejszy potrzebny zakres (kilka dni, jeden typ, jedna strona), tylko do odczytu.
 - Wartości, ID rekordów, konta, tokeny i trasy nie trafiają do `docs/`, fixture'ów, logów ani commitów. W docs reguły i kształty, w testach przypadki syntetyczne, raport z wartościami poza repo.
-- Odczyt rzeczywisty nie zastępuje walidacji użytkownika; zgodność z UI Health opisuje się z datą i ograniczeniami.
 
 ## Rozliczanie pracy
 

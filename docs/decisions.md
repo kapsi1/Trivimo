@@ -28,7 +28,7 @@ Pełny katalog API zastępuje dawne ograniczenia Health Sync do wybranych pól. 
 
 **2026-11-04 — masa i tkanka tłuszczowa (`google-body-v1`):** średnia unikalnych pomiarów doby z API; kopie z różnych aplikacji liczone raz; Takeout tylko do porównania.
 
-**2026-11-04 — porównanie z aplikacją Health** (kryterium odbioru M1, kształt wykresów) jest wstrzymane; agent wykonuje je tylko na wyraźną prośbę. Do tego czasu nie deklarujemy zgodności z UI Health.
+**2026-11-06 — porównanie z aplikacją Health** (wcześniej kryterium odbioru M1, wstrzymane 2026-11-04) usunięte z planu. Agent nie porównuje wyników z UI Health bez wyraźnej prośby, a Trivimo nie deklaruje zgodności z UI Health.
 
 **2026-11-04 — UI.** Widok startowy Dzień; masa z dokładnością 0,1 kg; kroje Bricolage Grotesque, IBM Plex Sans i Mono. Kliknięcie wykresu powiększa go, „?” otwiera metadane, najechanie — tooltip. Strefa czasowa nie jest pokazywana w nagłówkach, tylko w ustawieniach. Prognoza kalorii do końca doby jako własna pochodna `prognoza-spoczynek-v0` (najprostsza metoda; inna to nowa wersja). Tętno dnia w UI to agregacja prezentacyjna okien, nie tętno spoczynkowe. Szczegóły: [projekt UI](design/ui.md).
 
@@ -44,7 +44,7 @@ Stos: TypeScript, React/Vite, Node z wbudowanym SQLite, lokalny serwer REST na 1
 
 | Decyzja | Kiedy | Co rozstrzygnąć |
 | --- | --- | --- |
-| Strefa czasowa doby | Przed obsługą stref ([plan](plan/01-foundation-mvp.md)) | Jedna strefa globalna czy strefa przypisana do doby (podróże); migracja i wersja reguł |
+| Strefa czasowa doby | Przed obsługą stref ([plan Q](plan/09-quality-operations.md#strefy-czasowe)) | Jedna strefa globalna czy strefa przypisana do doby (podróże); migracja i wersja reguł |
 | Próg „dnia z noszeniem” | Gdy potrzebny w UI/analizie | Dziś tylko udział doby z opaską, bez progu |
 | Nazwa i identyfikatory produktu | Przed publikacją | Wybiera użytkownik; wstępne wyszukiwanie nie potwierdza praw do marki/domeny |
 | Wariant local-first PWA (bez serwera) | Przed dostępem mobilnym, razem z wyborem hosta | SQLite-WASM (OPFS) w przeglądarce, ewentualny bezstanowy proxy tylko do wymiany tokenów OAuth. Do sprawdzenia w dokumentach Google: OAuth bez sekretu, refresh token, CORS Health API. Koszty: brak synchronizacji w tle, ryzyko wyczyszczenia OPFS, brak REST/MCP, klucz AI nie w przeglądarce. Do tego czasu przypadki użycia nie zakładają HTTP; bez sterownika WASM |

@@ -64,6 +64,5 @@ Kliknięcie wykresu lub karty otwiera powiększenie (Esc zamyka). Tooltip po naj
 
 ## Otwarte pytania
 
-- Czy przywrócić w lżejszej formie pochodzenie wartości (źródła, reguła, rewizja, historia odczytów, porównanie z Takeout) i oznaczenie komórek z CSV, usunięte 2026-11-05.
 - Kolumna „Źródła”: pełne nazwy (dziś) czy skróty.
 - Reguła okien prognozy kalorii: v0 czeka na ocenę ([plan](../plan/01-foundation-mvp.md)).
