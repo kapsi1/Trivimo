@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { dayResponseSchema, forecastSchema, groups, heartRateDaySchema, heartRateRangeSchema, metricOf, metrics, post, rangeSchema, seriesSchema, useJson, userNoteSchema, type DayRow, type Forecast, type MetricKey, type Snapshot, type SyncStatus } from './api.ts';
 import { DayMini, EnergyLegend, HourChart, HR_LEGEND, HrDayChart, HrDayMini, type HourKey } from './charts.tsx';
-import { dayHours, dayTotal, hrOf, lastMeasured, meanValid, valueOf, type DayHours } from './derive.ts';
+import { dayHours, dayTotal, forecastHint, hrOf, lastMeasured, meanValid, valueOf, type DayHours } from './derive.ts';
 import { StatusChip, hourMetricLabel } from './details.tsx';
 import { addDays, fmtD, formatRational, nf, warsawToday, whenOf, firstDay } from './format.ts';
 import { Placeholder } from './placeholders.tsx';
@@ -76,7 +76,7 @@ function KpiCard({ date, rows, snapshot, metricKey, forecast, onZoom, mini, quie
   const fc = metricKey === 'total_energy' && forecast && value?.value ? { now: valueOf(snapshot, metricKey) ?? 0, total: forecast.forecastKcal } : null;
   return <div className={`kcard ${className ?? ''}`} data-zoom={onZoom ? '' : undefined} onClick={onZoom}>
     <span className="k-label"><h3 className="th"><i style={{ background: groups[metric.group].color }} />{metric.label}</h3><span className="k-right">{!(quiet && value?.status === 'provisional') && <StatusChip value={value} compact />}</span></span>
-    <span className={`k-value ${value?.value ? value.status === 'provisional' ? 'prov' : '' : 'none'}`}>{value?.value ? formatRational(value.value, metric.decimals) : '—'}{value?.value && metric.unit ? <small>{metric.unit}</small> : null}{fc && <span className="k-fc">Prognoza: <b>{nf(fc.total)}</b> kcal</span>}</span>
+    <span className={`k-value ${value?.value ? value.status === 'provisional' ? 'prov' : '' : 'none'}`}>{value?.value ? formatRational(value.value, metric.decimals) : '—'}{value?.value && metric.unit ? <small>{metric.unit}</small> : null}{fc && <span className="k-fc" title={forecast ? forecastHint(forecast) : undefined}>Prognoza: <b>{nf(fc.total)}</b> kcal</span>}</span>
     {!(bare && value?.value) && <span className="k-cmp">{cmp}</span>}
     {onZoom && mini !== null && <button type="button" className="chartbtn" aria-label={`Powiększ wykres: ${metric.label}`} onClick={(event) => { event.stopPropagation(); onZoom(); }}>{mini}</button>}</div>;
 }
@@ -144,10 +144,10 @@ function DayZoom({ zoom, setZoom, showHr, onShowHr, snapshot, hours, legacy, ser
   if (zoom.type === 'hour') {
     const none = !seriesRead || (legacy && (zoom.key === 'total' || zoom.key === 'active')) || hours.hours.every((hour) => hour[zoom.key] === null);
     const total = dayTotal(snapshot, zoom.key, hours.hours);
-    const title = `${hourMetricLabel(zoom.key)}${total ? `: ${total.text}${total.computed ? ' (suma godzin)' : ''}` : ''}${zoom.key === 'total' && forecast ? ` · prognoza ${nf(forecast.forecastKcal)} kcal` : ''}`;
+    const title = <>{hourMetricLabel(zoom.key)}{total ? `: ${total.text}${total.computed ? ' (suma godzin)' : ''}` : ''}{zoom.key === 'total' && forecast && <> · <span title={forecastHint(forecast)} style={{ cursor: 'help' }}>prognoza {nf(forecast.forecastKcal)} kcal</span></>}</>;
     return <ZoomDialog title={title} onClose={close}
       controls={<><Segmented label="Metryka" items={hourOptions} value={zoom.key} onChange={(key) => setZoom({ ...zoom, key })} />{hours.hr.length > 0 && <div className="seg" role="group" aria-label="Wykres tętna"><button type="button" aria-pressed={showHr} onClick={() => onShowHr(!showHr)}>Tętno</button></div>}</>}
-      legend={none ? null : <>{zoom.key === 'total' && <EnergyLegend forecast={!!forecast} />}{showHr && hours.hr.length > 0 && <span><i style={{ background: 'var(--c-band)' }} />tętno, prawa oś (bpm)</span>}</>}>
+      legend={none ? null : <>{zoom.key === 'total' && <EnergyLegend forecast={forecast ? forecastHint(forecast) : null} />}{showHr && hours.hr.length > 0 && <span><i style={{ background: 'var(--c-band)' }} />tętno, prawa oś (bpm)</span>}</>}>
       {loading ? <Loading /> : none ? <p className="sub">Brak rozkładu godzinowego dla tej doby.</p> : <HourChart windows={hours.windows} hours={hours.hours} metric={zoom.key} height={H} width={W} hr={showHr ? hours.hr : undefined} />}</ZoomDialog>;
   }
   return <ZoomDialog title={`Tętno${hrToday ? `: śr. ${nf(hrToday.avg)} · ${nf(hrToday.min)}–${nf(hrToday.max)} bpm` : ''}`} legend={HR_LEGEND} onClose={close}>

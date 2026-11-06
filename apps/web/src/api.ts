@@ -60,7 +60,7 @@ export const heartRateDaySchema = z.object({ dayWindows: z.number().int().positi
 export type HeartRateDay = z.infer<typeof heartRateDaySchema>;
 export const heartRateRangeSchema = z.array(z.object({ date: z.iso.date(), read: z.boolean(), windows: z.number().int().nonnegative(), avg: z.number().nullable(), min: z.number().nullable(), max: z.number().nullable() }));
 export type HeartRateSummary = z.infer<typeof heartRateRangeSchema>[number];
-export const forecastSchema = z.object({ rule: z.literal('prognoza-spoczynek-v0'), burnedKcal: z.number(), restRateKcalPerHour: z.number(), restWindows: z.number().int(), asOf: z.iso.datetime(), remainingWindows: z.number().int(), forecastKcal: z.number() }).nullable();
+export const forecastSchema = z.object({ rule: z.enum(['prognoza-bez-wysilku-v2', 'prognoza-spoczynek-v0']), burnedKcal: z.number(), asOf: z.iso.datetime(), remainingWindows: z.number().int(), forecastKcal: z.number(), floorKcal: z.number().nullable(), restRateKcalPerHour: z.number().nullable(), restWindows: z.number().int().nullable(), historyDays: z.number().int().nullable(), windowKcal: z.array(z.number()) }).nullable();
 export type Forecast = z.infer<typeof forecastSchema>;
 export const dailyReviewSchema = z.object({
   rows: z.array(z.object({ originalValue: z.string(), unit: z.enum(['steps', 'mm', 'kcal']), converted: z.object({ value: z.string(), unit: z.enum(['szt.', 'km', 'kcal']) }).nullable(), receivedAt: z.string(), jobStartedAt: z.string().optional(), state: z.enum(['running', 'complete']).optional() })),

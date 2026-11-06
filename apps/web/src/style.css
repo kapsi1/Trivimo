@@ -28,6 +28,8 @@
 }
 * { box-sizing: border-box; }
 html { overflow-y: scroll; scrollbar-gutter: stable; }
+/* Thin scrollbars in the theme's colours, inherited by every scrollable element. */
+html { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
 html, body { background: var(--bg); color: var(--fg); }
 body { margin: 0; font: 14px/1.5 var(--font-ui); }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--bg); }
@@ -199,8 +201,15 @@ td.notes-c { text-align: left; color: var(--muted); max-width: 320px; overflow: 
 /* The day table fills the height below the header; the page itself does not scroll. */
 @media (min-width: 641px) {
   .main:has(> .content > .twrap) { height: 100vh; height: 100dvh; }
-  .content:has(> .twrap) { flex: 1; min-height: 0; padding-bottom: 22px; }
-  .content > .twrap { flex: 0 1 auto; min-height: 0; max-height: none; }
+  /*
+   * The page does not scroll here: its empty scrollbar is transparent so it does not sit next to the table's. It stays
+   * in place (Chrome drops the gutter of an overflow-hidden page), so the layout does not shift between views.
+   */
+  html:has(.content > .twrap) { scrollbar-color: transparent transparent; }
+  .content > .twrap { scrollbar-color: var(--line-strong) transparent; }
+  /* The table runs edge to edge: no content margins, rounded corners or side borders. */
+  .content:has(> .twrap) { flex: 1; min-height: 0; padding: 0; gap: 0; max-width: none; }
+  .content > .twrap { flex: 0 1 auto; min-height: 0; max-height: none; border-width: 0 0 1px; border-radius: 0; }
 }
 /* Virtualization sizer: zero-height rows keep every column as wide as its widest value in the whole range. */
 .days tr.sizer { visibility: hidden; }
@@ -446,7 +455,7 @@ td.src-c { color: var(--muted); max-width: 280px; overflow: hidden; text-overflo
 .sync { cursor: pointer; }
 .sync:disabled { cursor: progress; }
 .sync:hover:not(:disabled) { color: var(--fg); }
-.dot.busy { animation: pulse 1.2s ease-in-out infinite; }
-@keyframes pulse { 50% { opacity: .35; } }
+.dot.busy { animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; transform: scale(.7); } }
 @media (prefers-reduced-motion: reduce) { .dot.busy { animation: none; } }
 .sync > span:not(.dot)::first-letter { text-transform: uppercase; }

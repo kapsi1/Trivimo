@@ -32,11 +32,15 @@ export function lastMeasured(rows: readonly DayRow[], key: MetricKey, onOrBefore
   return null;
 }
 
+/** Tooltip of "prognoza X kcal": what the forecast assumes. */
+export const forecastHint = (forecast: Forecast): string => forecast && forecast.rule === 'prognoza-bez-wysilku-v2'
+  ? 'Prognoza zakłada resztę dnia bez znaczącego wysiłku.'
+  : 'Prognoza zakłada resztę dnia bez dalszej aktywności.';
 /** Short tooltip of a day's value: date and value with unit; for calories the estimate source and today's forecast. */
 export function dayTip(row: DayRow | undefined, date: string, key: MetricKey, forecast?: Forecast): string[] {
   const metric = metricOf(key), value = valueOf(row?.snapshot, key);
   const lines = [fmtDL(date), value === null ? '—' : `${nf(value, metric.decimals)}${metric.unit ? ` ${metric.unit}` : ''}`];
-  if (key === 'total_energy' && forecast) lines.push(`Prognoza: ${nf(forecast.forecastKcal)} kcal`);
+  if (key === 'total_energy' && forecast) lines.push(`Prognoza: ${nf(forecast.forecastKcal)} kcal`, forecastHint(forecast));
   const energy = row?.snapshot?.energy;
   if (metric.group === 'energy' && value !== null && energy) lines.push(...energyTip(energy.heartRateWindows, energy.dayWindows));
   return lines;
@@ -59,13 +63,16 @@ export interface DayHours { hours: HourPoint[]; windows: SlotPoint[]; hr: HrWind
 const seriesValue = (value: string | null, unit: string) => value === null ? null : unit === 'mm' ? Number(value) / 1e6 : Number(value);
 /**
  * Hours of a Warsaw day (23 or 25 across DST) from the saved ten-minute series. For the day in progress, hours after the
- * last read are future; the resting forecast fills them at its rate (own derivation, never a producer value).
+ * last read are future; the forecast fills them window by window (own derivation, never a producer value).
  */
 export function dayHours(date: string, series: Partial<Record<HourKey, Series>>, heart: HeartRateDay | undefined, forecast: Forecast | undefined, today: boolean): DayHours {
   const bounds = warsawDay(date), dayStart = Date.parse(bounds.start), dayEnd = Date.parse(bounds.end);
   const count = Math.round((dayEnd - dayStart) / 3600000), slots = count * 6;
   const asOf = today ? (forecast ? Date.parse(forecast.asOf) : Date.now()) : Infinity;
-  const rate = forecast ? forecast.restRateKcalPerHour : null;
+  // expected kcal of the windows after the last read, by window index of the day (the forecast says them window by window)
+  const asOfIndex = forecast ? Math.round((Date.parse(forecast.asOf) - dayStart) / 600000) : 0;
+  const fcAt = (index: number) => forecast && today && index >= asOfIndex ? forecast.windowKcal[index - asOfIndex] ?? null : null;
+  const fcOver = (first: number, last: number) => { let sum = 0, any = false; for (let index = first; index < last; index++) { const value = fcAt(index); if (value !== null) { sum += value; any = true; } } return any ? sum : null; };
   const hr: HrWindow[] = (heart?.windows ?? []).map((window) => {
     const start = Date.parse(window.start);
     return { index: Math.round((start - dayStart) / 600000), label: `${timeOf(start)}–${timeOf(start + 600000)}`, avg: window.avg, min: window.min, max: window.max };
@@ -76,11 +83,10 @@ export function dayHours(date: string, series: Partial<Record<HourKey, Series>>,
     const start = dayStart + index * 3600000, end = start + 3600000;
     const label = hourOf(start), repeat = index > 0 && hourOf(start - 3600000) === label;
     const inHour = hr.filter((window) => window.index >= index * 6 && window.index < index * 6 + 6);
-    const futureMs = today ? Math.max(0, end - Math.max(start, asOf)) : 0;
     hours.push({
       start, label: `${label}${repeat ? '′' : ''}`, range: `${timeOf(start)}–${timeOf(end)}${repeat ? ' (drugi raz, czas zimowy)' : ''}`,
       total: byKey('total', index), active: byKey('active', index), steps: byKey('steps', index), distance: byKey('distance', index),
-      fc: rate !== null && futureMs > 0 ? rate * futureMs / 3600000 : null, future: start >= asOf, now: start < asOf && asOf < end,
+      fc: fcOver(index * 6, index * 6 + 6), future: start >= asOf, now: start < asOf && asOf < end,
       hrWindows: heart ? inHour.length : null, hrAvg: inHour.length ? inHour.reduce((sum, window) => sum + window.avg, 0) / inHour.length : null,
       hrMin: inHour.length ? Math.min(...inHour.map((window) => window.min)) : null, hrMax: inHour.length ? Math.max(...inHour.map((window) => window.max)) : null,
     });
@@ -90,11 +96,11 @@ export function dayHours(date: string, series: Partial<Record<HourKey, Series>>,
   const bySlot = (key: HourKey, index: number) => { const item = series[key]; return item ? seriesValue(item.slots[index] ?? null, item.unit) : null; };
   const windows: SlotPoint[] = [];
   for (let index = 0; index < slots; index++) {
-    const start = dayStart + index * 600000, end = start + 600000, futureMs = today ? Math.max(0, end - Math.max(start, asOf)) : 0;
+    const start = dayStart + index * 600000, end = start + 600000;
     windows.push({
       index, start, range: `${timeOf(start)}–${timeOf(end)}`,
       total: bySlot('total', index), active: bySlot('active', index), steps: bySlot('steps', index), distance: bySlot('distance', index),
-      fc: rate !== null && futureMs > 0 ? rate * futureMs / 3600000 : null, future: start >= asOf, now: start < asOf && asOf < end,
+      fc: fcAt(index), future: start >= asOf, now: start < asOf && asOf < end,
       hr: heart ? hrBySlot.get(index)?.avg ?? null : undefined,
     });
   }

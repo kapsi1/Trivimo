@@ -80,7 +80,7 @@ function Shell() {
   const sync = useJson('/api/google/sync-status', syncStatusSchema, syncTick);
   // poll often while a refresh runs, so the day in progress updates as soon as its new snapshot is published
   const running = (sync.data?.running ?? false) || sync.data?.backfill?.state === 'running' || sync.data?.backfill?.state === 'stopping';
-  useEffect(() => { const timer = setInterval(() => setSyncTick((value) => value + 1), running ? 5000 : 60000); return () => clearInterval(timer); }, [running]);
+  useEffect(() => { const timer = setInterval(() => setSyncTick((value) => value + 1), running ? 2000 : 10000); return () => clearInterval(timer); }, [running]);
 
   // Leaving the day with an unsaved note asks first; a cancelled change restores the address without a new entry.
   useEffect(() => {

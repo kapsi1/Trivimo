@@ -245,6 +245,7 @@ export function HrTrendChart({ points, events = [], highlight, width = 640, heig
 export const weekTitle = (monday: string) => `Tydzień ${isoWeek(monday)} · ${fmtD(monday)}–${fmtD(addDays(monday, 6))}`;
 
 export const HR_LEGEND = <><span><i style={{ background: 'var(--c-band)' }} />średnia okna</span><span><i style={{ background: 'color-mix(in srgb, var(--c-band) 30%, transparent)' }} />min–maks.</span></>;
-export function EnergyLegend({ forecast }: { forecast: boolean }) {
-  return <><span><i style={{ background: 'var(--c-energy)' }} />aktywne</span><span><i style={{ background: 'color-mix(in srgb, var(--c-energy) 32%, transparent)' }} />spalone poza aktywnymi</span>{forecast && <span><i className="i-fc" />prognoza bez aktywności</span>}</>;
+/** `forecast`: tooltip saying what the dashed part assumes, null without a forecast. */
+export function EnergyLegend({ forecast }: { forecast: string | null }) {
+  return <><span><i style={{ background: 'var(--c-energy)' }} />aktywne</span><span><i style={{ background: 'color-mix(in srgb, var(--c-energy) 32%, transparent)' }} />spalone poza aktywnymi</span>{forecast && <span title={forecast}><i className="i-fc" />prognoza</span>}</>;
 }

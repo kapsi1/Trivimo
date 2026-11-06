@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { z } from 'zod';
 import { forecastSchema, groups, heartRateRangeSchema, metricOf, metrics, rangeSchema, useChunkedJson, useJson, earliestOf, type Earliest, type Loaded, type MetricKey } from './api.ts';
 import { HR_LEGEND, HrTrendChart, TrendChart, Zoomable, tip } from './charts.tsx';
-import { axisEvents, heartTrend, meanValid, metricTrend, valueOf } from './derive.ts';
+import { axisEvents, forecastHint, heartTrend, meanValid, metricTrend, valueOf } from './derive.ts';
 import { addDays, maxDate, nf, warsawToday , firstDay } from './format.ts';
 import { tableBounds, type RangePrefs } from './table.tsx';
 import { ZoomDialog, zoomSize } from './zoom.tsx';
@@ -37,7 +37,7 @@ export function TrendsView({ earliest, prefs, agg }: { earliest: Loaded<Earliest
     return <TrendChart points={metricTrend(rows, key, agg, key === 'total_energy' && to === today ? forecast.data ?? null : undefined)} form={metric.form} color={groups[metric.group].color} decimals={metric.decimals} label={metric.label} events={events(key)} agg={agg} forecast={key === 'total_energy' ? fc : null} width={size?.W} height={size?.H} />; };
   const { W, H } = zoomSize();
   return <>
-    <div className="events"><span className="event"><i className="ev-legacy" />starszy model kalorii</span><span className="event"><i className="ev-hatch" />okres nieporównywalny</span>{fc && <span className="event"><i className="ev-fc" />prognoza do 24:00</span>}{agg === 'week' && <span className="event">Słupek bledszy = mniej dób z wartością w tygodniu</span>}</div>
+    <div className="events"><span className="event"><i className="ev-legacy" />starszy model kalorii</span><span className="event"><i className="ev-hatch" />okres nieporównywalny</span>{fc && <span className="event" title={forecast.data ? forecastHint(forecast.data) : undefined}><i className="ev-fc" />prognoza do 24:00</span>}{agg === 'week' && <span className="event">Słupek bledszy = mniej dób z wartością w tygodniu</span>}</div>
     <div className="tgrid">
       {ordered.map((metric) => { const body = metric.group === 'body', a = meanValid(rows, metric.key, from, to, body);
         return <section key={metric.key} className="panel tcard"><header><h3 className="th"><i style={{ background: groups[metric.group].color }} />{metric.label}</h3>

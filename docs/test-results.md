@@ -2,6 +2,19 @@
 
 Najnowsze wpisy na górze. Starsze (2026-11-02 – 2026-11-04): [archiwum](completed/04-test-results-archive.md). Pakiety instaluje pnpm; skrypty `npm run …` w raporcie działają tak samo jak `pnpm run …`.
 
+## 2026-11-06 — `prognoza-bez-wysilku-v2` (po `prognoza-profil-v1`)
+
+- `prognoza-profil-v1` (średni profil) wdrożona i sprawdzona w przeglądarce, potem zastąpiona po uwadze użytkownika (profil oczekiwał treningu). Test wsteczny na tych samych 77 dobach (skrypt i wartości poza repozytorium): na dobach z resztą dnia bez znaczącej aktywności v1/E zawyża o 9–17%, a profil z okien bez znaczących kalorii aktywnych (próg 3 kcal) ma błąd 0,4–0,6% i obciążenie −0,4…+0,1%; na wszystkich dobach jak v0 (obciążenie −2…−19%).
+- `pnpm test`: testy `energy-forecast-profile` przepisane pod v2 (okna z treningiem poza profilem, próg 3 kcal włącznie, tylko okna total, za mało dób / doba bez odczytu aktywnych / godzina bez okien codziennych → v0, dolna granica v0, doby 23 i 25 h, odczyt z magazynu); wynik pełnego `pnpm test` i `pnpm run build` poniżej w osobnym wpisie, jeśli był uruchomiony po zmianie.
+- Prognoza dziś na magazynie użytkownika (odczyt): reguła `prognoza-bez-wysilku-v2`, 9 kompletnych dób historii, ok. 90–97 kcal na godzinę czuwania do 24:00 (wcześniej ok. 270 kcal na godzinę w porze treningu), wynik powyżej dolnej granicy v0.
+- Dodatkowo okres 1–14.06.2026 (14 dób, historia z maja–czerwca): v2 zaniża o 38% o 06:00, 36% o 12:00, 27% o 15:00, 14% o 18:00, 6% o 21:00 (v0: 44/42/31/17/8%), E jest nieobciążone (−1…−2%, błąd 9–11%); na 3–5 dobach bez wysiłku w reszcie dnia (tylko późne odcięcia) v2 ma błąd 0,7–1,4%, v0 1,8–4,1%, E 5–14% za wysoko. W tym okresie trening był niemal codziennie.
+- Nie sprawdzono w przeglądarce nowej wersji interfejsu (serwer użytkownika działa na starym kodzie do restartu), dób z podróżą i innymi porami roku.
+
+## 2026-11-06 — ocena prognozy kalorii i `verify:takeout` po rekonsyliacji
+
+- `pnpm run verify:takeout` na magazynie użytkownika po zapisach rekonsyliacji (serwer działał, odczyt): integralność, skróty oryginałów, liczby wierszy i odczyt typów poprawne, 5 s.
+- Test wsteczny prognozy (odczyt zapisanych okien 10-minutowych, bez żądań do Google i bez zapisu; skrypt i wartości poza repozytorium): 77 zakończonych dób z kompletnymi oknami, wnioski i błędy względne w [planie MVP](plan/01-foundation-mvp.md). Ograniczenia: jedno konto, ok. 3,5 miesiąca, doby bez zmiany czasu; granice doby liczone indeksem okna (godzina lokalna = indeks/6); wynik nie dotyczy dni z podróżą ani innych pór roku. Kod prognozy bez zmian, więc testów automatycznych nie dodawano.
+
 ## 2026-11-06 — rekonsyliacja starszych dób, kryteria odbioru M1, wirtualizacja tabeli
 
 - `pnpm test`: 157 testów zaliczonych (nowe: `google-reconcile` — weryfikacja doby po końcu doby i po potwierdzeniu „bez zmian”, plan paczek bez luk i poza oknem odświeżania, ważność zależna od wieku, limit i kolejność, serwis z odczytem wymuszonym; `acceptance-flow` — sześć metryk od zapisanych stron do publikacji dla krojenia: cały zakres, doba po dobie, tydzień, 3 doby ze stronami po 40 punktów, porcje maksymalne ze stronami po 150, na zakresach z dobą 23 h, 25 h i zwykłą; powtórzone odczyty z polityką i bez niej; późna korekta jako jedna rewizja z wierszem audytu; Takeout obok API; restart w trakcie wielostronicowego odczytu). `pnpm run build`: poprawny (typecheck i Vite).

@@ -20,7 +20,7 @@ export function DateControl({ date, onDate }: { date: string; onDate: (date: str
     <button type="button" className="btn ghost" disabled={date === today} onClick={() => onDate(today)}>Dziś</button></div>;
 }
 
-export function ZoomDialog({ title, sub, controls, legend, onClose, children }: { title: string; sub?: string; controls?: ReactNode; legend?: ReactNode; onClose: () => void; children: ReactNode }) {
+export function ZoomDialog({ title, sub, controls, legend, onClose, children }: { title: ReactNode; sub?: string; controls?: ReactNode; legend?: ReactNode; onClose: () => void; children: ReactNode }) {
   const ref = useDialog(onClose); const { W, H } = zoomSize();
   // the top bar (date, tabs) stays usable while a chart is zoomed: the dialog starts below it
   const top = Math.max(0, Math.round(document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 0));
