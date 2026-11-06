@@ -18,7 +18,7 @@ Modułowy monolit TypeScript: React + Vite w przeglądarce, lokalny serwer Node 
 Magazyn ma wersję 13 (`currentStoreVersion`, sprawdzanie przez `storeHas(version, since)`). Kluczowe elementy:
 
 - **Oryginały.** Strony odpowiedzi Google w zadaniach (`google_read_jobs`, `google_read_pages`) z kursorem wznowienia, skrótem konta i metadanymi (`google_read_job_meta`, audyt zastąpień `google_read_supersessions`); pliki Takeout jako bajty z planem i checkpointem per plik; pliki CSV jako tekst z mapowaniem i decyzjami (`csv_imports*`).
-- **Rodzaje odczytu Google:** pomiary (masa, tłuszcz), sumy dobowe producenta (kroki, dystans, kalorie total i aktywne), okna 10-minutowe UTC dla doby warszawskiej (tętno, kalorie, kroki, dystans) i listy źródeł wpisów.
+- **Rodzaje odczytu Google:** pomiary (masa, tłuszcz), sumy dobowe producenta (kroki, dystans, kalorie total i aktywne), okna 10-minutowe UTC dla doby warszawskiej (tętno, kalorie, kroki, dystans) i listy źródeł wpisów (tylko odczyt ręczny; odświeżanie automatyczne ich nie pobiera).
 - **Warstwa pochodna** `google_page_windows`: sparsowane okna stron pod digestem strony i wersjonowaną nazwą parsera, zapisywane w tej samej transakcji co strona. Zmiana wyniku parsera to nowa nazwa (`@2`); stare wiersze są pomijane. Kolejność odczytu: pamięć procesu (limit 400 tys. okien) → warstwa pochodna → parsowanie oryginału.
 - **Snapshoty dób:** wartości, statusy, uwagi i dowody jednej rewizji; notatki użytkownika z osobną historią (`user_note_versions`, pochodzenie z importów w `user_note_sources`).
 

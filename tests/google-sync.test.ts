@@ -220,8 +220,8 @@ test('backfill: czyta wszystkie luki, wznawia bez powtórzeń, zatrzymuje się p
     const status = service.backfillStatus();
     assert.equal(status.state, 'done');
     assert.deepEqual(status.kinds.map((item) => [item.covered, item.total]), syncKinds.map(() => [19, 19]));
-    // 23 chunks in all (1 per steps, distance and active, 2 for total-calories, 2 per window kind, 3 per source list, 1 per measurement), one read before the stop; plus five refused requests
-    assert.deepEqual([status.readsThisRun, rollups], [22, 22 + 5]);
+    // 17 chunks in all (1 per steps, distance and active, 2 for total-calories, 2 per window kind, 1 per measurement), one read before the stop; plus five refused requests
+    assert.deepEqual([status.readsThisRun, rollups], [16, 16 + 5]);
     assert.equal(env.db.prepare("SELECT COUNT(*) AS n FROM google_read_jobs WHERE state != 'complete'").get()?.n, 0);
 
     rollups = 0;
@@ -273,4 +273,22 @@ test('przebieg automatyczny: luka starsza niż nadrabianie uruchamia uzupełnian
     await service.scheduledRun();
     assert.equal(service.backfillStatus().state, 'stopped');
   } finally { env.db.close(); rmSync(env.dir, { recursive: true, force: true }); }
+});
+
+test('plan odświeżania: waga i tkanka tłuszczowa są czytane najwyżej raz na godzinę, reszta co połowę interwału', () => {
+  const db = store();
+  try {
+    for (const kind of syncKinds) {
+      const window = instant(kind);
+      done(db, kind, window ? warsawDay('2026-03-07').start : '2026-03-07', window ? warsawDay('2026-03-09').end : '2026-03-10', '2026-03-10T10:00:00.000Z');
+      done(db, kind, window ? warsawDay('2026-03-10').start : '2026-03-10', window ? warsawDay('2026-03-10').end : '2026-03-11', '2026-03-10T10:00:00.000Z');
+    }
+    const quarter = 15 * 60000;
+    const kinds = (at: string) => planSync(db, '2026-03-10', Date.parse(at), quarter).map((read) => read.kind);
+    const soon = kinds('2026-03-10T10:30:00Z');
+    assert.equal(soon.includes('steps'), true);
+    assert.equal(soon.includes('weight') || soon.includes('body-fat'), false);
+    const later = kinds('2026-03-10T11:05:00Z');
+    assert.equal(later.includes('weight') && later.includes('body-fat'), true);
+  } finally { db.close(); }
 });

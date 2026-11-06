@@ -54,10 +54,6 @@ export const bandShareSchema = z.object({
   totalWindows: z.number().int().positive(), heartRate: z.object({ windows: z.number().int().nonnegative() }).nullable(),
   activeEnergy: z.object({ bandKcal: z.string(), bandWindows: z.number().int(), otherKcal: z.string(), otherWindows: z.number().int() }).nullable(), activeEnergyRead: z.boolean(),
 });
-const dataSourceSchema = z.object({ platform: z.string().nullable(), application: z.string().nullable(), device: z.string().nullable(), recordingMethod: z.string().nullable() });
-const sourceRecordsSchema = z.array(z.object({ source: dataSourceSchema, records: z.number().int().nonnegative() })).nullable();
-export const daySourcesSchema = z.array(z.object({ date: z.iso.date(), steps: sourceRecordsSchema, activeEnergy: sourceRecordsSchema }));
-export type DaySources = z.infer<typeof daySourcesSchema>[number];
 export const seriesSchema = z.object({ unit: z.enum(['steps', 'mm', 'kcal']), windowsPerDay: z.number(), windows: z.number(), hours: z.array(z.object({ start: z.iso.datetime(), value: z.string().nullable() })), slots: z.array(z.string().nullable()), total: z.string() }).nullable();
 export type Series = z.infer<typeof seriesSchema>;
 export const heartRateDaySchema = z.object({ dayWindows: z.number().int().positive(), windows: z.array(z.object({ start: z.iso.datetime(), avg: z.number(), min: z.number(), max: z.number() })) }).nullable();
@@ -125,15 +121,6 @@ export async function post(path: string, body: object): Promise<Response> {
   return fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Trivimo-Request': '1' }, body: JSON.stringify(body) });
 }
 /** Readable name of who supplied the records: the app that counted them and, when known, the device. */
-export function sourceName(source: z.infer<typeof dataSourceSchema>): string {
-  if (source.platform === 'FITBIT') return source.device === 'MobileTrack' ? 'Telefon (aplikacja Health)' : `Opaska ${source.device ?? 'Fitbit'}`;
-  if (source.platform === 'HEALTH_CONNECT') {
-    if (source.application === 'com.google.android.apps.fitness') return 'Google Fit (Health Connect)';
-    if (source.application === 'android' || source.application === 'com.android.healthconnect.phone') return 'Telefon: Android (Health Connect)';
-    return `Health Connect: ${source.application ?? source.device ?? 'nieznana aplikacja'}`;
-  }
-  return [source.platform, source.application ?? source.device].filter(Boolean).join(': ') || 'Nieznane źródło';
-}
 /** Whose estimate the calories are (decision of 2026-11-03), from the share of windows with heart rate. */
 export function energySource(windows: number | null | undefined, total: number): string {
   if (windows === null || windows === undefined) return 'nieustalone (brak odczytu tętna)';

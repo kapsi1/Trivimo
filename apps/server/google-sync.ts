@@ -14,11 +14,14 @@ import type { GoogleAuth } from './google-auth.ts';
 import { readGoogleJobPage, startGoogleReadJob } from './google-read-service.ts';
 
 /** Kinds refreshed automatically: the six M1 metrics' raw material plus the ten-minute wear evidence. */
-export const syncKinds = ['steps', 'distance', 'total-calories', 'active-energy-burned', 'heart-rate-10m', 'active-energy-10m', 'total-calories-10m', 'steps-10m', 'distance-10m', 'steps-sources', 'active-energy-sources', 'weight', 'body-fat'] as const;
+export const syncKinds = ['steps', 'distance', 'total-calories', 'active-energy-burned', 'heart-rate-10m', 'active-energy-10m', 'total-calories-10m', 'steps-10m', 'distance-10m', 'weight', 'body-fat'] as const;
 export type SyncKind = (typeof syncKinds)[number];
 export interface SyncRead { kind: SyncKind; first: string; last: string; begin: string; end: string }
 export interface SyncOutcome { at: string; result: 'ok' | 'authorization_required' | 'scope_missing' | 'migration_required' | 'error'; code?: string; reads: number; retryAt?: string; energy?: { published: number; unchanged: number } | 'failed' }
 
+/** Measurements that change a few times a day at most: read at most once an hour instead of every run. */
+const slowKinds: ReadonlySet<SyncKind> = new Set(['weight', 'body-fat']);
+const slowRefreshMs = 60 * 60000;
 const maxCatchUpDays = 13; // keeps a ten-minute-window range within 14 days even across a 25-hour day
 const windowed = (kind: SyncKind) => kind.endsWith('-10m');
 /** Window and measurement (weight, body fat) jobs hold the UTC bounds of Warsaw days; the others hold civil dates. */
@@ -55,7 +58,7 @@ export function planSync(db: DatabaseSync, today: string, nowMs: number, refresh
     if (!completed.get(kind, recent.begin, recent.end)) plan.push({ kind, first, last: recentLast, ...recent });
     const current = boundsFor(kind, today, today);
     const previous = completed.get(kind, current.begin, current.end);
-    if (!previous || nowMs - Date.parse(String(previous.created_at)) >= refreshAfterMs) plan.push({ kind, first: today, last: today, ...current });
+    if (!previous || nowMs - Date.parse(String(previous.created_at)) >= (slowKinds.has(kind) ? Math.max(refreshAfterMs, slowRefreshMs) : refreshAfterMs)) plan.push({ kind, first: today, last: today, ...current });
   }
   return plan;
 }

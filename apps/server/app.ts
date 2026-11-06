@@ -5,7 +5,6 @@ import { listDays } from '../../packages/storage/days.ts';
 import { sourceKindSchema } from '../../packages/contracts/source-records.ts';
 import { listSourceRecords } from '../../packages/storage/source-records.ts';
 import { currentStoreVersion, readCanonicalDay, readEarliestMetricDays, storeHas } from '../../packages/storage/canonical-days.ts';
-import { readDaySourcesRange } from '../../packages/storage/google-day-sources.ts';
 import { readUserNote } from '../../packages/storage/user-notes.ts';
 import { readBodySourceDay } from '../../packages/storage/body-source-day.ts';
 import { readGoogleBodySourceDay } from '../../packages/storage/google-body-source-day.ts';
@@ -158,16 +157,6 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
       if (!source || source.prepare('PRAGMA user_version').get()?.user_version !== currentStoreVersion) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
       try {
         response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }).end(JSON.stringify(readDaySeries(source, metric.data, date.data)));
-      } catch { response.writeHead(500, { 'Cache-Control': 'no-store' }).end(); }
-      return;
-    }
-    if (request.method === 'GET' && url.pathname === '/api/google/day-sources') {
-      const from = z.iso.date().safeParse(url.searchParams.get('from')), to = z.iso.date().safeParse(url.searchParams.get('to'));
-      if (!from.success || !to.success || from.data > to.data || (Date.parse(to.data) - Date.parse(from.data)) / 86400000 > 365 || Number(from.data.slice(0, 4)) < firstSupportedYear || Number(to.data.slice(0, 4)) > 9998) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
-      const source = typeof sourceDb === 'function' ? sourceDb() : sourceDb;
-      if (!source || source.prepare('PRAGMA user_version').get()?.user_version !== currentStoreVersion) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
-      try {
-        response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }).end(JSON.stringify(readDaySourcesRange(source, from.data, to.data)));
       } catch { response.writeHead(500, { 'Cache-Control': 'no-store' }).end(); }
       return;
     }

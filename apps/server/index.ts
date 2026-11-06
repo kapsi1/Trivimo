@@ -36,7 +36,7 @@ if (process.env.TRIVIMO_GOOGLE_CLIENT_FILE) {
 }
 // Automatic refresh is configured separately from opening the UI: unset or invalid means manual only.
 const syncMinutes = Number(process.env.TRIVIMO_GOOGLE_SYNC_MINUTES);
-const googleSync = googleAuth && sourcePath ? new GoogleSyncService(sourcePath, googleAuth, { intervalMinutes: Number.isInteger(syncMinutes) && syncMinutes >= 15 && syncMinutes <= 1440 ? syncMinutes : null }) : undefined;
+const googleSync = googleAuth && sourcePath ? new GoogleSyncService(sourcePath, googleAuth, { intervalMinutes: Number.isInteger(syncMinutes) && syncMinutes >= 5 && syncMinutes <= 1440 ? syncMinutes : null }) : undefined;
 createApp(createDemoDatabase(), getSourceDb, sourcePath ? new TakeoutService(sourcePath) : undefined, [], googleAuth, googleAuth && sourcePath ? new GoogleReadService(sourcePath, googleAuth) : undefined, googleSync, sourcePath ? new CsvImportService(sourcePath) : undefined).listen(3000, '127.0.0.1', () => {
   console.log('Lokalne API: http://127.0.0.1:3000');
   googleSync?.start();

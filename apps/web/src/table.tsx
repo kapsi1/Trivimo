@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { z } from 'zod';
-import { bandRangeSchema, daySourcesSchema, groups, metricOf, quality, rangeSchema, sourceName, useChunkedJson, type DayRow, type DaySources, type Group, type MetricKey } from './api.ts';
+import { bandRangeSchema, groups, metricOf, quality, rangeSchema, useChunkedJson, type DayRow, type Group, type MetricKey } from './api.ts';
 import { meanValid } from './derive.ts';
 import { StatusChip } from './details.tsx';
 import { addDays, dow, fmtD, formatRational, isoWeek, maxDate, mondayOf, nf, warsawToday, WDS , firstDay } from './format.ts';
@@ -70,14 +70,6 @@ function rowNotes(row: DayRow, today: string): string[] {
   if (row.snapshot) return row.snapshot.notes;
   return row.date >= '2026-01-01' && row.date < today ? ['Brak odczytu Google dla tej doby (przerwa w odczytach; uzupełnianie historii ją nadrobi)'] : [];
 }
-function sourcesText(day: DaySources | undefined): { short: string; detail: string } {
-  if (!day || (day.steps === null && day.activeEnergy === null)) return { short: '—', detail: 'Brak odczytu listy źródeł' };
-  const names = new Map<string, number>();
-  for (const item of [...(day.steps ?? []), ...(day.activeEnergy ?? [])]) names.set(sourceName(item.source), (names.get(sourceName(item.source)) ?? 0) + item.records);
-  const detail = ([['Kroki', day.steps], ['Kalorie aktywne', day.activeEnergy]] as const).map(([label, items]) => `${label}: ${items === null ? 'nie odczytano' : items.length === 0 ? 'brak wpisów' : items.map((item) => `${sourceName(item.source)} (${item.records} wpisów)`).join(', ')}`).join('\n');
-  return { short: names.size === 0 ? 'brak wpisów' : [...names].sort((a, b) => b[1] - a[1]).map(([name]) => name).join(', '), detail };
-}
-
 /** Metrics behind the visible column groups: the scope of "Od początku" in the table (all metrics when none is shown). */
 export function tableMetricKeys(cols: Columns): MetricKey[] {
   const keys = columnGroups.filter(([group]) => cols[group]).flatMap(([, list]) => list);
@@ -90,12 +82,10 @@ export function TableView({ from, to, cols, onCols, onOpenDay, onOpenMetric }: {
   const [sort, setSort] = useState<{ key: 'date' | MetricKey; desc: boolean }>({ key: 'date', desc: true });
   const result = useChunkedJson('/api/day-range', from, to, rangeSchema, (parts): z.infer<typeof rangeSchema> => parts.every((part) => part.state === 'ready') ? { state: 'ready', days: parts.flatMap((part) => part.state === 'ready' ? part.days : []) } : { state: 'not_ready' });
   const band = useChunkedJson(readable ? '/api/google/band-share-range' : null, read, to, bandRangeSchema, (parts) => parts.flat());
-  const sources = useChunkedJson(readable ? '/api/google/day-sources' : null, read, to, daySourcesSchema, (parts) => parts.flat());
   const scroller = useRef<HTMLDivElement>(null);
   const [view, setView] = useState({ top: 0, height: 600 });
   const [heights, setHeights] = useState({ day: 35, week: 31 });
   const bandBy = useMemo(() => new Map((band.data ?? []).map((item) => [item.date, item])), [band.data]);
-  const sourcesBy = useMemo(() => new Map((sources.data ?? []).map((item) => [item.date, item])), [sources.data]);
   const ready = result.data?.state === 'ready';
   useLayoutEffect(() => {
     const element = scroller.current;
@@ -119,7 +109,7 @@ export function TableView({ from, to, cols, onCols, onOpenDay, onOpenMetric }: {
   const byWeek = sort.key === 'date' && !onlyNotes;
   const shown = columnGroups.filter(([group]) => cols[group]);
   const metricCount = shown.reduce((sum, [, keys]) => sum + keys.length, 0);
-  const colCount = 1 + metricCount + (cols.food ? 1 : 0) + (cols.ctx ? 2 : 0) + 2;
+  const colCount = 1 + metricCount + (cols.food ? 1 : 0) + (cols.ctx ? 1 : 0) + 2;
   const sortOn = (key: 'date' | MetricKey) => setSort((current) => current.key === key ? { key, desc: !current.desc } : { key, desc: true });
   const sortButton = (key: 'date' | MetricKey, label: React.ReactNode, aria: string) => <button type="button" onClick={() => sortOn(key)} aria-label={`Sortuj: ${aria}`}>{label}{sort.key === key ? sort.desc ? ' ↓' : ' ↑' : ''}</button>;
   const ariaSort = (key: 'date' | MetricKey) => sort.key === key ? sort.desc ? 'descending' as const : 'ascending' as const : undefined;
@@ -140,14 +130,13 @@ export function TableView({ from, to, cols, onCols, onOpenDay, onOpenMetric }: {
         <td colSpan={colCount - 1 - metricCount} className="l">śr. dzienna z dób potwierdzonych · doby z wartością / w zakresie</td></tr>;
   }
   function dayRow(row: DayRow) {
-    const notes = rowNotes(row, today), share = bandBy.get(row.date), src = sourcesText(sourcesBy.get(row.date)), weekend = dow(row.date) === 0 || dow(row.date) === 6;
+    const notes = rowNotes(row, today), share = bandBy.get(row.date), weekend = dow(row.date) === 0 || dow(row.date) === 6;
     return <tr key={row.date} data-kind="day" className={`rowlink ${weekend ? 'we' : ''}`} onClick={() => onOpenDay(row.date)}>
       <td className="date"><button type="button" className="datebtn" aria-label={`Otwórz dzień ${row.date}`} onClick={() => onOpenDay(row.date)}><span className="wd">{WDS[dow(row.date)]}</span>{row.date}</button>{row.date === today && <> <span className="chip prov">w toku</span></>}</td>
       {shown.flatMap(([, keys]) => keys.map((key) => { const metric = metricOf(key), value = row.snapshot?.metrics[key];
         return <td key={key}><button type="button" className={`cellbtn ${value?.value ? value.status === 'provisional' ? 'v-prov' : '' : 'v-none'}`} aria-label={`${metric.label}, ${row.date}: ${value ? quality[value.status] : 'brak obliczonego wyniku'}`} onClick={(event) => { event.stopPropagation(); onOpenMetric(row.date, key); }}>{value?.status !== 'provisional' && <StatusChip value={value} compact />}{value?.value ? formatRational(value.value, metric.decimals) : '—'}</button></td>; }))}
       {cols.food && <td className="food-c" aria-label="M3">·</td>}
-      {cols.ctx && <><td>{share?.heartRate ? <span className="bandbar" title={`${share.heartRate.windows} z ${share.totalWindows} okien 10-minutowych z tętnem`}>{nf(share.heartRate.windows / share.totalWindows * 100)} %<i><b style={{ width: `${share.heartRate.windows / share.totalWindows * 100}%` }} /></i></span> : <span className="v-none">—</span>}</td>
-        <td className="l src-c" title={src.detail}>{src.short}</td></>}
+      {cols.ctx && <><td>{share?.heartRate ? <span className="bandbar" title={`${share.heartRate.windows} z ${share.totalWindows} okien 10-minutowych z tętnem`}>{nf(share.heartRate.windows / share.totalWindows * 100)} %<i><b style={{ width: `${share.heartRate.windows / share.totalWindows * 100}%` }} /></i></span> : <span className="v-none">—</span>}</td></>}
       <td className="notes-c" title={notes.join('; ')}>{notes.join('; ')}</td><td className="notes-c" title={row.userNote?.content ?? ''}>{row.userNote?.content ?? ''}</td>
     </tr>;
   }
@@ -172,11 +161,11 @@ export function TableView({ from, to, cols, onCols, onOpenDay, onOpenMetric }: {
       <button type="button" className="btn hide-sm" disabled title="Po podstawowym UI">Eksport CSV</button></div>
     {!all.some((row) => row.snapshot) && <div role="status" className="empty"><p>W tym zakresie nie ma jeszcze obliczonych wyników dziennych. Uzupełnianie historii w „Źródła danych” odczyta brakujące doby.</p></div>}
     <div className="twrap" ref={scroller}><table className="days"><thead>
-      <tr className="g"><th className="date" />{shown.map(([group, keys]) => <th key={group} colSpan={keys.length} style={{ '--gc': groups[group].color } as React.CSSProperties}><span>{groups[group].label}</span></th>)}{cols.food && <th style={{ '--gc': 'var(--c-food)' } as React.CSSProperties}><span>Jedzenie · M3</span></th>}{cols.ctx && <th colSpan={2}><span>Kontekst</span></th>}<th colSpan={2}><span>Opis dnia</span></th></tr>
+      <tr className="g"><th className="date" />{shown.map(([group, keys]) => <th key={group} colSpan={keys.length} style={{ '--gc': groups[group].color } as React.CSSProperties}><span>{groups[group].label}</span></th>)}{cols.food && <th style={{ '--gc': 'var(--c-food)' } as React.CSSProperties}><span>Jedzenie · M3</span></th>}{cols.ctx && <th><span>Kontekst</span></th>}<th colSpan={2}><span>Opis dnia</span></th></tr>
       <tr className="c"><th className="date l" scope="col" aria-sort={ariaSort('date')}>{sortButton('date', 'Data', 'Data')}</th>
         {shown.flatMap(([, keys]) => keys.map((key) => { const metric = metricOf(key); return <th key={key} scope="col" aria-sort={ariaSort(key)}>{sortButton(key, <>{metric.short}{metric.unit && <span className="faint"> {metric.unit}</span>}</>, metric.label)}</th>; }))}
         {cols.food && <th scope="col" className="faint">Spożyte kcal</th>}
-        {cols.ctx && <><th scope="col" title="Część doby warszawskiej, w której urządzenie mierzyło tętno (okna 10-minutowe). Dowód pomiaru, nie noszenia przez całe okno.">Opaska</th><th scope="col" className="l" title="Aplikacje i urządzenia, które zapisały kroki lub kalorie aktywne tego dnia; najedź na komórkę, aby zobaczyć liczbę wpisów.">Źródła</th></>}
+        {cols.ctx && <><th scope="col" title="Część doby warszawskiej, w której urządzenie mierzyło tętno (okna 10-minutowe). Dowód pomiaru, nie noszenia przez całe okno.">Opaska</th></>}
         <th scope="col" className="l">Uwagi</th><th scope="col" className="l">Notatka</th></tr>
     </thead><tbody>{body.length ? body : <tr><td className="l" colSpan={colCount}>Brak dni z uwagami w tym zakresie.</td></tr>}</tbody></table></div>
     <div className="daycards">{rows.slice(0, 90).map((row) => { const share = bandBy.get(row.date)?.heartRate, total = bandBy.get(row.date)?.totalWindows ?? 144, notes = rowNotes(row, today);

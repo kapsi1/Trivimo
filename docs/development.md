@@ -23,7 +23,7 @@ Skopiuj `.env.example` do `.env` (poza gitem). Wczytują go serwer i skrypty CLI
 | Zmienna | Znaczenie |
 | --- | --- |
 | `TRIVIMO_GOOGLE_CLIENT_FILE` | Ścieżka do JSON klienta OAuth w prywatnym katalogu poza repozytorium (sekret zostaje w pliku) |
-| `TRIVIMO_GOOGLE_SYNC_MINUTES` | 15–1440; włącza automatyczne odświeżanie przy starcie i co tyle minut |
+| `TRIVIMO_GOOGLE_SYNC_MINUTES` | 5–1440; włącza automatyczne odświeżanie przy starcie i co tyle minut |
 | `TRIVIMO_DATA_DIR` | Katalog bazy; domyślnie `%LOCALAPPDATA%\Trivimo` |
 
 Baza `takeout-raw.sqlite` leży w katalogu danych, obok `google-token.dpapi` i plików roboczych importu. Nie jest szyfrowana przez aplikację. Gdy bazy nie ma, serwer tworzy pustą w bieżącej wersji (zbudowaną i zweryfikowaną w katalogu tymczasowym); istniejącej nigdy nie zmienia. Test na czystej bazie: ustaw `TRIVIMO_DATA_DIR` na nowy katalog poza repozytorium (autoryzację Google trzeba wtedy wykonać osobno). Gdy środowisko izolowane nie widzi bazy, uruchom serwer w zwykłym terminalu; „Spróbuj ponownie” ponawia odczyt bez restartu.
@@ -49,7 +49,7 @@ Kopia wymaga ścieżki poza repozytorium, nie nadpisuje pliku i potrzebuje syste
 
 Token dostępu jest tylko w pamięci serwera; token odświeżania w `google-token.dpapi` (Windows DPAPI, CurrentUser), odnawiany automatycznie. Odrzucenie przez Google usuwa zapis. Odłączenia konta w UI jeszcze nie ma.
 
-**Odświeżanie** (zmienna `TRIVIMO_GOOGLE_SYNC_MINUTES`, przycisk „Odśwież teraz” albo kliknięcie stanu w stopce nawigacji): wznawia niedokończone zadania, czyta dobę bieżącą i trzy ostatnie zakończone, po przerwie do 13 dni wstecz. Zatrzymuje się na pierwszym błędzie; stan pokazuje tylko kody. Pojedyncze żądanie jest ponawiane przy 429 i przejściowym 503 (do 4 prób, `Retry-After` lub rosnący odstęp); trwały 429 wstrzymuje kolejne przebiegi do podanego czasu. Odczyty automatyczne podlegają [polityce odczytów](decisions.md#ustalenia-datowane); ręczne (`google:read`, panel „Odczyt próbny”) nie są usuwane. Gdy po przebiegu zostają nieodczytane doby od 2026-01-01, serwer sam uruchamia uzupełnianie historii (po ręcznym zatrzymaniu — dopiero po restarcie). Minioną dobę bez odczytu tabela oznacza uwagą o przerwie.
+**Odświeżanie** (zmienna `TRIVIMO_GOOGLE_SYNC_MINUTES`, przycisk „Odśwież teraz” albo kliknięcie stanu w stopce nawigacji): wznawia niedokończone zadania, czyta dobę bieżącą (co połowę interwału; masę i tkankę tłuszczową najwyżej raz na godzinę) i trzy ostatnie zakończone, po przerwie do 13 dni wstecz. Rodzajów odczytu jest 11, więc pełny przebieg to około 11 żądań; listy źródeł nie są pobierane. Zatrzymuje się na pierwszym błędzie; stan pokazuje tylko kody. Pojedyncze żądanie jest ponawiane przy 429 i przejściowym 503 (do 4 prób, `Retry-After` lub rosnący odstęp); trwały 429 wstrzymuje kolejne przebiegi do podanego czasu. Odczyty automatyczne podlegają [polityce odczytów](decisions.md#ustalenia-datowane); ręczne (`google:read`, panel „Odczyt próbny”) nie są usuwane. Gdy po przebiegu zostają nieodczytane doby od 2026-01-01, serwer sam uruchamia uzupełnianie historii (po ręcznym zatrzymaniu — dopiero po restarcie). Minioną dobę bez odczytu tabela oznacza uwagą o przerwie.
 
 **Uzupełnianie historii** (panel w „Pokryciu historii”; `POST /api/google/backfill` z `{"action":"start","from":"RRRR-MM-DD"}` lub `{"action":"stop"}`; postęp w polu `backfill` stanu): te same rodzaje co odświeżanie, od 2026-01-01 lub wybranej daty (≥ 2000-01-01) do wczoraj, od najnowszych okresów. Doba jest pokryta, gdy pełny odczyt objął ją po jej końcu. Paczki: 13 dób dla okien 10-minutowych, 14 dla kalorii total, 7 dla list źródeł, 30 dla masy i tłuszczu, 90 dla pozostałych sum. Postęp liczony z bazy przeżywa restart, ale sam przebieg po restarcie serwera trzeba wznowić. Zatrzymanie kończy bieżącą paczkę i niczego nie cofa.
 
@@ -75,7 +75,7 @@ Import zachowuje bajty wszystkich plików Google Health, a dla sześciu typów M
 Wszystkie punkty wymagają lokalnego ciasteczka sesji (`GET /api/session`, `HttpOnly`, `SameSite=Strict`) i kontroli Host/Origin; POST dodatkowo nagłówka `X-Trivimo-Request`. Główne grupy (lista w `apps/server/app.ts`):
 
 - Dni: `/api/day`, `/api/day-range`, `/api/earliest-days`, `POST /api/day/note`.
-- Google: `/api/google/status|start|callback`, `sync-status`, `POST sync`, `POST backfill`, `coverage?year=`, `jobs`, `daily-candidates`, `body-candidates`, `band-share`, `band-share-range`, `day-series`, `day-sources`, `heart-rate`, `heart-rate-range`, `energy-forecast`.
+- Google: `/api/google/status|start|callback`, `sync-status`, `POST sync`, `POST backfill`, `coverage?year=`, `jobs`, `daily-candidates`, `body-candidates`, `band-share`, `band-share-range`, `day-series`, `heart-rate`, `heart-rate-range`, `energy-forecast`.
 - Importy: `/api/takeout/upload|zip-preview|preview|import`, `/api/source-account/*`, `/api/source-records`, `/api/csv/inspect|preview|import|decision|imports|day`.
 
 ## Dane rzeczywiste
