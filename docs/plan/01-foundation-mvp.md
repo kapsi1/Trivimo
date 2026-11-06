@@ -1,8 +1,6 @@
 # P0 / M1 — fundament i pierwsze sześć metryk
 
-Cel: użyteczna tabela/wykresy dla 2026 i nowych dni, oparta na własnej bazie. Bez map, dziennika, AI i zapisów zewnętrznych jako warunku startu. [Kontrakty](../data-contracts.md) są obowiązujące; stos z [architektury](../architecture.md) jest propozycją.
-
-Wykonane: próby P0 w [P0 — wykonane](../completed/01-p0-probes.md), a magazyn, sześć metryk z danych Google, odświeżanie, backfill, tabela, przegląd, kopia i odtworzenie w [M1 — wykonane](../completed/02-m1.md). Poniżej tylko to, co zostało.
+Cel: użyteczna tabela i wykresy dla 2026 i nowych dni z własnej bazy, bez map, dziennika, AI i zapisów zewnętrznych. Wykonane: [P0](../completed/01-p0-probes.md), [M1](../completed/02-m1.md). Poniżej tylko to, co zostało.
 
 ## M1: magazyn i przepływ
 
@@ -11,10 +9,10 @@ Wykonane: próby P0 w [P0 — wykonane](../completed/01-p0-probes.md), a magazyn
 
 ## M1: UI
 
-Układ z [projektu UI](../design/ui.md) jest wdrożony (2026-11-04, zob. [M1 — wykonane](../completed/02-m1.md#ui)). Zostało:
+Obecny interfejs: [projekt UI](../design/ui.md). Zostało:
 
-- [ ] Tabela: wirtualizacja przy dużych zakresach (rok to dziś ok. 420 wierszy z tygodniami, bez wirtualizacji).
-- [ ] Panel szczegółów: porównanie sum dobowych (kroki, dystans, kalorie) z Takeout. Dla masy i tkanki tłuszczowej panel pokazuje pomiary Takeout tej doby; dla sum nie ma jeszcze wyliczenia doby z wierszy eksportu.
+- [ ] Tabela: wirtualizacja przy dużych zakresach (zakres do „Od początku”, wiele lat; dziś bez wirtualizacji).
+- [ ] Pochodzenie wartości w UI: po usunięciu panelu szczegółów (2026-11-05) nie widać źródła, reguły, rewizji, historii odczytów, porównania z Takeout ani oznaczenia wartości z CSV. Zdecydować o formie (zob. [projekt UI](../design/ui.md#otwarte-pytania)); porównanie sum dobowych z Takeout wymaga wyliczenia doby z wierszy eksportu.
 - [ ] Prognoza spalonych kalorii (`prognoza-spoczynek-v0`): reguła wyboru okien wdrożona w najprostszej postaci (wszystkie dzisiejsze okna bez kroków i aktywnych kcal, co najmniej 6). Ocenić na kilku dobach, czy okna nocne lub dłuższe okno odniesienia dają lepszą stawkę; zmiana metody to nowa wersja reguły.
 - [ ] Eksport CSV wybranej projekcji (przycisk nieaktywny), z zabezpieczeniem przed formułami i zachowaniem jednostek/statusów.
 - [ ] Kopia zapasowa z interfejsu (Ustawienia pokazują polecenia CLI) oraz historia importów i dziennik zdarzeń w „Źródłach danych” — wymagają nowych punktów API.

@@ -4,11 +4,10 @@ Zależność M1: własny magazyn oryginałów i reguły sześciu metryk. Import 
 
 ## Odczyt archiwum i sesja importu
 
-Rozpoczęto import rozpakowanego katalogu Google Health: zachowanie bajtów plików, odczyt wierszy sześciu typów, podgląd, zamrożone skróty oraz checkpoint i wznowienie per plik. Pozostałe oryginały pozostają nieinterpretowane. Ograniczenia i weryfikacja są w [raporcie](../test-results.md); inne typy, kwalifikacja i projekcje są nadal niewykonane.
+Wykonane: import katalogu i plików ZIP Takeout do bazy (zachowane bajty, surowe wiersze sześciu typów, podgląd, zamrożony plan, checkpoint i wznowienie per plik), przypisanie importów do lokalnego konta po potwierdzeniu użytkownika, import CSV z mapowaniem (`csv-fill-v1`). Opis: [środowisko](../development.md#importy-plików).
 
-Dotychczasowe sesje przypisano do jednego lokalnego konta zgodnie z potwierdzeniem użytkownika. Kolejny import wymaga osobnego potwierdzenia tego samego konta; bez niego pozostaje nieprzypisany. Zakończone nieprzypisane importy można później przypisać po podglądzie i jawnym potwierdzeniu zamrożonego zestawu. Samo konto nie potwierdza tożsamości pomiarów ani replik.
-
-- [ ] ZIP: wdrożono 2026-11-04 (wybór pliku w przeglądarce, limity liczby plików, wielkości i współczynnika, strumieniowe wysłanie i rozpakowanie, ochrona przed path traversal/symlinkami i nadpisaniem, CRC-32, ZIP64, kilka części naraz, usuwanie plików tymczasowych). Zostało: sprawdzenie na prawdziwym archiwum z Takeout (dziś tylko archiwum utworzone lokalnie z tych samych plików) i jawny manifest części — import kilku części nie sprawdza, czy wybrano wszystkie.
+- [ ] ZIP: sprawdzenie na prawdziwym archiwum z Takeout (dotąd archiwum utworzone lokalnie z tych samych plików) i manifest części — import kilku części nie sprawdza, czy wybrano wszystkie.
+- [ ] CSV z mapowaniem: próba na rzeczywistym pliku użytkownika, podgląd wartości przed zapisem (dziś liczby i odrzucenia), strumieniowanie plików > 8 MiB.
 - [ ] Sprawdzić README/nagłówki/schemat i jednostki konkretnego eksportu. Czytnik CSV obsługuje cudzysłowy, przecinki, nowe linie, kodowanie/BOM i puste pola. Nazwa pliku/dzień wygenerowania nie jest czasem pomiaru. Schemat nieznany lub sprzeczny kieruje rekord do kwarantanny z powodem, bez zgadywania kolumn.
 - [ ] Archiwum ma digest, konto źródłowe i czas snapshotu. Ten sam użytkownik może mieć wiele eksportów; e-mail/nazwa ZIP nie są jedynym identyfikatorem konta. Metadane konta pozostają prywatne.
 - [ ] Preview pokazuje typy, zakres, liczby nowych/zmienionych/powtórzonych/nieobsługiwanych/konfliktowych rekordów, jakość i skutki dla kanonicznych wyników. Osobno „zachowane raw” i „zakwalifikowane”.
@@ -24,16 +23,15 @@ Dotychczasowe sesje przypisano do jednego lokalnego konta zgodnie z potwierdzeni
 - [ ] Aktywność: dzienne/minutowe pliki i legacy tracker summaries to odmienne reprezentacje. Przenieść wszystkie dostępne oryginały, ale nie sumować dziennej wartości z minutową i nie nadawać punktom nieznanych granic przedziału. Historyczny szacunkowy zapis całej doby do Connect nie jest źródłowym rozkładem minutowym.
 - [ ] Puste `summary_*` w treningach oznacza brak pola. Serie globalne HR/stref można dopasować po czasie jako osobną analizę z pokryciem; nie udawać źródłowego podsumowania sesji. Nocne podsumowania nie stają się fikcyjnymi punktami pomiaru.
 
-## Historia 2026 i ewentualne źródło Connect
+## Historia i ewentualne źródło Connect
+
+Historia 2026 z API jest uzupełniona i zakwalifikowana regułami M1 ([M1 — wykonane](../completed/02-m1.md)).
 
 - [ ] Zbudować prywatny raport pokrycia per typ/miesiąc i snapshot źródła. Porównywać tylko wspólny zakończony zakres: starszy Takeout nie ma obowiązku zawierać dni po eksporcie.
-- [ ] Kalorie total/active od 2026-01-01 kwalifikować tym samym kontraktem co przyszłe dni. Brak danych Takeout przed rozpoczęciem zapisu typu nie oznacza zera. Nie backfillować active z legacy `activityCalories` bez równoważności.
 - [ ] Z doświadczeń Health Sync wynika, że Connect może mieć wcześniejsze pomiary/zdarzenia nieobecne w danym eksporcie. Najpierw ocenić zakres różnic, bez obietnicy, że API uzupełni całość. To argument za opcjonalnym jednorazowym przechwyceniem, nie za obowiązkowym ciągłym Androidem.
 - [ ] Jeśli potrzebne, zaprojektować minimalny adapter Connect według [planu Android](08-sync-android.md). Zachować oryginalny `dataOrigin`, device/recordingMethod, czas/offset i rozróżnienie własnych importowanych kopii Health Sync. Nie traktować wszystkiego z pakietu Health Sync jako oryginału Fitbit.
 - [ ] Nie wyłączać integracji Google Health↔Connect tylko dlatego, że nowa aplikacja nie czyta Connect. Część danych telefonu może docierać do chmury właśnie tą drogą. Zmiana uprawnień dostawców jest osobną świadomą operacją.
-- [ ] Korekta 2026 najpierw mała próbka porównawcza, potem pełny backfill i raport luk. Starsze arkuszowe wyniki zdrowia nie są lepszym źródłem pomiaru niż udokumentowane oryginały.
-- [ ] **TODO:** audyt poprzednich lat po M1, z oceną zmian urządzeń, schematów i modeli. Od 2026-11-04 odczyt API sprzed 2026 działa na żądanie i doby są kwalifikowane regułami 2026 (decyzja użytkownika, [kontrakty](../data-contracts.md#historia-sprzed-2026-2026-11-04)); audyt ma ocenić, czy progi tych reguł są trafne dla starszych lat. Nie odczytano jeszcze rzeczywistej historii do magazynu.
-- [ ] Import CSV z mapowaniem (`csv-fill-v1`) jest wdrożony i sprawdzony syntetycznie; brakuje próby na rzeczywistym pliku użytkownika, podglądu wartości przed zapisem (dziś tylko liczby i odrzucenia) i strumieniowania plików większych niż 8 MiB.
+- [ ] **TODO:** audyt poprzednich lat po M1 (zmiany urządzeń, schematów i modeli). Odczyt API sprzed 2026 działa na żądanie, a doby kwalifikują reguły 2026 ([kontrakty](../data-contracts.md#historia-sprzed-2026-2026-11-04)); audyt ma ocenić trafność progów dla starszych lat.
 
 ## Arkusze i zakończenie migracji
 

@@ -1,6 +1,6 @@
 # Źródła, doświadczenia i granice potwierdzenia
 
-Przegląd publicznych dokumentów i dokumentacji projektu: **2026-11-02**. Nie przeprowadzono nowego OAuth, odczytu prywatnego konta API, zmiany uprawnień telefonu ani zapisu/usuwania pomiarów w ramach tworzenia tej dokumentacji. Wnioski z dotychczasowej analizy archiwum są doświadczeniem migracyjnym, nie dowodem obecnych odpowiedzi API.
+Przegląd publicznych dokumentów: **2026-11-02** (planowanie). Późniejsze sprawdzenia konkretnych metod i pól API przy implementacji M1 (2026-11-03) są zapisane z datą w [M1 — wykonane](completed/02-m1.md#health-api--wykonane-w-m1), a wyniki odczytów konta w [obserwacjach](completed/03-data-findings.md). Doświadczenia z Health Sync są wiedzą migracyjną, nie dowodem obecnych odpowiedzi API.
 
 ## Materiały Health Sync
 
@@ -15,13 +15,13 @@ Poniższe linki dotyczą sąsiedniego projektu w dotychczasowym układzie katalo
 | [Kontrakt Takeout](../../health-sync/docs/takeout.md) | Stabilne ID/wersje, preview, zamrożone decyzje wznowienia, indywidualne wykluczenia, wersje snu |
 | [Architektura](../../health-sync/docs/architecture.md), [kontrakty](../../health-sync/docs/data-contracts.md), [API](../../health-sync/docs/plan/google-health-api.md), [żywienie](../../health-sync/docs/plan/nutrition.md) | Rozdzielenie implementacji i planów, platformowych adapterów, tymczasowego eksportu zdrowia i właściwego źródła posiłków |
 
-Nie przenosimy dawnej architektury Connect→Room→Sheets jako wymogu nowej aplikacji. Nie przenosimy dawnych wyników buildów jako dowodu nowego kodu. Własna baza i desktop są teraz wybrane przez użytkownika, a nie tylko wariantem rekomendacji.
+Nie przenosimy dawnej architektury Connect→Room→Sheets ani wyników buildów Health Sync jako dowodu nowego kodu.
 
 Doświadczenia analizy danych: możliwa obecność Connect-only historii, różne daty snapshotów, kopie Fit/Fitbit i Health Sync, dni z samym bazowym wyliczeniem energii, różne modele active, niepełne pola podsumowań treningów i nakładające się wersje snu. Te przypadki wymagają syntetycznych testów oraz ograniczonej prywatnej walidacji. Prywatnych pomiarów, tras, kont i ID nie powielono tutaj.
 
 ## Google — źródła pierwotne
 
-Ponowne sprawdzenie 2026-11-02, przed czytnikiem CSV: [instrukcja eksportu Google Health](https://support.google.com/googlehealth/answer/14236615?hl=en) i [instrukcja Google Takeout](https://support.google.com/fit/answer/3024190?hl=en) opisują drogę eksportu i informacje o formatach dołączone do archiwum. Nie stanowią potwierdzenia konkretnych nagłówków, jednostek ani kompletności plików dla tego konta; dokumenty bez wskazanej wersji schematu. Czytnik jest na razie ogólny i testowany syntetycznie.
+[Eksport Google Health](https://support.google.com/googlehealth/answer/14236615?hl=en) i [Google Takeout](https://support.google.com/fit/answer/3024190?hl=en) (2026-11-02) opisują drogę eksportu, ale nie potwierdzają nagłówków, jednostek ani kompletności plików konta; dokumenty bez wersji schematu.
 
 | Dokument | Co sprawdzono / co nadal wymaga potwierdzenia |
 | --- | --- |
@@ -34,7 +34,7 @@ Ponowne sprawdzenie 2026-11-02, przed czytnikiem CSV: [instrukcja eksportu Googl
 | [TCX](https://developers.google.com/health/reference/rest/v4/users.dataTypes.dataPoints/exportExerciseTcx) | HTTP media, brak GPS/partialData i wymagane zakresy aktywności oraz lokalizacji |
 | [Vitals](https://developers.google.com/health/data-types/vitals), [sen](https://developers.google.com/health/data-types/sleep) | Podsumowania nocne/dzienne versus próbki, rozróżnienie metryk i danych sesji |
 | [Temperatura skóry](https://developers.google.com/health/data-types/skin-temperature) | Poziom beta czujników, ograniczenia urządzeń i read-only mimo szerokiego scope; delta versus model bazowy |
-| [Cloud/OAuth](https://developers.google.com/health/setup) | Klient, scopes, testowi użytkownicy i wymagania dostępu; żadnego nowego klienta nie utworzono |
+| [Cloud/OAuth](https://developers.google.com/health/setup) | Klient, scopes, testowi użytkownicy i wymagania dostępu (klient utworzono 2026-11-03) |
 | [Create](https://developers.google.com/health/reference/rest/v4/users.dataTypes.dataPoints/create) | Identifiable data points, asynchroniczna Operation i scopes; realny zapis per typ do sprawdzenia |
 | [HC katalog](https://developer.android.com/health-and-fitness/health-connect/data-types), [HealthConnectClient](https://developer.android.com/reference/kotlin/androidx/health/connect/client/HealthConnectClient) | Osobne lokalne typy/uprawnienia i operacje; nie jest to webowe API własnej aplikacji |
 | [AI assistance Google](https://developers.google.com/health/ai-assistance-and-developer-tools) | Pomoc Gemini dla deweloperów dokumentacji; nie endpoint gotowych narracji użytkownika Health |
@@ -47,7 +47,7 @@ Sprawdzone dokumenty nie uzasadniają obietnicy pełnego zapisu wszystkich danyc
 - [Uwierzytelnianie MCP/plugin](https://developers.openai.com/plugins/build/auth): OAuth 2.1/discovery/PKCE i weryfikacja uprawnień narzędzi; nie jest to token Health.
 - [Responses API — MCP](https://developers.openai.com/api/docs/guides/tools-connectors-mcp): osobna ścieżka integracji przez API, nie dowód wsparcia tej samej funkcji w kliencie ChatGPT.
 
-W tej analizie użyto skillu [OpenAI Docs](C:/Users/kk/.codex/skills/.system/openai-docs/SKILL.md) do doboru oficjalnych źródeł. Dostępność na Androidzie, uprawnienia konta, rozliczenia i zachowanie załączników pozostają osobnym spike; nie opieramy architektury na założeniu, że wystarczy sam prompt.
+Dostępność na Androidzie, uprawnienia konta, rozliczenia i zachowanie załączników pozostają osobnym spike; nie opieramy architektury na założeniu, że wystarczy sam prompt.
 
 ## Żywność, importy i mapy
 

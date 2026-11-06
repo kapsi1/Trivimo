@@ -1,6 +1,6 @@
 # Instrukcje dla agentów aplikacji Trivimo
 
-Dokumentacja po polsku, identyfikatory kodu po angielsku. Ten katalog zaczyna jako samodzielny zestaw planów; nie zakładaj istniejącego kodu ani narzędzi Health Sync.
+Dokumentacja po polsku, identyfikatory kodu po angielsku. Nie zakładaj dostępności kodu ani narzędzi Health Sync.
 
 ## Dobór kontekstu i zakres
 
@@ -28,7 +28,7 @@ Dokumentacja po polsku, identyfikatory kodu po angielsku. Ten katalog zaczyna ja
 
 ## Walidacja i dokumentacja
 
-- Wprowadź narzędzia testowania dopiero w P0. Potem uruchamiaj celowane testy, typecheck/build według wpływu. Dla docs sprawdź linki, semantyczną spójność i diff. Nie wymyślaj poleceń ani wyników nieistniejącego projektu.
+- Uruchamiaj celowane testy (`pnpm test`), typecheck/build według wpływu (docs/development.md). Dla docs sprawdź linki, semantyczną spójność i diff. Nie wymyślaj poleceń ani wyników nieistniejącego projektu.
 - Krytyczne testy: null/zero, DST, jednostki, źródła/repliki, niezależność od porcji importu, wznowienie, niejednoznaczny zapis, historia korekt i przywrócenie kopii.
 - Dokumentuj architekturę w docs/architecture.md, reguły w docs/data-contracts.md, przyszłą pracę w docs/plan/, decyzje w docs/decisions.md. Ukończony zakres przenoś z planu do docs/completed/ dopiero po faktycznym wykonaniu; nie twórz pozornych potwierdzeń.
 - Raport weryfikacji: data, komenda, wynik, ograniczenia. Test automatyczny nie potwierdza telefonu/konta. Niewykonany test ręczny pozostaje osobną pozycją.

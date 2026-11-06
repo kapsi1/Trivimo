@@ -1,26 +1,27 @@
 # Indeks dokumentacji
 
-Stan (2026-11-04): M1 w końcowej fazie — sześć metryk z Google Health API zakwalifikowanych od 2026-01-01, tabela dni, trendy, źródła, odświeżanie z uzupełnianiem historii, kopia i odtworzenie; otwarte punkty w [MVP](plan/01-foundation-mvp.md).
+Stan (2026-11-06): M1 w końcowej fazie; pozostałe punkty w [planie MVP](plan/01-foundation-mvp.md).
 
 | Potrzeba | Dokument |
 | --- | --- |
-| Uruchomienie i wykonane kontrole | [Środowisko](development.md), [Raport testów](test-results.md) |
-| Ukończone próby P0 i zakres M1 | [P0 — wykonane](completed/01-p0-probes.md), [M1 — wykonane](completed/02-m1.md) |
-| Cel, pierwszy zakres i start agenta | [README](../README.md), [AGENTS](../AGENTS.md) |
-| Moduły, baza, proponowany stos i umiejscowienie serwera | [Architektura](architecture.md) |
-| Definicje metryk, pochodzenie, kalorie i uwagi | [Kontrakty danych](data-contracts.md) |
-| Ustalenia użytkownika, propozycje i decyzje do podjęcia | [Decyzje](decisions.md) |
-| Kolejność i kryteria etapów | [Plan](plan/README.md) |
-| Pierwsze sześć metryk, ciemna tabela i wykresy | [MVP](plan/01-foundation-mvp.md) |
-| Projekt UI (wdrożony 2026-11-04): nawigacja, widoki, stany wartości, prototyp | [Projekt UI](design/ui.md) |
-| Pełny katalog odczytu Health API, OAuth i agregacja | [Health API](plan/02-health-api.md) |
-| Takeout, opcjonalne dane Connect, migracja historii | [Import i migracja](plan/03-import-migration.md) |
-| Dashboardy, treningi, HR, strefy i mapy | [Analiza i treningi](plan/04-ui-workouts.md) |
-| Produkty, posiłki, receptury, planer | [Żywienie](plan/05-nutrition.md) |
-| OFF, inne katalogi, FatSecret, obecny arkusz | [Źródła żywienia](plan/06-food-sources.md) |
-| ChatGPT na telefonie, własne AI, MCP, głos i zdjęcia | [AI i wprowadzanie](plan/07-ai-chatgpt.md) |
-| Zapis do Health/Connect, konflikty, przyszły Android | [Synchronizacja i Android](plan/08-sync-android.md) |
-| Kopie, zabezpieczenia, testy i eksploatacja | [Jakość i operacje](plan/09-quality-operations.md) |
-| Dokumenty producentów, zakres potwierdzenia i dawne materiały | [Źródła](references.md) |
+| Uruchomienie, konfiguracja, CLI, REST | [Środowisko](development.md) |
+| Wyniki kontroli | [Raport testów](test-results.md) |
+| Moduły, magazyn, docelowy model i hosting | [Architektura](architecture.md) |
+| Definicje metryk, reguły kwalifikacji, uwagi | [Kontrakty danych](data-contracts.md) |
+| Decyzje użytkownika i decyzje otwarte | [Decyzje](decisions.md) |
+| Interfejs: widoki, interakcje, język wizualny | [Projekt UI](design/ui.md), [logo](design/logo/README.md) |
+| Etapy, stan M1, zasady pracy z danymi rzeczywistymi | [Plan](plan/README.md) |
+| Pozostała praca M1 | [MVP](plan/01-foundation-mvp.md) |
+| Katalog Health API | [Health API](plan/02-health-api.md) |
+| Takeout, Connect, migracja historii | [Import i migracja](plan/03-import-migration.md) |
+| Dashboardy, treningi, HR, mapy | [Analiza i treningi](plan/04-ui-workouts.md) |
+| Produkty, posiłki, planer | [Żywienie](plan/05-nutrition.md), [źródła żywienia](plan/06-food-sources.md) |
+| ChatGPT, AI, MCP | [AI i wprowadzanie](plan/07-ai-chatgpt.md) |
+| Zapis do Health/Connect, Android | [Synchronizacja](plan/08-sync-android.md) |
+| Bezpieczeństwo, testy, kopie | [Jakość i operacje](plan/09-quality-operations.md) |
+| Dokumenty producentów i materiały Health Sync | [Źródła](references.md) |
+| Pomysły do oceny | [Pomysły](ideas.md) |
 
-Wymagania są opisem celu, checkboxy pozostałą pracą, a przykładowe modele propozycją implementacyjną. Faktyczny zakres i wyniki kontroli opisano w raporcie testów.
+Wykonane i archiwalne: [P0](completed/01-p0-probes.md), [M1](completed/02-m1.md), [obserwacje z danych](completed/03-data-findings.md), [archiwum raportu testów](completed/04-test-results-archive.md).
+
+Plany opisują cel; checkboxy to pozostała praca, a modele w planach są propozycjami. Faktyczny stan i wyniki kontroli są w raporcie testów i w `completed/`.

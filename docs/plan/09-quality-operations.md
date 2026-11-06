@@ -4,8 +4,8 @@ Wymagania przekrojowe od P0. Dobierać testy do ryzyka i wpływu; nie tworzyć t
 
 ## Bezpieczeństwo i dane prywatne
 
-- [ ] Serwis lokalny domyślnie tylko loopback, z sesją i kontrolą Origin/Host, ochroną CSRF, ograniczonym CORS oraz bezpiecznym uploadem. Loopback sam nie chroni przed innymi stronami/programami. Dostęp spoza komputera wymaga wybranego modelu TLS/auth; nie otwierać portu na 0.0.0.0 bez decyzji wdrożeniowej.
-- [ ] Tokeny i klucze w systemowym/serwerowym secret store, oddzielone od DB dostępnej UI. Nie umieszczać w localStorage, kodzie bundla, URL, logach, nazwach eksportów ani promptach. Google OAuth, sesja aplikacji i autoryzacja MCP są różnymi relacjami.
+- [ ] Serwis lokalny: loopback, sesja `SameSite=Strict`, kontrola Host/Origin i nagłówek żądania dla POST już działają (zob. [środowisko](../development.md#rest)); loopback nie chroni przed lokalnymi programami. Dostęp spoza komputera wymaga wybranego modelu TLS/auth; nie otwierać portu na 0.0.0.0 bez decyzji wdrożeniowej.
+- [ ] Tokeny i klucze w systemowym/serwerowym secret store (token Google: DPAPI), oddzielone od DB dostępnej UI. Nie umieszczać w localStorage, kodzie bundla, URL, logach, nazwach eksportów ani promptach. Google OAuth, sesja aplikacji i autoryzacja MCP są różnymi relacjami.
 - [ ] Prywatny katalog danych poza repo, restrykcyjne prawa OS, szyfrowanie dysku i chronione kopie. Osobne zasady dla dużych oryginałów, tras, audio i zdjęć. Szyfrowanie pliku bazy, jeśli potrzebne, z wybranym mechanizmem zarządzania kluczem; nie obiecywać go przez samo użycie SQLite.
 - [ ] Domyślnie bez zewnętrznej analityki i wysyłania pomiarów do raportowania błędów. Logi: kod błędu, typ operacji, lokalne niejawne correlation ID i postęp; bez payloadów, route bounds, identyfikatorów kont i tokenów. Debug z prywatnymi danymi tylko świadomie, poza repo i z retencją.
 - [ ] Importowane pliki, wyniki modeli i strony produktów niezaufane. Limity ZIP/XML/obrazów/audio/JSON, walidacja jednostek i czasu, odrzucanie nieobsługiwanych treści. Prompt injection nie może zmienić uprawnień ani wykonać arbitralnego URL/SQL. Eksport tabel chroniony przed CSV/formula injection.
@@ -36,4 +36,4 @@ Wymagania przekrojowe od P0. Dobierać testy do ryzyka i wpływu; nie tworzyć t
 
 ## Raportowanie
 
-Po rozpoczęciu implementacji utworzyć `docs/development.md` z faktycznymi komendami oraz `docs/test-results.md`: data, komenda, wynik i ograniczenia. Stan obecny: tylko dokumentacja, brak builda/testów aplikacji. Nie przenosić wyników Gradle z Health Sync jako dowodu nowej aplikacji.
+Komendy: [środowisko](../development.md); wyniki: [raport testów](../test-results.md) z datą, komendą, wynikiem i ograniczeniami. Wyniki Gradle z Health Sync nie są dowodem dla tej aplikacji.

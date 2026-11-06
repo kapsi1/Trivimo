@@ -1,112 +1,69 @@
-# Projekt UI — propozycja
+# Projekt UI
 
-Stan: propozycja z 2026-11-04, częściowo zaakceptowana przez użytkownika tego samego dnia (widok startowy, precyzja masy, kroje pisma, prognoza kalorii, interakcje wykresów; zob. [decyzje](../decisions.md)). Wdrożona w `apps/web` tego samego dnia; różnice wdrożenia opisuje sekcja [Wdrożenie](#wdrożenie-2026-11-04). Interaktywny prototyp na danych syntetycznych: [ui-prototype.html](ui-prototype.html), opublikowany jako prywatny [artefakt](https://claude.ai/artifact/PbNSGrNRUVXLGGNt1kaVSU). Reguły danych z [kontraktów](../data-contracts.md) mają pierwszeństwo przed tym projektem.
+Stan wdrożenia w `apps/web` na 2026-11-06. Projekt powstał 2026-11-04 (prototyp na danych syntetycznych: [ui-prototype.html](ui-prototype.html), prywatny [artefakt](https://claude.ai/artifact/PbNSGrNRUVXLGGNt1kaVSU)), a 2026-11-05 interfejs uproszczono: zniknął panel szczegółów wartości, ikony „?” z metadanymi, zakładki dnia „Podsumowanie” i „Pochodzenie danych” oraz oznaczenie komórek uzupełnionych z CSV. Prototyp pokazuje więc wcześniejszą wersję. Reguły danych z [kontraktów](../data-contracts.md) mają pierwszeństwo; decyzje użytkownika: [rejestr](../decisions.md).
 
-## Cel i założenia
+## Założenia
 
-- Jeden użytkownik, desktop w przeglądarce, ciemny motyw (decyzja 3). Telefon: podstawowy odczyt i w przyszłości szybkie wpisy jedzenia.
-- Główna praca to przegląd dnia, porównanie dni i sprawdzenie pochodzenia wartości. Diagnostyka odczytów jest potrzebna rzadko, więc nie zajmuje głównych widoków.
-- Stan wartości widać w formie, nie tylko w tekście: brak, częściowy, nieporównywalny i konflikt mają stałe oznaczenia we wszystkich widokach.
+- Jeden użytkownik, desktop w przeglądarce, ciemny motyw; telefon: podstawowy odczyt, w przyszłości szybkie wpisy jedzenia.
+- Główna praca to przegląd dnia i porównanie dni. Diagnostyka odczytów jest w „Źródłach danych”, nie w głównych widokach.
+- Stan wartości widać w formie, nie tylko w tekście (sekcja [Język wizualny](#język-wizualny)).
 
 ## Nawigacja
 
-Stała lewa nawigacja zastępuje prowizoryczne zakładki (w tym „Przykład”); można ją zwinąć do samych ikon (stan zapamiętany w przeglądarce, nazwy w podpowiedziach). Na wąskim ekranie dolny pasek: Dzień, Dni, Trendy, Jedzenie, Więcej.
+Lewa nawigacja (zwijana do ikon, stan zapamiętany w przeglądarce): **Dane** — Dzień, Trendy, Tabela dni, Treningi; **Jedzenie** — Dziennik, Produkty i przepisy, Planer; **System** — Źródła danych, Ustawienia. Pozycje przyszłych etapów (Treningi M2, jedzenie M3–M4) są wyszarzonymi placeholderami z opisem zakresu. Na wąskim ekranie dolny pasek: Dzień, Trendy, Dni, Jedzenie, Więcej.
 
-| Grupa | Pozycja | Stan |
-| --- | --- | --- |
-| Dane | Dzień, Tabela dni, Trendy | M1 |
-| Dane | Treningi | placeholder M2 |
-| Jedzenie | Dziennik, Produkty i przepisy | placeholder M3 |
-| Jedzenie | Planer | placeholder M4 |
-| System | Źródła danych, Ustawienia | M1 |
+Stopka nawigacji pokazuje czas ostatniego odświeżenia Google (harmonogram w podpowiedzi); kliknięcie uruchamia odświeżenie. Globalny błąd sieci jest stanem synchronizacji, nie uwagą przy każdym dniu.
 
-Stopka nawigacji pokazuje stan synchronizacji (ostatnie odświeżenie, harmonogram) i ostatnią kopię zapasową. Kliknięcie prowadzi do „Źródeł danych”. Globalny błąd sieci jest stanem synchronizacji, nie uwagą przy każdym dniu.
-
-Pasek górny ma tytuł widoku, kontekst daty lub okresu danego widoku oraz przycisk „Dodaj” (notatka do dnia; „Posiłek” M3 i „Pomiar wagi” M7 jako nieaktywne pozycje). Adresy widoków i ich zakładek przez hash (`#dzien`, `#dzien/podsumowanie`, `#dzien/2026-11-03/pochodzenie`, `#zrodla/importy`, `#jedzenie/planer`, `#tabela`, …), żeby dało się wrócić do konkretnego miejsca; domyślna zakładka nie jest zapisywana w adresie, a zmiana dnia zachowuje bieżącą zakładkę.
+Pasek górny: tytuł (w widoku Dzień — data), kontrolka daty lub zakresu widoku i „Dodaj” (notatka do dnia; „Posiłek” i „Pomiar wagi” nieaktywne). Adresy w hashu: `#dzien[/RRRR-MM-DD][/zakładka]`, `#zrodla[/zakładka]`, `#jedzenie[/zakładka]`, `#tabela`, `#trendy`; domyślna zakładka i dzisiejsza data nie trafiają do adresu.
 
 ## Widoki
 
-### Dzień (ekran startowy — zatwierdzone)
+### Dzień (ekran startowy)
 
-Wybór dnia strzałkami, polem daty, „Dziś”, a z klawiatury ←/→ i `t`. Nagłówek pokazuje „w toku · stan na HH:MM” dla bieżącej doby i „doba 23 h / 25 h” przy zmianie czasu. Strefa czasowa nie jest wyświetlana w nagłówkach ani opisach; widać ją tylko w ustawieniach (decyzja z 2026-11-04). Zakładki: Przebieg doby (domyślna, ustalenie użytkownika 2026-11-04), Podsumowanie, Pochodzenie danych, Jedzenie (M3), Treningi (M2).
+Wybór dnia strzałkami, polem daty, „Dziś”, z klawiatury ←/→ i `t`. Dla bieżącej doby „w toku · stan na HH:MM” (czas ostatniego udanego odświeżenia), przy zmianie czasu znacznik „doba 23 h / 25 h”. Strefa czasowa nie jest pokazywana poza Ustawieniami. Zakładki: **Przebieg doby** (domyślna), **Dane godzinowe**, Jedzenie (M3), Treningi (M2).
 
-- **Podsumowanie:** karty metryk w czterech grupach — Energia, Aktywność, Ciało i Jedzenie (placeholder: spożyte kalorie, bilans). Karta ma wartość, stan, porównanie ze średnią 7 dni z liczbą dób potwierdzonych („6 z 7 dób”) i miniwykres 14 dni (dla masy i tkanki linia łączy dni z pomiarem, bez przerw). Dla masy i tkanki bez pomiaru karta pokazuje „ostatni pomiar … · data”, nie przenosi go na dzień. Grupa Ciało ma też kartę „Tętno”: średnia okien z pomiarem, obok zakres min–maks., porównanie ze średnią 7 dni i miniwykres 14 dni (kreska min–maks., linia średniej); powiększenie pokazuje 7 / 14 / 30 / 90 dni. Pod kartami „Doba w skrócie” (spalone kcal na godzinę z podziałem na aktywne i pozostałe, mały wykres tętna), uwagi automatyczne i edytowalna „Moja notatka”. Bez osobnego paska okien „HR” i opisu udziału opaski pod wykresem: udział opaski jest w tooltipie kalorii i w kolumnie „Opaska” tabeli.
-- **Prognoza spalonych kalorii (doba w toku):** karta „Spalone kalorie” pokazuje w tym samym wierszu co wartość „Prognoza: X kcal”. Na wykresach godzinowych reszta bieżącej godziny i przyszłe godziny są przerywanymi słupkami, a na wykresach dni przerywany obrys nad dzisiejszym słupkiem. Metoda: spalone do teraz + stawka spoczynkowa × pozostały czas doby (23/25 h przy zmianie czasu). Stawka pochodzi z dzisiejszych okien 10-minutowych bez kroków i bez aktywnych kcal. To własna, nazwana i wersjonowana pochodna (`prognoza-spoczynek-v0`), nie wartość producenta ani BMR. Nie trafia do tabeli, średnich ani eksportu. Panel „?” opisuje założenie: rzeczywista wartość zwykle będzie wyższa. Dokładną regułę wyboru okien (np. minimalna liczba okien, okna nocne) trzeba ustalić na danych przed implementacją.
-- **Przebieg doby:** wykres godzinowy z przełącznikiem metryki i tabela danych godzinowych (dostępność). Dla starszego modelu kalorii zamiast wykresu wyjaśnienie braku rozkładu. Pod spodem wykres tętna (realizuje punkt MVP „seria tętna w widoku dnia”).
-- **Tętno w dniu:** okna 10-minutowe z rollUp: pas min–maks. i linia średniej okna, na tej samej osi godzin co pozostałe wykresy. Okna bez pomiaru to przerwy, bo w ciągu doby oznaczają brak opaski. Nagłówek: średnia okien, min–maks. i liczba okien z pomiarem. Mały wykres tętna jest też w „Dobie w skrócie”. Tooltip: zakres 10 minut, średnia, min–maks.
-- **Pochodzenie danych:** źródła wpisów dnia z rolą (wybrane przez producenta, kopia, replika niedoliczana), reguły i rewizja wyniku, historia odczytów doby.
+- **Przebieg doby:** karty metryk w grupach Energia, Aktywność, Ciało. Karta ma wartość dnia ze stanem i porównanie ze średnią 7 poprzednich dni („6 z 7 dób”); dla masy i tkanki bez pomiaru — „ostatni pomiar … · data”, bez przenoszenia na dzień. Karty energii i aktywności mają miniwykres godzinowy doby (z okien 10-minutowych), karta „Tętno” — wykres okien. Kliknięcie powiększa wykres. Pod kartami edytowalna „Moja notatka”.
+- **Dane godzinowe:** tabela godzin (spalone i aktywne kcal, kroki, dystans, zakres tętna) — dostępny odpowiednik wykresów.
+- **Prognoza (doba w toku):** karta spalonych kalorii pokazuje „Prognoza: X kcal” (`prognoza-spoczynek-v0`, [kontrakty](../data-contracts.md#pochodne-prezentacyjne-ui-2026-11-04)); na wykresach godzinowych pozostała część doby jest przerywana, od końca ostatniego okna kalorii. Nie trafia do tabeli, średnich ani eksportu.
+- **Powiększenie godzinowe:** przełącznik metryki, opcjonalna linia tętna (prawa oś, bpm). Tytuł podaje wartość dobową producenta (tę samą co karta i tabela), a sumę godzin tylko przy jej braku, z dopiskiem. Dla starszego modelu kalorii i doby bez odczytu — wyjaśnienie braku rozkładu zamiast zer.
+- **Tętno doby:** okna 10-minutowe jako pas min–maks. z linią średniej; okna bez pomiaru to przerwy. Oś dopasowana do danych (np. górna linia 175 dla maks. 171, 200 dla 212 z marginesem na słupki).
 
 ### Tabela dni
 
-- Zakres: 7 / 30 / 90 dni / rok albo własny „od – do” (pola daty zsynchronizowane z przyciskami: przycisk wypełnia pola, a zakres kończący się dziś o długości przycisku go zaznacza; do 366 dni, zapamiętywany w przeglądarce); filtr „Tylko dni z uwagami”; przełączanie grup kolumn (zapamiętywane w przeglądarce); eksport CSV nieaktywny do czasu realizacji.
-- Grupy kolumn z kolorem grupy: Ciało, Aktywność, Energia, Jedzenie (jedna kolumna-placeholder „Spożyte kcal”, M3), Kontekst (opaska z paskiem udziału, źródła), Opis dnia (uwagi, notatka).
-- Zamrożony nagłówek i kolumna daty. Przy sortowaniu po dacie wiersz tygodnia ze średnią dzienną z dób potwierdzonych i liczbą dób z wartością („5/7”), zamiast pozornej średniej z braków.
-- Kliknięcie komórki otwiera boczny panel szczegółów zamiast sekcji pod tabelą, więc tabela zostaje na miejscu.
-- Na telefonie lista kart dni; karta otwiera widok dnia.
-
-### Panel szczegółów wartości
-
-Wspólny dla tabeli i kart dnia: wartość i stan z powodem, „Skąd ta wartość” (źródło, reguła), część zależna od grupy (model i źródło szacunku kalorii z podziałem aktywnych kcal na okna z tętnem i bez; uzgodnienie źródeł kroków; pomiary dnia i kopie dla masy), odczyty, porównanie z Takeout, uwagi dnia, rewizja oraz przejście do dnia lub jego pochodzenia. To realizuje punkt MVP „kliknięcie komórki: oryginalna wartość źródła, czas odczytu i porównanie API/Takeout”.
-
-### Interakcje wykresów (zatwierdzone)
-
-Dotyczy wykresów w widokach Dzień i Trendy.
-
-- **Kliknięcie wykresu powiększa go** w oknie nad widokiem. Karta metryki w Dniu otwiera historię wokół wybranego dnia (7 / 14 / 30 / 90 dni, wybrany dzień wyróżniony). Wykres godzinowy otwiera się z przełącznikiem metryki i z linią tętna (średnie okien 10-min) na tym samym wykresie, ze skalą w bpm po prawej; tooltip godziny dodaje średnie tętno. Tytuł powiększenia odpowiada wykresowi źródłowemu („Doba w skrócie” albo „Przebieg doby”). Wysokość okna jest stała przy przełączaniu metryk. Wykres trendu z tymi samymi przyciskami zakresu co widok Trendy (30 dni / 90 dni / Rok / Od 1 sty) oraz przełącznikiem dni / tygodni. Okno ma wąskie marginesy, żeby wykres zajmował jak najwięcej miejsca. Esc zamyka.
-- **Ikona „?” w kółku w prawym górnym rogu** każdego wykresu i karty (także w powiększeniu) otwiera prawy panel z metadanymi: „Skąd ta wartość”, reguła, model, źródło szacunku, odczyty, Takeout, rewizja. Dla serii godzinowej i trendu panel opisuje serię: definicję, źródło, zgodność z dobą, pas opaski, zdarzenia na osi, sposób czytania i jednostkę. Kliknięcie komórki w tabeli dni nadal otwiera ten panel bezpośrednio.
-- **Tooltip po najechaniu** na wartość jest krótki: data (albo zakres godzin, albo tydzień) i wartość z jednostką. Dla kalorii dodatkowo „Źródło: opaska / telefon / mieszane” i „Opaska: X %”, a dla dzisiejszych spalonych kalorii „Prognoza: X kcal”. Stan, powody i pozostałe metadane są w tabeli i w panelu „?”. Obszar najechania obejmuje całą kolumnę dnia lub godziny, nie tylko słupek. Tooltip uzupełnia tabelę danych godzinowych i panel, nie zastępuje ich (dostępność bez myszy).
+- Zakres: Tydzień, Miesiąc, 3 i 6 miesięcy, Rok, 2 lata, 5 lat, Od początku (pierwszy dzień z danymi widocznych kolumn) albo własne „od – do”; pola i lista są zsynchronizowane, wybór zapamiętany w przeglądarce. Dłuższe zakresy są pobierane porcjami po ≤ 366 dni.
+- Grupy kolumn (przełączane, zapamiętane): Ciało, Aktywność, Energia, Kontekst (część dnia z opaską z paskiem udziału, źródła), Opis dnia (uwagi, notatka). Zamrożony nagłówek i kolumna daty; przy sortowaniu po dacie wiersze tygodni ze średnią z dób potwierdzonych i liczbą dób z wartością („5/7”).
+- Kliknięcie wiersza lub komórki otwiera dzień. Na telefonie lista kart dni.
+- Eksport CSV jeszcze nie istnieje.
 
 ### Trendy
 
-Okres 30 dni / 90 dni / Rok (365 dni wstecz) / Od 1 sty oraz agregacja Dni albo Tygodnie (tydzień bledszy, gdy ma mniej dób z wartością). Dni przed 2026 są w zakresie „Rok” oznaczone jako niezaimportowana historia, a nie jako zera ani luki w odczytach. Osiem kart: sześć metryk M1, tętno (pionowa kreska min–maks. dnia, linia średniej okien łącząca dni z pomiarem) i placeholder tętna spoczynkowego (M2; osobny typ API, nie wyliczany z okien). Wartości dnia tętna to min, maks. i średnia średnich okien — własna agregacja do prezentacji, nie tętno spoczynkowe. Wykresy metryk: słupki od zera dla sum, linia dla pomiarów, łącząca dni z pomiarem (kropka oznacza dzień z pomiarem; brak nie jest wartością). Bez stałego bloku „Jak czytać”; legenda zostaje tylko dla oznaczeń (starszy model, okres nieporównywalny, prognoza), a objaśnienia są w panelu „?”. Nagłówek karty ma średnią z dób potwierdzonych i ich liczbę. Zdarzenia na osi zamiast niewidocznych skoków: okres samej energii bazowej (kreskowany), początek opaski i pełnego modelu kalorii; słupki starszego modelu kalorii kreskowane.
+Ten sam wybór zakresu co w tabeli oraz agregacja Dni albo Tygodnie (tydzień bledszy przy mniejszej liczbie dób z wartością). Karty sześciu metryk (kolejność jak w dniu) i tętna (kreska min–maks. dnia, linia średniej okien) ze średnią okresu w nagłówku; dzisiejsza doba nie wchodzi do średnich sum. Placeholdery: tętno spoczynkowe (M2, osobny typ API, nie liczone z okien) i „Porównania i korelacje”. Słupki od zera dla sum, linia łącząca dni z pomiarem dla masy i tkanki. Legenda: starszy model kalorii, okres nieporównywalny, prognoza do 24:00. Zdarzenia na osi wyliczane z całej historii: okresy samej energii bazowej, doby sprzed importowanej historii, pierwsza doba pełnego modelu kalorii (bez „początku opaski”, bo próg noszenia nie jest ustalony).
 
 ### Źródła danych
 
-Zakładki zamiast jednej długiej strony:
-
-- **Połączenia:** karty Google Health API (stan, zakresy, ostatni i następny odczyt, co jest odświeżane, „Odśwież teraz”), Google Takeout, oraz przyszłe: Health Connect (M8), źródła jedzenia (M3–M4), zapis do Google/Connect (M7).
-- **Pokrycie historii:** kalendarz 2026 z dobami pokrytymi odczytem po końcu doby i lukami, postęp według rodzaju odczytu, „Uzupełnij luki”.
-- **Importy plików:** import Takeout z podglądem przed zapisem i historia importów.
-- **Diagnostyka:** zadania odczytu, zwinięty „Odczyt próbny” i dziennik zdarzeń (limity 429, kopie). Tu trafia to, co dziś jest w głównej zakładce Google.
+- **Połączenia:** Google Health API (stan, zakresy, ostatni odczyt, „Odśwież teraz”), Google Takeout, przyszłe źródła jako opisy.
+- **Pokrycie historii:** kalendarz roku (doba pokryta, gdy wszystkie rodzaje objął pełny odczyt po jej końcu; kolor pośredni — część rodzajów), postęp według rodzaju, uzupełnianie od wybranej daty. Zakończenie uzupełniania zgłasza globalne powiadomienie.
+- **Importy plików:** import CSV z mapowaniem i listą importów (wycofanie/przywrócenie), import Takeout (ZIP), oryginalne wiersze Takeout.
+- **Diagnostyka:** zadania odczytu i „Odczyt próbny”.
 
 ### Ustawienia
 
-Strefa dnia, precyzja prezentacji, pierwszy dzień tygodnia, kopie zapasowe (lokalizacja, ostatnia kopia, „Utwórz kopię teraz”), cele kalorii i makr (placeholder M4), prywatność.
+Wartości tylko do odczytu: strefa dnia Europe/Warsaw, precyzja, tydzień od poniedziałku; polecenia CLI kopii i sprawdzenia odtworzenia.
 
-### Placeholdery jedzenia i treningów
+## Interakcje wykresów
 
-Widok „Jedzenie” ma zakładki Dziennik, Produkty i przepisy, Planer, Importy; każda to opis zakresu z etykietą etapu. Treningi i zakładki dnia „Jedzenie” / „Treningi” tak samo. Szczegóły zaprojektujemy razem z etapami M2–M4.
+Kliknięcie wykresu lub karty otwiera powiększenie (Esc zamyka). Tooltip po najechaniu obejmuje całą kolumnę dnia lub godziny i jest krótki: data/zakres godzin i wartość z jednostką; dla kalorii także źródło szacunku (opaska / telefon / mieszane) i udział opaski, dla dzisiejszych spalonych kalorii prognoza. Tooltip uzupełnia tabele danych, nie zastępuje ich.
 
 ## Język wizualny
 
-- **Kolory grup:** energia pomarańczowy, aktywność morski (też kolor akcji), ciało niebieski, tętno/opaska lawendowy, jedzenie limonkowy (tylko placeholdery). Kolory stanów osobne: żółty dla uwag i konfliktu, czerwony dla błędu i luki.
-- **Stany wartości:** potwierdzona — sama liczba; częściowa — przygaszona liczba i znacznik „w toku”; nieporównywalna — „—” i kreskowany znacznik; konflikt — żółty znacznik; brak — „—”, nigdy 0. Na wykresach: półprzezroczysty słupek dla doby częściowej, kreskowanie dla starszego modelu i okresów nieporównywalnych.
-- **Typografia (zatwierdzone):** Bricolage Grotesque (nagłówki), IBM Plex Sans (interfejs, cyfry tabelaryczne), IBM Plex Mono (daty, etykiety, identyfikatory reguł). Wszystkie na licencji SIL OFL; w aplikacji dołączyć jako lokalne pliki zamiast Google Fonts, żeby lokalna aplikacja nie łączyła się z zewnętrznym serwerem.
-- **Precyzja (zatwierdzone):** masa 0,1 kg, tkanka tłuszczowa 0,1 %, dystans 0,01 km; tylko prezentacja, przechowywanie dokładne.
-- Liczby w formacie pl-PL, jednostki zawsze widoczne w nagłówku kolumny lub przy wartości.
-
-## Różnice względem planu MVP
-
-- „Przegląd” dzieli się na **Dzień** i **Trendy**; „Dane” to **Tabela dni**; „Źródła/Importy” to **Źródła danych** z zakładkami. Ustawienia jak w planie.
-- Szczegóły komórki w panelu bocznym zamiast pod tabelą.
-- Wiersze tygodni z pokryciem w tabeli i agregacja tygodniowa w trendach — nowe propozycje.
-- Zdarzenia na osi trendów realizują zasadę z [planu analiz](../plan/04-ui-workouts.md): zmiana algorytmu lub urządzenia jest oznaczeniem, nie niewidocznym skokiem.
-
-## Wdrożenie (2026-11-04)
-
-Wdrożono widoki i interakcje opisane wyżej, na danych z serwera. Różnice i ograniczenia:
-
-- Tętno okien (średnia, min, maks.) pochodzi z zapisanych stron odczytu `heart-rate-10m` (`/api/google/heart-rate`, `/api/google/heart-rate-range`); wcześniej obecność okna służyła tylko jako dowód pomiaru.
-- Prognoza: stawka to średnia total kcal ze wszystkich dzisiejszych okien bez kroków i bez aktywnych kcal, co najmniej 6 okien (inaczej brak prognozy); prognoza = suma okien do ostatniego okna z wartością + stawka × pozostałe okna doby. Brak odczytu kroków lub aktywnych kcal oznacza brak prognozy, nie zerową aktywność. Ocena reguły na danych pozostaje w [planie](../plan/01-foundation-mvp.md).
-- „Stan na HH:MM” to czas ostatniego udanego odświeżenia (albo najnowszego odczytu); przerywane słupki zaczynają się od końca ostatniego okna kalorii.
-- Zdarzenia na osi trendów są wyliczane z danych: okresy samej energii bazowej, doby sprzed 2026, pierwsza doba pełnego modelu kalorii (tylko w Trendach, które czytają całą historię). Zdarzenia „początek opaski” nie ma, bo próg „dnia z noszeniem” nie jest zatwierdzony.
-- Kalendarz pokrycia: doba jest „pokryta”, gdy wszystkie rodzaje odczytu objął pełny odczyt po jej końcu (`/api/google/coverage`); kolor pośredni oznacza część rodzajów.
-- Panel szczegółów porównuje z Takeout tylko pomiary masy i tkanki tłuszczowej; sumy dobowe z Takeout nie są jeszcze wyliczane.
-- Ustawienia pokazują stałe wartości (strefa, precyzja, tydzień od poniedziałku) i polecenia kopii; kopii, historii importów i dziennika zdarzeń z interfejsu jeszcze nie ma. Stopka nawigacji nie pokazuje ostatniej kopii, bo serwer jej nie zna.
-- Kolumna „Źródła” pokazuje pełne nazwy (otwarte pytanie poniżej).
-- Przebieg doby (ustalenia użytkownika 2026-11-04): tytuły wykresów podają wartość dnia — dla metryk godzinowych wartość dobową producenta (ta sama liczba co na karcie i w tabeli), a sumę godzin tylko przy braku wartości producenta, z dopiskiem; dla tętna średnią okien i zakres min–maks. Powiększenia z zakładki „Przebieg doby” mają wybór daty (strzałki, pole daty, „Dziś”, także ←/→) i zostają otwarte przy zmianie dnia; powiększenia z „Podsumowania” go nie mają. Pasek przewijania ma stałe miejsce (`scrollbar-gutter`), więc chwilowo krótsza strona przy ładowaniu dnia nie przesuwa układu. Oś tętna jest dopasowana do danych: górna linia tuż nad maksimum, gdy jest blisko (np. 175 dla 171), w przeciwnym razie pod nim z marginesem mieszczącym słupki (np. linia 200 dla 212); dół analogicznie.
+- **Kolory grup:** energia pomarańczowy, aktywność morski (też kolor akcji), ciało niebieski, tętno/opaska lawendowy, jedzenie limonkowy. Stany osobno: żółty — uwagi i konflikt, czerwony — błąd i luka.
+- **Stany wartości:** potwierdzona — sama liczba; częściowa — przygaszona, „w toku”; nieporównywalna — „—” z kreskowanym znacznikiem; konflikt — żółty znacznik; brak — „—”, nigdy 0. Na wykresach: półprzezroczysty słupek doby częściowej, kreskowanie starszego modelu i okresów nieporównywalnych.
+- **Typografia (zatwierdzone):** Bricolage Grotesque (nagłówki), IBM Plex Sans (interfejs, cyfry tabelaryczne), IBM Plex Mono (daty, etykiety). SIL OFL, lokalne pliki.
+- **Precyzja (zatwierdzone):** masa 0,1 kg, tkanka 0,1 %, dystans 0,01 km — tylko prezentacja.
+- Liczby pl-PL, jednostki w nagłówku kolumny lub przy wartości. Pasek przewijania ma stałe miejsce (`scrollbar-gutter`).
 
 ## Otwarte pytania
 
-- Kolumna „Źródła” w tabeli: pełne nazwy (dziś) czy skróty z pełną listą w panelu szczegółów.
-- Reguła wyboru okien do stawki prognozy kalorii: wdrożona wersja v0 (wyżej) czeka na ocenę na danych.
+- Czy przywrócić w lżejszej formie pochodzenie wartości (źródła, reguła, rewizja, historia odczytów, porównanie z Takeout) i oznaczenie komórek z CSV, usunięte 2026-11-05.
+- Kolumna „Źródła”: pełne nazwy (dziś) czy skróty.
+- Reguła okien prognozy kalorii: v0 czeka na ocenę ([plan](../plan/01-foundation-mvp.md)).

@@ -1,50 +1,46 @@
 # Plan realizacji i zależności
 
-P0 rozpoczęto od syntetycznego przykładu; w M1 rozpoczęto lokalny import surowych plików Takeout, bez dziennych wyników i odczytu API. Plan przygotowany 2026-11-02; szczegóły semantyki mają jedno miejsce w [kontraktach](../data-contracts.md).
+Semantyka: [kontrakty](../data-contracts.md). Wykonane: [docs/completed](../completed/).
 
 | Etap | Wynik i zależności | Plan |
 | --- | --- | --- |
-| P0 | Ustalenie stosu, minimalny szkielet, migracje/testy i próby możliwości; bez zależności od nazwy/żywienia | [01](01-foundation-mvp.md) |
-| M1 | Użyteczne lokalne MVP: 6 metryk, Takeout + odczyt API, tabela/wykresy/uwagi, poprawna historia 2026 | [01](01-foundation-mvp.md), [02](02-health-api.md), [03](03-import-migration.md) |
-| M2 | Treningi, HR, strefy, mapy, więcej dashboardów; pełny katalog API rozwijany iteracyjnie po M1 | [02](02-health-api.md), [04](04-ui-workouts.md) |
-| M3 | Ręczny dziennik posiłków, produkty/receptury, własny katalog; import obecnych danych i OFF | [05](05-nutrition.md), [06](06-food-sources.md) |
-| M4 | Planer i import FatSecret; zależy od stabilnych wpisów/produktów, nie od AI | [05](05-nutrition.md), [06](06-food-sources.md) |
-| M5 | Wygodne wpisy przez ChatGPT na telefonie albo mobilne web UI, tekst/głos/zdjęcia, kontrolowane AI | [07](07-ai-chatgpt.md) |
-| M6 | Analizy AI treningów i później żywienia; pierwsza analiza treningu może nastąpić po M2 | [07](07-ai-chatgpt.md) |
-| M7 | Zapis wybranych typów do Health i opcjonalnie Connect, weryfikacja i konflikty | [08](08-sync-android.md) |
-| M8 | Opcjonalny komponent/klient Android; wcześniej tylko jeśli uzasadni go brak danych lub potrzebny zapis Connect | [08](08-sync-android.md) |
-| Q | Prywatność, testy, backup/restore i operacje — wymagania od P0, nie końcowy dodatek | [09](09-quality-operations.md) |
+| P0 | Stos, szkielet, migracje/testy, próby możliwości — **wykonane** | [P0](../completed/01-p0-probes.md) |
+| M1 | Lokalne MVP: 6 metryk z API i Takeout, tabela/wykresy/uwagi, historia 2026 — **w końcowej fazie** | [01](01-foundation-mvp.md), [02](02-health-api.md), [03](03-import-migration.md) |
+| M2 | Treningi, HR, strefy, mapy, dashboardy; pełny katalog API iteracyjnie | [02](02-health-api.md), [04](04-ui-workouts.md) |
+| M3 | Dziennik posiłków, produkty/receptury, import obecnych danych i OFF | [05](05-nutrition.md), [06](06-food-sources.md) |
+| M4 | Planer i import FatSecret; zależy od wpisów/produktów, nie od AI | [05](05-nutrition.md), [06](06-food-sources.md) |
+| M5 | Wpisy przez ChatGPT na telefonie albo mobilne web UI, tekst/głos/zdjęcia | [07](07-ai-chatgpt.md) |
+| M6 | Analizy AI treningów, potem żywienia | [07](07-ai-chatgpt.md) |
+| M7 | Zapis wybranych typów do Health i opcjonalnie Connect | [08](08-sync-android.md) |
+| M8 | Opcjonalny komponent Android, jeśli uzasadniony | [08](08-sync-android.md) |
+| Q | Prywatność, testy, kopie i operacje — przekrojowo | [09](09-quality-operations.md) |
 
-Etapy nie są sztywnym harmonogramem. Nie buduj całego katalogu API jako warunku pierwszej tabeli ani pełnego Androida jako warunku importu Takeout. M5 może wyprzedzić M4, gdy działa dziennik i jego komendy. Próba ChatGPT mobilnego może być wykonana wcześniej na syntetycznej komendzie, żeby rozstrzygnąć architekturę dostępu.
+Etapy nie są harmonogramem. Pełny katalog API nie warunkuje tabeli, Android nie warunkuje importu. M5 może wyprzedzić M4; próbę ChatGPT mobilnego można zrobić wcześniej na syntetycznej komendzie.
+
+## Stan M1 (2026-11-06)
+
+Działa i jest sprawdzone (syntetycznie i na koncie użytkownika): autoryzacja Google z trwałym tokenem, magazyn v13, sześć metryk zakwalifikowanych z danych Google od 2026-01-01 (i na żądanie wcześniej), odświeżanie automatyczne z polityką odczytów, uzupełnianie historii, import Takeout (katalog i ZIP) i CSV, interfejs według [projektu UI](../design/ui.md), kopia i odtworzenie. Szczegóły: [M1 — wykonane](../completed/02-m1.md), [raport testów](../test-results.md).
+
+Pozostałe punkty: [plan MVP](01-foundation-mvp.md) — najważniejsze to testy odbioru (powtórny import, niezależność od porcji, DST, paginacja), strefy czasowe, eksport CSV i kopia z UI. Porównanie z aplikacją Health jest wstrzymane decyzją użytkownika (2026-11-04).
+
+Nierozstrzygnięte: nagłówek Health wyższy o ok. 0,55 % od API dla jednej doby; rola źródła „Phone Health Connect” ([obserwacje](../completed/03-data-findings.md)); zachowanie polityki odczytów po wielu przebiegach (starsze odczyty bez znacznika „automatyczny” nie są porządkowane); praca w tle po wielu godzinach i restarcie komputera.
 
 ## Bramy jakości
 
-Syntetyczna brama P0 została wykonana i opisana w [ukończonych próbach](../completed/01-p0-probes.md); zadania zależne od konta i walidacji danych nadal pozostają otwarte.
-
-- [ ] M1: przepływ sześciu metryk dla importu i API, jedna semantyka historii/przyszłości, brak BMR-only/nieporównywalnego active w kanonicznych wynikach, widoczne luki, odtwarzalna kopia. Brak OAuth pozostaje jawną luką, nie „ukończonym API”.
-- [ ] Każdy kolejny typ: karta definicji, jednostki, czas, pochodzenie, operacje, brak/zero, syntetyczne testy i ograniczony rzeczywisty odczyt. „Wszystkie dane API” wymaga raportu pokrycia całego aktualnego katalogu, nie tylko listy obiecanych ekranów.
-- [ ] M5: realny wpis z telefonu w wybranym wariancie, odczyt potwierdzenia, korekta, ponowienie bez duplikatu i zachowanie po niedostępności hosta. Nie wymaga własnej aplikacji Android.
-- [ ] M7: dowód per typ/operacja, wybrany własny rekord, timeout i restart, brak pętli, jawne niewspierane cele; żadnego masowego czyszczenia Connect.
-
-## Stan M1 i następne kroki
-
-Stan na 2026-11-03 (szczegóły i dowody: [wyniki testów](../test-results.md), reguły: [kontrakty](../data-contracts.md), decyzje: [rejestr](../decisions.md)). Zrobione i sprawdzone (syntetycznie oraz na koncie użytkownika, bez przeglądarki): autoryzacja Google z trwałym tokenem, magazyn w wersji 10, odczyty sum dobowych, okien 10-minutowych (kroki, dystans, kalorie total i aktywne, tętno) i list źródeł, odświeżanie automatyczne z polityką odczytów i ponowieniami 429/503, widok dnia (kandydaci, część dnia z opaską, przebieg doby) oraz kolumny „Część dnia z opaską” i „Źródła” w tabeli dni. Uzupełniono historię od 2026-01-01 (backfill) i zakwalifikowano kalorie (snapshoty przeliczane lokalnie po każdym odświeżeniu). Zakwalifikowano wszystkie sześć metryk (kalorie, kroki, dystans, masa, tkanka tłuszczowa) z danych Google, z backfillem od 2026-01-01.
-
-2026-11-04 dodano odczyt API sprzed 2026 na żądanie (kwalifikacja regułami 2026, audyt lat otwarty) oraz import CSV z mapowaniem kolumn, który uzupełnia tylko braki Google; magazyn użytkownika zmigrowano do wersji 11 tego samego dnia ([plan importu](03-import-migration.md)). Wykonany zakres przeniesiono 2026-11-04 do [M1 — wykonane](../completed/02-m1.md). Pozostałe punkty są w [planie MVP](01-foundation-mvp.md); najważniejsze to testy odbioru (powtórny import, niezależność od porcji, DST i paginacja), a dalej nawigacja, panel źródeł, wirtualizacja tabeli i rekonsyliacja starszych dni. Porównanie z aplikacją Health jest na razie pominięte z decyzji użytkownika (2026-11-04) i wraca tylko na wyraźną prośbę.
-
-Otwarte pytania i niewyjaśnione rozbieżności: nagłówek Health dla jednej doby wyższy o ok. 0,55 % niż API; suma minutowego pliku Takeout `calories` niższa o ok. 0,2 % dla jednej doby bez opaski; zachowanie polityki odczytów na prawdziwych danych po kilku przebiegach (wcześniejsze odczyty bez znacznika „automatyczny” nie są porządkowane); praca w tle po kilku godzinach i po restarcie komputera oraz widoki w przeglądarce nie były sprawdzone. Zasady pracy użytkownika: git zarządzany ręcznie (nie twórz branchy, commitów ani PR; zapisane w pamięci agenta), odczyt rzeczywistych danych dozwolony (sekcja niżej).
+- [ ] M1: przepływ sześciu metryk dla importu i API, jedna semantyka historii i przyszłości, brak BMR-only i nieporównywalnego active w wynikach kanonicznych, widoczne luki, odtwarzalna kopia — pozostały kryteria odbioru z [planu MVP](01-foundation-mvp.md#kryteria-odbioru).
+- [ ] Każdy kolejny typ: karta definicji, jednostki, czas, pochodzenie, operacje, brak/zero, testy syntetyczne i ograniczony rzeczywisty odczyt. „Wszystkie dane API” wymaga raportu pokrycia całego katalogu.
+- [ ] M5: realny wpis z telefonu, potwierdzenie, korekta, ponowienie bez duplikatu, zachowanie przy niedostępnym hoście.
+- [ ] M7: dowód per typ/operacja, timeout i restart, brak pętli, jawnie niewspierane cele; bez masowego czyszczenia Connect.
 
 ## Dane rzeczywiste w pracy deweloperskiej
 
-Decyzja użytkownika z 2026-11-03: gdy do dalszej pracy potrzebna jest rzeczywista wartość, kształt odpowiedzi lub przypadek brzegowy, agent może odczytać wartości z Google Health API (przez własną autoryzację aplikacji) oraz z Takeout, zamiast je zgadywać. Przypuszczenia o formatach i znaczeniu pól wolno przyjmować tylko tymczasowo i trzeba je oznaczyć jako niepotwierdzone.
+Decyzja użytkownika z 2026-11-03: gdy potrzebna jest rzeczywista wartość, kształt odpowiedzi lub przypadek brzegowy, agent może czytać Google Health API (przez autoryzację aplikacji) i Takeout zamiast zgadywać. Założenia o formatach są tymczasowe i oznaczone jako niepotwierdzone.
 
-- Eksport Takeout do pracy leży w katalogu `test-data/` w repozytorium; jest w `.gitignore` i nie trafia do gita. Poza nim, poza bazą aplikacji i API nie szukaj danych zdrowotnych po dysku.
-- Czytaj najmniejszy zakres potrzebny do rozstrzygnięcia pytania (kilka dni, jeden typ, jedna strona); nie przeglądaj całych archiwów bez potrzeby. Odczyt jest tylko do odczytu: nic nie jest zapisywane do dostawcy ani nie zmienia danych.
-- Wartości, rekordowe ID, konta, tokeny i trasy nie trafiają do `docs/`, fixture'ów testów, logów ani commitów. W dokumentacji zapisuj reguły, kształty i ograniczenia, a w testach przypadki syntetyczne odtwarzające znaleziony kształt. Raport z wartościami zapisuj poza repo.
-- Odczyt rzeczywisty nie zastępuje walidacji użytkownika: zgodność z UI Health i znaczenie metryk nadal wymagają porównania i są opisywane z datą oraz ograniczeniami.
+- Takeout leży w `test-data/` (w `.gitignore`). Poza nim, bazą aplikacji i API nie szukaj danych zdrowotnych po dysku.
+- Czytaj najmniejszy potrzebny zakres (kilka dni, jeden typ, jedna strona), tylko do odczytu.
+- Wartości, ID rekordów, konta, tokeny i trasy nie trafiają do `docs/`, fixture'ów, logów ani commitów. W docs reguły i kształty, w testach przypadki syntetyczne, raport z wartościami poza repo.
+- Odczyt rzeczywisty nie zastępuje walidacji użytkownika; zgodność z UI Health opisuje się z datą i ograniczeniami.
 
-## Zasada rozliczania pracy
+## Rozliczanie pracy
 
-Przed implementacją zadania agent wybiera mały pionowy zakres i podaje kryteria. Po wykonaniu usuwa ukończone checkboxy z planu do `docs/completed/` oraz zapisuje wynik bieżących testów. Nie oznacza całego etapu jako niewykonanego wyłącznie przez pojedynczą pozostałą próbę telefonu; nie oznacza jako ukończonego bez tej próby, jeśli jest kryterium etapu.
-
-Nie ma tu terminów i estymacji kosztu budowy. Nieznana dostępność API, podsumowań Gemini i mobilnego MCP ma osobne zadania badawcze z wynikiem także „niedostępne”.
+Przed zadaniem: mały pionowy zakres z kryteriami. Po wykonaniu: ukończone punkty do `docs/completed/`, wynik testów do [raportu](../test-results.md). Etap z otwartą próbą telefonu/konta jako kryterium nie jest ukończony. Bez terminów i estymacji; nieznana dostępność API, Gemini i mobilnego MCP ma zadania badawcze z możliwym wynikiem „niedostępne”.

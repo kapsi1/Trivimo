@@ -23,7 +23,7 @@ SQLite w pamięci → repozytorium → REST → ciemna tabela i niewielki wykres
 
 ## Próba parserów Kotlin
 
-2026-11-02 uruchomiono wybrane pliki domenowe Health Sync na syntetycznym CSV: waga w gramach, osobne kolumny total i active, jawne zero, niepoprawna liczba i nieznane źródło. Stary akumulator dał także oczekiwany syntetyczny szacunek dnia dla dwóch punktów. Szczegóły uruchomienia są w [środowisku](../development.md).
+2026-11-02 uruchomiono wybrane pliki domenowe Health Sync na syntetycznym CSV: waga w gramach, osobne kolumny total i active, jawne zero, niepoprawna liczba i nieznane źródło. Stary akumulator dał także oczekiwany syntetyczny szacunek dnia dla dwóch punktów. Uruchomienie (poza CI, tylko syntetyczne ciągi): `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/spike-takeout.ps1`; wymaga sąsiedniego `C:\dev\health-sync`, cache Gradle z Kotlin 2.0.21 i Javy Android Studio wskazanej w skrypcie.
 
 - Do dalszego projektu nadają się zasady jawnego sprawdzania nagłówków, limitów, czasu, liczby i jednostek oraz oddzielne traktowanie total/active. Właściwy adapter musi zachować źródłową wartość i precyzję, a nie tylko wynik przeliczenia do `Double`.
 - Dawny akumulator grupuje punkty minutami, priorytetyzuje kategorie i wyklucza kategorię Connect; sam nazywa wynik przybliżeniem. Mapowanie nazw konkretnych urządzeń i ten szacunek nie są definicją pochodzenia ani kanonicznego dnia Trivimo. Nie przenosimy ich automatycznie; szczególnie total/active nie kwalifikują się wyłącznie dlatego, że istnieje liczba.
