@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { earliestOf, earliestSchema, metrics, syncStatusSchema, useJson } from './api.ts';
+import { earliestOf, earliestSchema, metrics, post, syncStatusSchema, useJson } from './api.ts';
 import { Tooltip } from './charts.tsx';
 import { DayView, type DayTab } from './day.tsx';
 import { addDays, fmtDL, timeOf, warsawToday, whenOf , firstDay } from './format.ts';
@@ -69,6 +69,7 @@ function Shell() {
   const tableEarliest = earliestOf(earliestAll, tableMetricKeys(prefs.cols)), trendEarliest = earliestOf(earliestAll, [...metrics.map((metric) => metric.key), 'hr']);
   const [addOpen, setAddOpen] = useState(false);
   const [syncTick, setSyncTick] = useState(0);
+  const [refreshing, setRefreshing] = useState(false), [refreshFailed, setRefreshFailed] = useState(false);
   const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem('trivimo-side') === 'collapsed'; } catch { return false; } });
   const toggleSide = () => setCollapsed((value) => { try { localStorage.setItem('trivimo-side', value ? 'open' : 'collapsed'); } catch { /* per-browser convenience only */ } return !value; });
   const dirty = useRef(false);
@@ -112,10 +113,16 @@ function Shell() {
   });
   useEffect(() => { if (!addOpen) return; const close = (event: MouseEvent) => { if (!(event.target instanceof Element && event.target.closest('.menuwrap'))) setAddOpen(false); }; document.addEventListener('click', close); return () => document.removeEventListener('click', close); }, [addOpen]);
 
+  // the footer does what "Odśwież teraz" in Źródła danych does
+  const refreshNow = async () => {
+    setRefreshing(true); setRefreshFailed(false);
+    try { const response = await post('/api/google/sync', {}); if (!response.ok) throw new Error('sync'); } catch { setRefreshFailed(true); } finally { setRefreshing(false); setSyncTick((value) => value + 1); }
+  };
   const syncData = sync.data;
+  const refreshBusy = refreshing || !!syncData?.running;
   const lastOk = syncData?.last?.result === 'ok' ? syncData.last.at : syncData?.kinds.map((kind) => kind.lastReadAt).filter((at): at is string => !!at).sort().at(-1);
   const syncBad = sync.error || (syncData?.last && syncData.last.result !== 'ok');
-  const nav = (view: View, ic: ReactNode, label: string, extra?: ReactNode, hash: string = view, soon = false) => <a className={`nav ${soon ? 'is-soon' : ''}`} href={`#${hash}`} aria-current={route.view === view && (hash === view || (view === 'jedzenie' ? foodTab : route.tab) === hash.split('/')[1]) ? 'page' : undefined}>{ic}<span>{label}</span>{extra}</a>;
+  const nav = (view: View, ic: ReactNode, label: string, hash: string = view, soon = false) => <a className={`nav ${soon ? 'is-soon' : ''}`} href={`#${hash}`} aria-current={route.view === view && (hash === view || (view === 'jedzenie' ? foodTab : route.tab) === hash.split('/')[1]) ? 'page' : undefined}>{ic}<span>{label}</span></a>;
   const bottom = (view: View, ic: ReactNode, label: string) => <button type="button" aria-current={route.view === view ? 'page' : undefined} onClick={() => go(view)}>{ic}<span>{label}</span></button>;
 
   let context: ReactNode = null;
@@ -135,17 +142,17 @@ function Shell() {
   return <div className={`app ${collapsed ? 'collapsed' : ''}`}>
     <BackfillNotice backfill={syncData?.backfill} onCoverage={route.view === 'zrodla' && srcTab === 'pokrycie'} go={go} />
     <aside className="side" aria-label="Nawigacja główna">
-      <div className="brand"><LogoMark className="brand-mark" /><b>Trivimo</b><span>lokalnie</span><button type="button" className="sidetoggle" aria-expanded={!collapsed} aria-label={collapsed ? 'Rozwiń panel nawigacji' : 'Zwiń panel do ikon'} title={collapsed ? 'Rozwiń panel' : 'Zwiń panel'} onClick={toggleSide}>{collapsed ? I.right : I.left}</button></div>
-      <nav className="navgroup" aria-label="Dane"><h4>Dane</h4>{nav('dzien', I.day, 'Dzień')}{nav('trendy', I.trend, 'Trendy')}{nav('tabela', I.table, 'Tabela dni')}{nav('treningi', I.run, 'Treningi', <span className="tag soon">M2</span>, 'treningi', true)}</nav>
-      <nav className="navgroup" aria-label="Jedzenie"><h4>Jedzenie</h4>{nav('jedzenie', I.book, 'Dziennik', <span className="tag soon food">M3</span>, 'jedzenie/dziennik', true)}{nav('jedzenie', I.food, 'Produkty i przepisy', <span className="tag soon food">M3</span>, 'jedzenie/produkty', true)}{nav('jedzenie', I.plan, 'Planer', <span className="tag soon food">M4</span>, 'jedzenie/planer', true)}</nav>
+      <div className="brand"><LogoMark className="brand-mark" /><b>Trivimo</b><button type="button" className="sidetoggle" aria-expanded={!collapsed} aria-label={collapsed ? 'Rozwiń panel nawigacji' : 'Zwiń panel do ikon'} title={collapsed ? 'Rozwiń panel' : 'Zwiń panel'} onClick={toggleSide}>{collapsed ? I.right : I.left}</button></div>
+      <nav className="navgroup" aria-label="Dane"><h4>Dane</h4>{nav('dzien', I.day, 'Dzień')}{nav('trendy', I.trend, 'Trendy')}{nav('tabela', I.table, 'Tabela dni')}{nav('treningi', I.run, 'Treningi', 'treningi', true)}</nav>
+      <nav className="navgroup" aria-label="Jedzenie"><h4>Jedzenie</h4>{nav('jedzenie', I.book, 'Dziennik', 'jedzenie/dziennik', true)}{nav('jedzenie', I.food, 'Produkty i przepisy', 'jedzenie/produkty', true)}{nav('jedzenie', I.plan, 'Planer', 'jedzenie/planer', true)}</nav>
       <nav className="navgroup" aria-label="System"><h4>System</h4>{nav('zrodla', I.src, 'Źródła danych')}{nav('ustawienia', I.gear, 'Ustawienia')}</nav>
-      <div className="side-foot"><button type="button" className="sync" title={collapsed ? `Google Health · ${lastOk ? `odświeżono ${whenOf(lastOk)}` : 'brak odczytu'}` : undefined} onClick={() => go('zrodla')}><span className={`dot ${syncBad ? 'warn' : ''}`} /><span>{sync.error ? 'Google Health · stan niedostępny' : `Google Health · ${lastOk ? `odświeżono ${whenOf(lastOk)}` : 'brak odczytu'}`}{syncBad && syncData?.last ? ' · błąd ostatniego odświeżenia' : ''}<br /><span className="faint">{syncData?.automatic ? `automatycznie co ${syncData.automatic} min` : sync.error ? 'zobacz Źródła danych' : 'odświeżanie ręczne'}</span></span></button></div>
+      <div className="side-foot"><button type="button" className="sync" disabled={refreshBusy} title={`${sync.error ? 'Stan niedostępny' : lastOk ? `Odświeżono ${whenOf(lastOk)}` : 'Brak odczytu'}${syncData?.automatic ? ` · automatycznie co ${syncData.automatic} min` : ''} · kliknij, aby odświeżyć teraz`} onClick={() => void refreshNow()}><span className={`dot ${syncBad || refreshFailed ? 'warn' : ''} ${refreshBusy ? 'busy' : ''}`} /><span>{refreshBusy ? 'odświeżanie…' : refreshFailed ? 'nie udało się odświeżyć' : sync.error ? 'stan niedostępny' : lastOk ? `odświeżono ${whenOf(lastOk).replace(/^dziś /, '')}` : 'brak odczytu'}{!refreshBusy && !refreshFailed && syncBad && syncData?.last ? ' · błąd' : ''}</span></button></div>
     </aside>
     <div className="main">
       <header className="topbar"><h1>{route.view === 'dzien' ? fmtDL(date) : titles[route.view]}</h1>{route.view === 'dzien' && date === warsawToday() && <span className="live">w toku{lastOk ? ` · stan na ${timeOf(lastOk)}` : ''}</span>}{context}
         <div className="menuwrap"><button type="button" className="btn primary" aria-haspopup="menu" aria-expanded={addOpen} onClick={() => setAddOpen(!addOpen)}>{I.plus}<span className="hide-sm">Dodaj</span></button>
           {addOpen && <div className="menu" role="menu"><button type="button" role="menuitem" onClick={() => { setAddOpen(false); setDay(route.view === 'dzien' ? date : warsawToday(), 'przebieg'); setTimeout(() => document.getElementById('usernote')?.focus(), 150); }}>Notatka do dnia</button>
-            <button type="button" role="menuitem" disabled>Posiłek <span className="tag food">M3</span></button><button type="button" role="menuitem" disabled>Pomiar wagi <span className="tag">M7</span></button></div>}</div></header>
+            <button type="button" role="menuitem" disabled>Posiłek</button><button type="button" role="menuitem" disabled>Pomiar wagi</button></div>}</div></header>
       <main className="content">{content}</main>
     </div>
     <nav className="bottomnav" aria-label="Nawigacja">{bottom('dzien', I.day, 'Dzień')}{bottom('trendy', I.trend, 'Trendy')}{bottom('tabela', I.table, 'Dni')}{bottom('jedzenie', I.food, 'Jedzenie')}{bottom('zrodla', I.more, 'Więcej')}</nav>

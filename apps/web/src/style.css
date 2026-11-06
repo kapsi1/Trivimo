@@ -24,7 +24,7 @@
   --font-ui: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
   --font-data: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
   --r: 8px;
-  --side: 236px;
+  --side: 191px;
 }
 * { box-sizing: border-box; }
 html { overflow-y: scroll; scrollbar-gutter: stable; }
@@ -41,7 +41,7 @@ h1, h2, h3 { text-wrap: balance; margin: 0; }
 /* ---------- shell ---------- */
 .app { display: grid; grid-template-columns: var(--side) minmax(0, 1fr); min-height: 100vh; }
 .side { position: sticky; top: env(safe-area-inset-top, 0px); height: calc(100vh - env(safe-area-inset-top, 0px)); display: flex; flex-direction: column; gap: 18px; background: var(--panel); border-right: 1px solid var(--line); padding-block: 18px; padding-left: max(14px, env(safe-area-inset-left, 0px)); padding-right: 14px; overflow-y: auto; }
-.brand { display: flex; align-items: baseline; gap: 8px; padding: 0 8px; }
+.brand { display: flex; align-items: center; gap: 8px; padding: 0 8px; }
 .brand b { font: 700 21px/1 var(--font-display); letter-spacing: -.01em; }
 .brand span { font: 500 10px/1 var(--font-data); color: var(--faint); letter-spacing: .08em; text-transform: uppercase; }
 .navgroup { display: flex; flex-direction: column; gap: 2px; }
@@ -56,7 +56,7 @@ h1, h2, h3 { text-wrap: balance; margin: 0; }
 .tag.food { border-color: color-mix(in srgb, var(--c-food) 45%, transparent); color: var(--c-food); }
 .side-foot { margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding: 10px 8px 0; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
 .sync { display: flex; gap: 8px; align-items: flex-start; background: none; border: 0; padding: 0; text-align: left; color: inherit; }
-.dot { flex: none; width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
+.dot { flex: none; width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
 .dot.warn { background: var(--warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 20%, transparent); }
 
 .main { min-width: 0; display: flex; flex-direction: column; }
@@ -286,9 +286,9 @@ svg .hit:hover { fill: color-mix(in srgb, var(--fg) 8%, transparent); }
 .rangectl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .rangectl label.check { gap: 6px; }
 /* lewy panel zwinięty do ikon */
-.brand .sidetoggle { margin-left: auto; align-self: center; display: inline-grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--faint); }
+.brand .sidetoggle { margin-left: auto; margin-right: -8px; flex: none; align-self: center; display: inline-grid; place-items: center; width: 35px; height: 35px; padding: 0; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--muted); }
 .brand .sidetoggle:hover { color: var(--fg); border-color: var(--line-strong); }
-.brand .sidetoggle svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.brand .sidetoggle svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .app.collapsed { --side: 64px; }
 .app.collapsed .side { padding-left: 10px; padding-right: 10px; align-items: stretch; }
 .app.collapsed .brand { justify-content: center; padding: 0; }
@@ -418,3 +418,13 @@ td.src-c { color: var(--muted); max-width: 280px; overflow: hidden; text-overflo
 .hourtable thead th { position: sticky; top: 0; z-index: 1; background: var(--panel); box-shadow: inset 0 -1px 0 var(--line); }
 
 .topbar { z-index: 47; }
+
+.tabs button.is-soon:not([aria-selected="true"]) { color: var(--faint); }
+
+.sync { cursor: pointer; }
+.sync:disabled { cursor: progress; }
+.sync:hover:not(:disabled) { color: var(--fg); }
+.dot.busy { animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .dot.busy { animation: none; } }
+.sync > span:not(.dot)::first-letter { text-transform: uppercase; }

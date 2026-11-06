@@ -45,10 +45,10 @@ export function DayView({ date, tab, onTab, sync, onDirty }: { date: string; tab
   const hrToday = hrOf((hrRange.data ?? []).find((item) => item.date === date));
   const len = Math.round(hours.slots / 6);
   const asOf = sync?.last?.result === 'ok' ? sync.last.at : sync?.kinds.map((kind) => kind.lastReadAt).filter((at): at is string => !!at).sort().at(-1);
-  const tabs: [DayTab, string, string?][] = [['przebieg', 'Przebieg doby'], ['godzinowe', 'Dane godzinowe'], ['jedzenie', 'Jedzenie', 'M3'], ['treningi', 'Treningi', 'M2']];
+  const tabs: [DayTab, string, boolean?][] = [['przebieg', 'Przebieg doby'], ['godzinowe', 'Dane godzinowe'], ['jedzenie', 'Jedzenie', true], ['treningi', 'Treningi', true]];
   // the date itself is the page title (topbar); here only what qualifies the day
   const head = <>{len !== 24 && <div className="daytitle">{len !== 24 && <span className="tag">doba {len} h · zmiana czasu</span>}</div>}
-    <div className="tabs" role="tablist" aria-label="Widok dnia">{tabs.map(([key, label, stage]) => <button type="button" role="tab" key={key} aria-selected={tab === key} onClick={() => onTab(key)}>{label}{stage && <span className={`tag ${key === 'jedzenie' ? 'food' : ''}`}>{stage}</span>}</button>)}</div></>;
+    <div className="tabs" role="tablist" aria-label="Widok dnia">{tabs.map(([key, label, soon]) => <button type="button" role="tab" key={key} className={soon ? 'is-soon' : undefined} aria-selected={tab === key} onClick={() => onTab(key)}>{label}</button>)}</div></>;
   const legacy = snapshot?.energy?.model === 'legacy';
   const loading = (read && total.data === undefined && !total.error) || !day.data;
   const zoomed = zoom && <DayZoom zoom={zoom} setZoom={setZoom} showHr={showHr} onShowHr={setShowHr} snapshot={snapshot} hours={hours} legacy={legacy} seriesRead={!!total.data} loading={loading} forecast={fc} hrToday={hrToday} />;

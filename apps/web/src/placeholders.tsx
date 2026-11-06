@@ -16,5 +16,5 @@ export function FoodView({ tab, onTab: setTab }: { tab: FoodTab; onTab: (tab: Fo
     planer: <Placeholder title="Planer posiłków" stage="M4" text="Plan dni i posiłków osobno od dziennika; „Zjadłem” tworzy wpis dziennika bez duplikatów." />,
     importy: <Placeholder title="Importy jedzenia" stage="M3–M4" text="Obecny arkusz posiłków, Open Food Facts i FatSecret. Każde źródło z pochodzeniem i licencją." />,
   }[tab];
-  return <><div className="tabs" role="tablist" aria-label="Jedzenie">{tabs.map(([key, label, stage]) => <button type="button" role="tab" key={key} aria-selected={tab === key} onClick={() => setTab(key)}>{label} <span className="tag food">{stage}</span></button>)}</div>{body}</>;
+  return <><div className="tabs" role="tablist" aria-label="Jedzenie">{tabs.map(([key, label, stage]) => <button type="button" role="tab" key={key} className="is-soon" aria-selected={tab === key} onClick={() => setTab(key)}>{label}</button>)}</div>{body}</>;
 }
