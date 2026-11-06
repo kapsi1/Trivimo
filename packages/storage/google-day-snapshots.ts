@@ -11,7 +11,8 @@ import { mergeReplicas, type SourceMeasurement } from '../domain/measurement-rep
 import { projectGoogleDay, type BodyDayEvidence } from '../domain/project-day.ts';
 import { parseSourceValue } from '../domain/source-units.ts';
 import type { BodyCandidate } from '../domain/body-daily.ts';
-import { warsawDay } from '../domain/warsaw-day.ts';
+import { dayBounds, defaultDayZone } from '../domain/day-zone.ts';
+import { readDayZone } from './day-zone.ts';
 import { readBandShareRange, savedWindows, type Day } from './google-band-share-day.ts';
 import { publishCanonicalDay, readCanonicalDay } from './canonical-days.ts';
 import { millimetresToKm } from './google-daily-source-day.ts';
@@ -38,7 +39,7 @@ function savedDailyValues(db: DatabaseSync, kind: DailyRollupType, from: string,
 }
 
 /**
- * Measurements of each Warsaw day from the newest complete read whose UTC range covers the whole day; values keep their
+ * Measurements of each day (in the day zone) from the newest complete read whose UTC range covers the whole day; values keep their
  * source text (grams converted to kg by shifting the decimal point). An unread day is absent.
  */
 function savedMeasurements(db: DatabaseSync, kind: 'weight' | 'body-fat', days: Day[]): Map<string, { records: SourceMeasurement[]; invalid: string[]; readAt: number }> {
@@ -80,13 +81,13 @@ function windowSum(windows: { value: string | null }[] | undefined): bigint | nu
  * Day snapshots from saved Google pages for the read days of [from, to]; a day never read gets no snapshot.
  * Calories follow rule google-energy-v1 (the band share marks whose estimate it is). Steps and distance follow
  * google-activity-v1: the producer's all-sources daily value, which on 2026 data equals the band on days with it and
- * one phone source otherwise, never a sum of replicas; it counts for the Warsaw day when the day's ten-minute windows
+ * one phone source otherwise, never a sum of replicas; it counts for the day when the day's ten-minute windows
  * sum to it exactly (for a day in progress the relation checked on completed days is assumed).
  */
 export function projectGoogleDays(db: DatabaseSync, from: string, to: string, nowMs: number): DaySnapshotInput[] {
   if ((Date.parse(to) - Date.parse(from)) / 86400000 > 365) throw new Error('range_too_large');
-  const days: Day[] = [];
-  for (let date = from; date <= to; date = addDays(date, 1)) { const bounds = warsawDay(date); days.push({ date, start: Date.parse(bounds.start), end: Date.parse(bounds.end) }); }
+  const zone = readDayZone(db), days: Day[] = [];
+  for (let date = from; date <= to; date = addDays(date, 1)) { const bounds = dayBounds(date, zone); days.push({ date, start: Date.parse(bounds.start), end: Date.parse(bounds.end) }); }
   const total = savedDailyValues(db, 'total-calories', from, to);
   const steps = savedDailyValues(db, 'steps', from, to), distance = savedDailyValues(db, 'distance', from, to);
   const stepWindows = savedWindows(db, 'steps-10m', 'steps', days), distanceWindows = savedWindows(db, 'distance-10m', 'distance', days);
@@ -105,7 +106,7 @@ export function projectGoogleDays(db: DatabaseSync, from: string, to: string, no
     const activity = (kind: 'steps' | 'distance', read: { value: string | null; readAt: number } | undefined, match: boolean | null): ActivityEvidence => ({
       kind, value: read?.value == null ? null : kind === 'distance' ? millimetresToKm(read.value) : read.value, unit: kind === 'steps' ? 'count' : 'km',
       reconciliation: 'confirmed', sourceFamily: 'resolved', coverage: 'confirmed', day: progressOf(read), zeroConfirmed: read?.value != null,
-      dayBoundary: nowMs < day.end || match === true ? 'warsaw_interval' : match === false ? 'producer_day_unmatched' : 'unknown',
+      dayBoundary: nowMs < day.end || match === true ? 'zone_interval' : match === false ? 'producer_day_unmatched' : 'unknown',
     });
     const share = band.get(day.date)!; const activeRead = active.get(day.date);
     // without a read of the day's windows the model cannot be told, so the day is not comparable until they are read;
@@ -133,14 +134,14 @@ export function projectGoogleDays(db: DatabaseSync, from: string, to: string, no
       return { evidence: { candidates, day: progressOf(read) } satisfies BodyDayEvidence, records: read.records.length + read.invalid.length, replicas: merged.replicas };
     };
     const weight = body(weightRead, '0.001'), bodyFat = body(bodyFatRead, '0.01');
-    snapshots.push(projectGoogleDay({
+    snapshots.push({ ...projectGoogleDay({
       date: day.date, weight: weight.evidence, bodyFat: bodyFat.evidence,
       body: { rule: 'google-body-v1', weightRecords: weight.records, weightReplicas: weight.replicas, bodyFatRecords: bodyFat.records, bodyFatReplicas: bodyFat.replicas },
       steps: activity('steps', stepsRead, stepsMatch), distance: activity('distance', distanceRead, distanceMatch),
       totalEnergy: evidence('total', totalRead), activeEnergy: evidence('active', activeRead),
       activity: { rule: 'google-activity-v1', stepsMatchWindows: stepsMatch, distanceMatchWindows: distanceMatch },
       energy: { rule: 'google-energy-v1', model, heartRateWindows: heart, dayWindows: share.totalWindows, activeWithHeartRateKcal: share.activeEnergy?.bandKcal ?? null, activeWithoutHeartRateKcal: share.activeEnergy?.otherKcal ?? null },
-    }));
+    }), zone });
   }
   return snapshots;
 }
@@ -151,10 +152,10 @@ const missing = { status: 'missing' as const, value: null };
  * value, also an incomparable or conflicting one, is never replaced or added to. A CSV conflict is a conflict of the day.
  */
 export function projectDays(db: DatabaseSync, from: string, to: string, nowMs: number): DaySnapshotInput[] {
-  const google = projectGoogleDays(db, from, to, nowMs), csv = csvDayValues(db, from, to);
+  const zone = readDayZone(db), google = projectGoogleDays(db, from, to, nowMs), csv = csvDayValues(db, from, to);
   if (csv.size === 0) return google;
   const byDate = new Map(google.map((day) => [day.date, day]));
-  for (const date of csv.keys()) if (!byDate.has(date)) byDate.set(date, { date, metrics: { weight: missing, body_fat: missing, steps: missing, distance: missing, total_energy: missing, active_energy: missing }, issues: [] });
+  for (const date of csv.keys()) if (!byDate.has(date)) byDate.set(date, { date, metrics: { weight: missing, body_fat: missing, steps: missing, distance: missing, total_energy: missing, active_energy: missing }, issues: [], zone });
   return [...byDate.values()].sort((a, b) => a.date < b.date ? -1 : 1).map((day) => {
     const values = csv.get(day.date);
     if (!values) return day;
@@ -171,7 +172,7 @@ export function projectDays(db: DatabaseSync, from: string, to: string, nowMs: n
 }
 
 /** What a day's snapshot says (everything except its revision and the notes derived from issues). */
-const content = (day: DaySnapshotInput) => JSON.stringify({ metrics: day.metrics, issues: day.issues, energy: day.energy, activity: day.activity, body: day.body, csv: day.csv });
+const content = (day: DaySnapshotInput) => JSON.stringify({ metrics: day.metrics, issues: day.issues, energy: day.energy, activity: day.activity, body: day.body, csv: day.csv, zone: day.zone ?? defaultDayZone });
 
 /**
  * Publish a new revision only for days whose projection changed; values, issues and evidence move together. A day
@@ -180,9 +181,11 @@ const content = (day: DaySnapshotInput) => JSON.stringify({ metrics: day.metrics
 export function publishGoogleDays(db: DatabaseSync, from: string, to: string, nowMs: number): { published: number; unchanged: number } {
   let published = 0, unchanged = 0;
   const projected = projectDays(db, from, to, nowMs), dates = new Set(projected.map((day) => day.date));
-  const cleared = db.prepare("SELECT day FROM daily_snapshots s WHERE day >= ? AND day <= ? AND revision = (SELECT MAX(revision) FROM daily_snapshots t WHERE t.day = s.day) AND json_extract(payload, '$.csv') IS NOT NULL").all(from, to)
+  // a day whose newest snapshot was cut in another zone and has no projection in the current one is not carried over as is
+  const zone = readDayZone(db);
+  const cleared = db.prepare("SELECT day FROM daily_snapshots s WHERE day >= ? AND day <= ? AND revision = (SELECT MAX(revision) FROM daily_snapshots t WHERE t.day = s.day) AND (json_extract(payload, '$.csv') IS NOT NULL OR COALESCE(json_extract(payload, '$.zone'), ?) != ?)").all(from, to, defaultDayZone, zone)
     .map((row) => String(row.day)).filter((day) => !dates.has(day))
-    .map((date): DaySnapshotInput => ({ date, metrics: { weight: missing, body_fat: missing, steps: missing, distance: missing, total_energy: missing, active_energy: missing }, issues: [] }));
+    .map((date): DaySnapshotInput => ({ date, metrics: { weight: missing, body_fat: missing, steps: missing, distance: missing, total_energy: missing, active_energy: missing }, issues: [], zone }));
   for (const snapshot of [...projected, ...cleared]) {
     const current = readCanonicalDay(db, snapshot.date);
     if (current && content(current) === content(snapshot)) { unchanged++; continue; }

@@ -6,12 +6,12 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { initializeTakeoutStore } from '../packages/adapters/takeout/import.ts';
-import { warsawDay } from '../packages/domain/warsaw-day.ts';
+import { warsawDay } from './helpers/warsaw-day.ts';
 import { migrateCalorieJobs, migrateCanonicalDays, migrateDailyRollups, migrateGooglePages, migratePageWindows, migrateReadPolicy, migrateSourceLists, migrateCsvImports, migrateCsvNotes, migrateSourceAccounts, migrateUserNotes, migrateWindowJobs } from '../packages/storage/canonical-days.ts';
 import { commitGooglePage, createGoogleReadJob, type GoogleJobKind } from '../packages/storage/google-pages.ts';
 import { pageParsers, removeUnusedPageWindows } from '../packages/storage/google-page-windows.ts';
 import { applyReadPolicy, registerAutomaticJob } from '../packages/storage/google-read-policy.ts';
-import { savedWindows, warsawDays } from '../packages/storage/google-band-share-day.ts';
+import { savedWindows, storedDays } from '../packages/storage/google-band-share-day.ts';
 import { readHeartRateDay } from '../packages/storage/google-heart-rate.ts';
 import { verifyTakeout } from '../packages/storage/verify-takeout.ts';
 
@@ -64,7 +64,7 @@ test('okna pochodne: zapis razem ze stroną, odczyt z warstwy, usunięcie po pol
     await migratePageWindows(db, join(dir, 'v12.sqlite'));
     const first = read(db, 'steps-10m', '2026-05-02', steps('2026-05-02', 3, 2));
     assert.deepEqual(rows(db), ['window:steps@1']);
-    const day = warsawDays('2026-05-02', '2026-05-02');
+    const day = storedDays(db, '2026-05-02', '2026-05-02');
     assert.deepEqual(savedWindows(db, 'steps-10m', 'steps', day).get('2026-05-02')?.map((window) => window.value), ['200', '201', '202']);
     const heartJob = read(db, 'heart-rate-10m', '2026-05-03', heart('2026-05-03', 2, 91));
     assert.deepEqual(readHeartRateDay(db, '2026-05-03')?.windows.map((window) => [window.avg, window.min, window.max]), [[91, 86, 96], [91, 86, 96]]);
@@ -76,7 +76,7 @@ test('okna pochodne: zapis razem ze stroną, odczyt z warstwy, usunięcie po pol
     const digest = String(db.prepare('SELECT digest FROM google_read_pages WHERE job_id = ?').get(other)?.digest);
     const changed = JSON.stringify(pageParsers['window:steps@1'](String(db.prepare('SELECT raw_json FROM google_read_pages WHERE job_id = ?').get(other)?.raw_json)).map((window) => ({ ...window, value: '7' })));
     db.prepare("UPDATE google_page_windows SET windows = ? WHERE digest = ? AND parser = 'window:steps@1'").run(changed, digest);
-    assert.deepEqual(savedWindows(db, 'steps-10m', 'steps', warsawDays('2026-05-04', '2026-05-04')).get('2026-05-04')?.map((window) => window.value), ['7', '7']);
+    assert.deepEqual(savedWindows(db, 'steps-10m', 'steps', storedDays(db, '2026-05-04', '2026-05-04')).get('2026-05-04')?.map((window) => window.value), ['7', '7']);
     assert.throws(() => verifyTakeout(path), /invalid_page_windows/);
     // restored to the parser's output of the original, the store passes again
     db.prepare("UPDATE google_page_windows SET windows = ? WHERE digest = ? AND parser = 'window:steps@1'").run(JSON.stringify(pageParsers['window:steps@1'](String(db.prepare('SELECT raw_json FROM google_read_pages WHERE job_id = ?').get(other)?.raw_json))), digest);

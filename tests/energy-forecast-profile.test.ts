@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { calmActiveKcal, clockSlot, forecastEnergy, forecastRule, maxHistoryDays, minHistoryDays, profileRule, type HistoryDay } from '../packages/domain/energy-forecast.ts';
-import { warsawDay } from '../packages/domain/warsaw-day.ts';
+import { calmActiveKcal, clockSlot as slotIn, forecastEnergy, forecastRule, maxHistoryDays, minHistoryDays, profileRule, type HistoryDay } from '../packages/domain/energy-forecast.ts';
+import { warsawDay } from './helpers/warsaw-day.ts';
 import { createDemoDatabase } from '../packages/storage/days.ts';
 import { readEnergyForecast } from '../packages/storage/google-energy-forecast.ts';
 
 const windowMs = 600000;
+const clockSlot = (ms: number) => slotIn(ms, 'Europe/Warsaw');
 const day = (date: string) => { const bounds = warsawDay(date); return { start: Date.parse(bounds.start), end: Date.parse(bounds.end), count: (Date.parse(bounds.end) - Date.parse(bounds.start)) / windowMs }; };
 const next = (date: string, days: number) => new Date(Date.parse(`${date}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
 /** Windows of a day, `value(index)` by window index; null leaves the window out. */
@@ -22,7 +23,7 @@ function history(days: number, from = '2026-06-01', complete = true): HistoryDay
 }
 const quiet = (date: string, count: number) => windows(date, count, () => 10);
 const zeros = (date: string, count: number) => windows(date, count, () => 0);
-const input = (date: string, done: number, days: HistoryDay[]) => { const today = day(date); return { dayStart: today.start, dayEnd: today.end, total: quiet(date, done), steps: zeros(date, done), active: zeros(date, done), history: days }; };
+const input = (date: string, done: number, days: HistoryDay[]) => { const today = day(date); return { dayStart: today.start, dayEnd: today.end, total: quiet(date, done), steps: zeros(date, done), active: zeros(date, done), history: days, zone: 'Europe/Warsaw' }; };
 
 test('v2: reszta doby w tempie dnia powszednim — okna z treningiem w historii nie wchodzą do profilu', () => {
   const result = forecastEnergy(input('2026-06-20', 48, history(8)));        // up to 08:00; 96 windows remain
@@ -77,7 +78,7 @@ test('v2: próg znaczącej aktywności, brak okna aktywnych kcal to brak aktywno
   assert.equal(run(3.5).windowKcal[12], 14);
   // the floor: a quiet day at 20 kcal per window (v0 rate) is above a history of 10–14, so the result is stretched to it
   const today = day('2026-06-20');
-  const hot = forecastEnergy({ dayStart: today.start, dayEnd: today.end, total: windows('2026-06-20', 48, () => 20), steps: zeros('2026-06-20', 48), active: zeros('2026-06-20', 48), history: history(8) })!;
+  const hot = forecastEnergy({ dayStart: today.start, dayEnd: today.end, total: windows('2026-06-20', 48, () => 20), steps: zeros('2026-06-20', 48), active: zeros('2026-06-20', 48), history: history(8), zone: 'Europe/Warsaw' })!;
   assert.equal(hot.floorKcal, 48 * 20 + 96 * 20);
   assert.equal(hot.forecastKcal, hot.floorKcal);
   assert.ok(Math.abs(hot.burnedKcal + hot.windowKcal.reduce((a, b) => a + b, 0) - hot.forecastKcal) < 1e-9);

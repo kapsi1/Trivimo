@@ -1,3 +1,4 @@
+import { defaultDayZone } from '../../../packages/domain/day-zone.ts';
 /** Presentation helpers: Polish dates and numbers. Values are stored exactly; rounding happens only here. */
 export const MON = ['sty', 'lut', 'mar', 'kwi', 'maj', 'cze', 'lip', 'sie', 'wrz', 'paź', 'lis', 'gru'];
 const MONG = ['stycznia', 'lutego', 'marca', 'kwietnia', 'maja', 'czerwca', 'lipca', 'sierpnia', 'września', 'października', 'listopada', 'grudnia'];
@@ -12,7 +13,7 @@ export const fmtD = (date: string) => `${Number(date.slice(8))} ${MON[Number(dat
 export const fmtDL = (date: string) => `${WD[dow(date)]}, ${Number(date.slice(8))} ${MONG[Number(date.slice(5, 7)) - 1]} ${date.slice(0, 4)}`;
 export const maxDate = (a: string, b: string) => a > b ? a : b;
 /** First day the views and Google reads accept (same bound as the server); history before 2026 is read on request. */
-export { firstSupportedDay as firstDay } from '../../../packages/domain/warsaw-day.ts';
+export { firstSupportedDay as firstDay } from '../../../packages/domain/day-zone.ts';
 export function isoWeek(date: string): number {
   const d = new Date(`${date}T00:00:00Z`); const day = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - day + 3);
   const first = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
@@ -20,21 +21,35 @@ export function isoWeek(date: string): number {
 }
 export const nf = (value: number, decimals = 0) => value.toLocaleString('pl-PL', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 
-export function warsawToday(): string {
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Warsaw', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
-  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
-  return `${value('year')}-${value('month')}-${value('day')}`;
+/**
+ * Day zone of the application (a setting kept in the store, rule day-zone-v1). The page loads it once before the first
+ * render and reloads after a change, so every view formats the days and times in the same zone.
+ */
+let zone = defaultDayZone;
+export const setDayZone = (next: string) => { zone = next; };
+export const getDayZone = () => zone;
+const formats = new Map<string, Intl.DateTimeFormat>();
+function format(kind: 'day' | 'hm' | 'hour'): Intl.DateTimeFormat {
+  const key = `${zone}|${kind}`;
+  let formatter = formats.get(key);
+  if (!formatter) {
+    formatter = kind === 'day' ? new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' })
+      : new Intl.DateTimeFormat('pl-PL', { timeZone: zone, hour: '2-digit', ...(kind === 'hm' ? { minute: '2-digit' } : {}), hourCycle: 'h23' });
+    formats.set(key, formatter);
+  }
+  return formatter;
 }
-const hm = new Intl.DateTimeFormat('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-const hourOnly = new Intl.DateTimeFormat('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', hourCycle: 'h23' });
-const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Warsaw', year: 'numeric', month: '2-digit', day: '2-digit' });
-/** Warsaw wall-clock time of an instant. */
-export const timeOf = (iso: string | number) => hm.format(new Date(iso));
-export const hourOf = (iso: string | number) => hourOnly.format(new Date(iso));
-/** "dziś 13:30", "3 lis 21:04": a read or save time relative to today, in Warsaw. */
+/** Civil date of an instant in the day zone. */
+export const dayOf = (instant: string | number | Date) => format('day').format(new Date(instant));
+/** Today's date in the day zone. */
+export const appToday = (): string => dayOf(new Date());
+/** Wall-clock time of an instant in the day zone. */
+export const timeOf = (iso: string | number) => format('hm').format(new Date(iso));
+export const hourOf = (iso: string | number) => format('hour').format(new Date(iso));
+/** "dziś 13:30", "3 lis 21:04": a read or save time relative to today, in the day zone. */
 export function whenOf(iso: string): string {
-  const date = dayOf.format(new Date(iso));
-  return `${date === warsawToday() ? 'dziś' : `${fmtD(date)}${date.slice(0, 4) !== warsawToday().slice(0, 4) ? ` ${date.slice(0, 4)}` : ''}`} ${timeOf(iso)}`;
+  const date = dayOf(iso), today = appToday();
+  return `${date === today ? 'dziś' : `${fmtD(date)}${date.slice(0, 4) !== today.slice(0, 4) ? ` ${date.slice(0, 4)}` : ''}`} ${timeOf(iso)}`;
 }
 
 /** Exact rational to a fixed number of decimals (half up), with a Polish decimal comma and thin grouping. */

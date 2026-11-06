@@ -51,7 +51,7 @@ Ten sam wybór zakresu co w tabeli oraz agregacja Dni albo Tygodnie (tydzień bl
 
 ### Ustawienia
 
-Wartości tylko do odczytu: strefa dnia Europe/Warsaw, precyzja, tydzień od poniedziałku; polecenia CLI kopii i sprawdzenia odtworzenia.
+Strefa doby jest edytowalna (lista stref, potwierdzenie z opisem przeliczenia, „Dokończ przeliczanie” po przerwie); wartości tylko do odczytu: precyzja, tydzień od poniedziałku; polecenia CLI kopii i sprawdzenia odtworzenia.
 
 ## Interakcje wykresów
 

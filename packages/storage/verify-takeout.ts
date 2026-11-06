@@ -6,6 +6,7 @@ import { daySnapshotSchema, userNoteSchema } from '../contracts/day-snapshot.ts'
 import { verifyGooglePages } from './google-pages.ts';
 import { projectIssueNotes } from '../domain/data-issues.ts';
 import { verifyPageWindows } from './google-page-windows.ts';
+import { verifyDayZone } from './day-zone.ts';
 
 /** Validate a read-only imported snapshot without emitting any record contents. */
 export function verifyTakeout(path: string): void {
@@ -21,9 +22,10 @@ export function verifyTakeout(path: string): void {
     }
     if (db.prepare("SELECT COUNT(*) AS count FROM import_sessions WHERE state != 'complete'").get()?.count !== 0) throw new Error('incomplete');
     const version = db.prepare('PRAGMA user_version').get()?.user_version;
-    if (typeof version !== 'number' || version < 1 || version > 13) throw new Error('unsupported_schema');
+    if (typeof version !== 'number' || version < 1 || version > 14) throw new Error('unsupported_schema');
     if (version >= 5) verifyGooglePages(db);
     if (version >= 13) verifyPageWindows(db);
+    if (version >= 14) verifyDayZone(db);
     if (version >= 2) {
       for (const row of db.prepare('SELECT day, revision, payload FROM daily_snapshots').iterate()) {
         if (typeof row.payload !== 'string') throw new Error('invalid_snapshot');

@@ -15,17 +15,17 @@ import { readBandShareDay, readBandShareRange } from '../../packages/storage/goo
 import { readGoogleDailySourceDay } from '../../packages/storage/google-daily-source-day.ts';
 import { readHeartRateDay, readHeartRateRange } from '../../packages/storage/google-heart-rate.ts';
 import { readEnergyForecast } from '../../packages/storage/google-energy-forecast.ts';
-import { firstSupportedYear, warsawDay } from '../../packages/domain/warsaw-day.ts';
+import { dayOfInstant, firstSupportedYear } from '../../packages/domain/day-zone.ts';
+import { readDayZone } from '../../packages/storage/day-zone.ts';
 import { unassignedSessions } from '../../packages/storage/source-accounts.ts';
 import { userNoteInputSchema } from '../../packages/contracts/day-snapshot.ts';
 import { z } from 'zod';
-const warsawDayFormat = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Warsaw', year: 'numeric', month: '2-digit', day: '2-digit' });
-const warsawDayOf = (iso: string) => warsawDayFormat.format(new Date(iso));
 import type { TakeoutService } from './takeout-service.ts';
 import type { GoogleAuth } from './google-auth.ts';
 import type { GoogleReadService } from './google-read-service.ts';
 import type { GoogleSyncService } from './google-sync.ts';
 import type { CsvImportService } from './csv-import-service.ts';
+import type { DayZoneService } from './day-zone-service.ts';
 
 async function readJson(request: IncomingMessage, limit = 8192): Promise<unknown> {
   const chunks: Buffer[] = [];
@@ -39,7 +39,7 @@ async function readJson(request: IncomingMessage, limit = 8192): Promise<unknown
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
 }
 
-export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => DatabaseSync | undefined), takeout?: TakeoutService, extraLocalOrigins: readonly string[] = [], googleAuth?: GoogleAuth, googleRead?: GoogleReadService, googleSync?: GoogleSyncService, csvImport?: CsvImportService): Server {
+export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => DatabaseSync | undefined), takeout?: TakeoutService, extraLocalOrigins: readonly string[] = [], googleAuth?: GoogleAuth, googleRead?: GoogleReadService, googleSync?: GoogleSyncService, csvImport?: CsvImportService, dayZone?: DayZoneService): Server {
   if (extraLocalOrigins.some((origin) => !/^http:\/\/(?:127\.0\.0\.1|localhost):\d+$/.test(origin))) throw new Error('Nieprawidłowy lokalny Origin');
   const session = randomBytes(32).toString('hex');
   const server = createServer((request, response) => {
@@ -100,7 +100,7 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
                 z.object({ kind: z.enum(dailyRollupTypes), date: z.iso.date() }).strict(),
                 z.object({ kind: z.enum(dailyRollupTypes), start: z.iso.date(), end: z.iso.date() }).strict(),
               ]).parse(body);
-              const range = (dailyRollupTypes as readonly string[]).includes(input.kind) && 'date' in input ? { start: input.date, end: new Date(Date.parse(`${input.date}T00:00:00Z`) + 86400000).toISOString().slice(0, 10) } : 'date' in input ? warsawDay(input.date) : input;
+              const range = (dailyRollupTypes as readonly string[]).includes(input.kind) && 'date' in input ? { start: input.date, end: new Date(Date.parse(`${input.date}T00:00:00Z`) + 86400000).toISOString().slice(0, 10) } : 'date' in input ? googleRead.dayRange(input.date) : input;
               result = await googleRead.start(input.kind, range.start, range.end);
             }
           }
@@ -279,7 +279,7 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
         if (source && storeHas(version, 2)) {
           // heart rate has no daily snapshot: the earliest completed read of its windows (when reads began, not the first measurement)
           const read = storeHas(version, 4) ? source.prepare("SELECT MIN(range_start) AS start FROM google_read_jobs WHERE kind = 'heart-rate-10m' AND state = 'complete'").get()?.start : null;
-          result = { state: 'ready', metrics: readEarliestMetricDays(source), heartRateRead: typeof read === 'string' ? warsawDayOf(read) : null };
+          result = { state: 'ready', metrics: readEarliestMetricDays(source), heartRateRead: typeof read === 'string' ? dayOfInstant(Date.parse(read), readDayZone(source)) : null };
         }
         response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }).end(JSON.stringify(result));
       } catch { response.writeHead(500, { 'Cache-Control': 'no-store' }).end(); }
@@ -370,6 +370,21 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
           const message = error instanceof Error ? error.message : '';
           const code = error instanceof z.ZodError ? 'invalid_request' : ['invalid_csv', 'empty_csv', 'too_many_rows', 'too_many_columns', 'plan_changed', 'migration_required', 'store_unavailable', 'not_found', 'body_too_large'].includes(message) ? message : 'csv_import_failed';
           response.writeHead(code === 'not_found' ? 404 : 400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify({ error: code }));
+        }
+      })();
+      return;
+    }
+    if (url.pathname === '/api/settings/day-zone' && (request.method === 'GET' || request.method === 'POST')) {
+      if (request.method === 'POST' && (!origin || !allowedOrigins.includes(origin) || request.headers['x-trivimo-request'] !== '1' || request.headers['content-type'] !== 'application/json')) { response.writeHead(403, { 'Cache-Control': 'no-store' }).end(); return; }
+      if (!dayZone) { response.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify({ error: 'service_unavailable' })); return; }
+      void (async () => {
+        try {
+          const result = request.method === 'GET' ? dayZone.state() : await dayZone.change(z.object({ zone: z.string().min(1).max(64) }).strict().parse(await readJson(request)).zone);
+          response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }).end(JSON.stringify(result));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : '';
+          const code = error instanceof z.ZodError ? 'invalid_request' : ['invalid_zone', 'sync_running', 'migration_required', 'store_unavailable', 'body_too_large'].includes(message) ? message : 'day_zone_failed';
+          response.writeHead(code === 'sync_running' ? 409 : 400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify({ error: code }));
         }
       })();
       return;

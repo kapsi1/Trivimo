@@ -10,16 +10,17 @@ Modułowy monolit TypeScript: React + Vite w przeglądarce, lokalny serwer Node 
 | --- | --- |
 | `apps/web` | Widoki Dzień, Tabela dni, Trendy, Źródła danych, Ustawienia; placeholdery treningów i jedzenia ([projekt UI](design/ui.md)) |
 | `apps/server` | REST, sesja lokalna, OAuth Google, `GoogleSyncService`, importy Takeout/CSV, skrypty CLI (import, weryfikacja, kopia, migracja, `google:read`) |
-| `packages/domain` | Doba Europe/Warsaw, kwalifikacja (`google-energy-v1`, `google-activity-v1`, `google-body-v1`), repliki pomiarów, uwagi, jednostki, prognoza; bez UI/HTTP |
+| `packages/domain` | Doba w strefie z ustawienia (`day-zone-v1`), kwalifikacja (`google-energy-v1`, `google-activity-v1`, `google-body-v1`), repliki pomiarów, uwagi, jednostki, prognoza; bez UI/HTTP |
 | `packages/contracts` | Schematy Zod wejść/wyjść (dzień, snapshot, rekordy źródłowe, import CSV) |
 | `packages/storage` | Migracje, zadania i strony odczytów Google, snapshoty dób, notatki, importy CSV, kopia i weryfikacja |
 | `packages/adapters` | Google Health (plan porcji, rollUp/dailyRollUp/list, limity 429), Takeout (katalog i ZIP), CSV z mapowaniem |
 
-Magazyn ma wersję 13 (`currentStoreVersion`, sprawdzanie przez `storeHas(version, since)`). Kluczowe elementy:
+Magazyn ma wersję 14 (`currentStoreVersion`, sprawdzanie przez `storeHas(version, since)`). Kluczowe elementy:
 
 - **Oryginały.** Strony odpowiedzi Google w zadaniach (`google_read_jobs`, `google_read_pages`) z kursorem wznowienia, skrótem konta i metadanymi (`google_read_job_meta`, audyt zastąpień `google_read_supersessions`); pliki Takeout jako bajty z planem i checkpointem per plik; pliki CSV jako tekst z mapowaniem i decyzjami (`csv_imports*`).
-- **Rodzaje odczytu Google:** pomiary (masa, tłuszcz), sumy dobowe producenta (kroki, dystans, kalorie total i aktywne), okna 10-minutowe UTC dla doby warszawskiej (tętno, kalorie, kroki, dystans) i listy źródeł wpisów (tylko odczyt ręczny; odświeżanie automatyczne ich nie pobiera).
+- **Rodzaje odczytu Google:** pomiary (masa, tłuszcz), sumy dobowe producenta (kroki, dystans, kalorie total i aktywne), okna 10-minutowe UTC dla doby w strefie ustawienia (tętno, kalorie, kroki, dystans) i listy źródeł wpisów (tylko odczyt ręczny; odświeżanie automatyczne ich nie pobiera).
 - **Warstwa pochodna** `google_page_windows`: sparsowane okna stron pod digestem strony i wersjonowaną nazwą parsera, zapisywane w tej samej transakcji co strona. Zmiana wyniku parsera to nowa nazwa (`@2`); stare wiersze są pomijane. Kolejność odczytu: pamięć procesu (limit 400 tys. okien) → warstwa pochodna → parsowanie oryginału.
+- **Strefa doby:** ustawienie `day_zone_versions` (wersje, nigdy nadpisywane); każdy moduł z dostępem do bazy czyta strefę z magazynu (`readDayZone`), przeglądarka dostaje ją przed pierwszym renderem (`GET /api/settings/day-zone`), a zmianę wykonuje `DayZoneService` (nowa wersja + przeliczenie dób). Reguły: [kontrakty](data-contracts.md#strefa-doby-day-zone-v1).
 - **Snapshoty dób:** wartości, statusy, uwagi i dowody jednej rewizji; notatki użytkownika z osobną historią (`user_note_versions`, pochodzenie z importów w `user_note_sources`).
 
 `GoogleSyncService` (włączany zmienną środowiskową) wznawia niedokończone zadania, odświeża dobę bieżącą i trzy ostatnie zakończone, nadrabia do 13 dni przerwy, okresowo sprawdza ponownie starsze doby (rekonsyliacja: najdawniej zweryfikowane paczki, ważność zależna od wieku doby) i uruchamia uzupełnianie historii. Pokrycie historii trzyma w pamięci per rodzaj, z odciskiem ukończonych zadań, więc `/api/google/sync-status` jest tani. Projekcja snapshotów po odświeżeniu jest przyrostowa: pierwszy przebieg procesu liczy całe okno (rok, od 2026), kolejne tylko doby zmienionych zadań i decyzji CSV oraz doby od poprzedniej projekcji; każda doba jest liczona i publikowana w jednym kroku, więc wynik równa się pełnemu przeliczeniu (test `incremental-projection`). Ciężka praca oddaje pętlę zdarzeń między porcjami (31 dób, plik Takeout), nigdy wewnątrz transakcji. Połączenie tylko do odczytu czeka do 5 s na zatwierdzenie zapisu.

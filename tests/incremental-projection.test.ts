@@ -6,8 +6,8 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { initializeTakeoutStore } from '../packages/adapters/takeout/import.ts';
-import { warsawDay } from '../packages/domain/warsaw-day.ts';
-import { migrateCalorieJobs, migrateCanonicalDays, migrateDailyRollups, migrateGooglePages, migrateReadPolicy, migrateSourceLists, migrateCsvImports, migrateCsvNotes, migratePageWindows, migrateSourceAccounts, migrateUserNotes, migrateWindowJobs, readCanonicalDay } from '../packages/storage/canonical-days.ts';
+import { warsawDay } from './helpers/warsaw-day.ts';
+import { migrateCalorieJobs, migrateCanonicalDays, migrateDailyRollups, migrateGooglePages, migrateReadPolicy, migrateSourceLists, migrateCsvImports, migrateCsvNotes, migratePageWindows, migrateDayZone, migrateSourceAccounts, migrateUserNotes, migrateWindowJobs, readCanonicalDay } from '../packages/storage/canonical-days.ts';
 import { compareGoogleDays } from '../packages/storage/google-day-snapshots.ts';
 import { readBandShareRange } from '../packages/storage/google-band-share-day.ts';
 import { commitGooglePage, createGoogleReadJob, type GoogleJobKind } from '../packages/storage/google-pages.ts';
@@ -40,7 +40,7 @@ async function store() {
   initializeTakeoutStore(db);
   await migrateCanonicalDays(db, join(dir, 'v1.sqlite')); await migrateUserNotes(db, join(dir, 'v2.sqlite'));
   await migrateSourceAccounts(db, join(dir, 'v3.sqlite'), true); await migrateGooglePages(db, join(dir, 'v4.sqlite'));
-  await migrateDailyRollups(db, join(dir, 'v5.sqlite')); await migrateCalorieJobs(db, join(dir, 'v6.sqlite')); await migrateWindowJobs(db, join(dir, 'v7.sqlite')); await migrateReadPolicy(db, join(dir, 'v8.sqlite')); await migrateSourceLists(db, join(dir, 'v9.sqlite')); await migrateCsvImports(db, join(dir, 'v10.sqlite')); await migrateCsvNotes(db, join(dir, 'v11.sqlite')); await migratePageWindows(db, join(dir, 'v12.sqlite'));
+  await migrateDailyRollups(db, join(dir, 'v5.sqlite')); await migrateCalorieJobs(db, join(dir, 'v6.sqlite')); await migrateWindowJobs(db, join(dir, 'v7.sqlite')); await migrateReadPolicy(db, join(dir, 'v8.sqlite')); await migrateSourceLists(db, join(dir, 'v9.sqlite')); await migrateCsvImports(db, join(dir, 'v10.sqlite')); await migrateCsvNotes(db, join(dir, 'v11.sqlite')); await migratePageWindows(db, join(dir, 'v12.sqlite')); await migrateDayZone(db, join(dir, 'v13.sqlite'));
   return { dir, path, db, dispose: () => { db.close(); rmSync(dir, { recursive: true, force: true }); } };
 }
 
@@ -48,8 +48,8 @@ test('dni do ponownej projekcji: zakresy dodanych, ukończonych i usuniętych za
   const before = new Map([['job:a', 'steps\t2026-03-01\t2026-03-03'], ['job:b', `heart-rate-10m\t${warsawDay('2026-04-10').start}\t${warsawDay('2026-04-10').end}`], ['job:c', 'steps\t2026-05-01\t2026-05-02']]);
   const after = new Map([['job:a', 'steps\t2026-03-01\t2026-03-03'], ['job:c', 'steps\t2026-05-01\t2026-05-02'], ['job:d', 'distance\t2026-02-27\t2026-03-02']]);
   // b removed (one Warsaw day), d added (clipped to the window start), a and c unchanged; the last projection was on 06-11
-  assert.deepEqual(changedDays(before, after, '2026-06-11', '2026-02-28', '2026-06-12'), [['2026-02-28', '2026-03-01'], ['2026-04-10', '2026-04-10'], ['2026-06-11', '2026-06-12']]);
-  assert.deepEqual(changedDays(after, after, '2026-06-12', '2026-01-01', '2026-06-12'), [['2026-06-12', '2026-06-12']]);
+  assert.deepEqual(changedDays(before, after, '2026-06-11', '2026-02-28', '2026-06-12', 'Europe/Warsaw'), [['2026-02-28', '2026-03-01'], ['2026-04-10', '2026-04-10'], ['2026-06-11', '2026-06-12']]);
+  assert.deepEqual(changedDays(after, after, '2026-06-12', '2026-01-01', '2026-06-12', 'Europe/Warsaw'), [['2026-06-12', '2026-06-12']]);
 });
 
 test('projekcja przyrostowa daje te same snapshoty co pełna: nowy odczyt, usunięty nowszy odczyt i koniec doby w toku', async () => {

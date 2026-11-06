@@ -4,7 +4,7 @@ export interface ActivityEvidence {
   unit: 'count' | 'km' | 'unknown';
   reconciliation: 'confirmed' | 'unresolved';
   sourceFamily: 'resolved' | 'mixed_unresolved' | 'unknown';
-  dayBoundary: 'warsaw_interval' | 'producer_day_unmatched' | 'unknown';
+  dayBoundary: 'zone_interval' | 'producer_day_unmatched' | 'unknown';
   coverage: 'confirmed' | 'partial' | 'unknown';
   /** `read_before_end`: the day has ended, but its newest read was made while it was still in progress. */
   day: 'complete' | 'ongoing' | 'read_before_end';
@@ -25,7 +25,7 @@ export function assessActivity(evidence: ActivityEvidence): ActivityAssessment {
   if (evidence.unit !== expectedUnit) return { status: 'incomparable', value: null, reason: 'unknown_unit' };
   if (evidence.reconciliation !== 'confirmed') return { status: 'incomparable', value: null, reason: 'unresolved_overlap' };
   if (evidence.sourceFamily !== 'resolved') return { status: 'incomparable', value: null, reason: evidence.sourceFamily === 'unknown' ? 'unknown_origin' : 'unresolved_sources' };
-  if (evidence.dayBoundary !== 'warsaw_interval') return { status: 'incomparable', value: null, reason: evidence.dayBoundary === 'unknown' ? 'unknown_boundary' : 'different_day_boundary' };
+  if (evidence.dayBoundary !== 'zone_interval') return { status: 'incomparable', value: null, reason: evidence.dayBoundary === 'unknown' ? 'unknown_boundary' : 'different_day_boundary' };
   if (!/[1-9]/.test(evidence.value) && !evidence.zeroConfirmed) return { status: 'incomplete', value: null, reason: 'unconfirmed_zero' };
   if (evidence.day === 'ongoing') return { status: 'provisional', value: evidence.value, reason: 'ongoing_day' };
   if (evidence.day === 'read_before_end') return { status: 'provisional', value: evidence.value, reason: 'read_before_day_end' };

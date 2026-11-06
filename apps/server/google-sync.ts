@@ -6,7 +6,8 @@ import { currentStoreVersion } from '../../packages/storage/canonical-days.ts';
 import { maxRollupDays } from '../../packages/adapters/google-health/daily-rollup.ts';
 import { defaultRetryPolicy, RateLimitedError, withRateLimitRetry, type RetryPolicy } from '../../packages/adapters/google-health/rate-limit.ts';
 import { sourceDay } from '../../packages/domain/source-day.ts';
-import { firstSupportedDay, warsawDay } from '../../packages/domain/warsaw-day.ts';
+import { dayBounds, firstSupportedDay } from '../../packages/domain/day-zone.ts';
+import { readDayZone } from '../../packages/storage/day-zone.ts';
 import type { GoogleJobKind } from '../../packages/storage/google-pages.ts';
 import { publishDayRangeYielding } from '../../packages/storage/google-day-snapshots.ts';
 import { applyReadPolicy, registerAutomaticJob } from '../../packages/storage/google-read-policy.ts';
@@ -24,20 +25,21 @@ const slowKinds: ReadonlySet<SyncKind> = new Set(['weight', 'body-fat']);
 const slowRefreshMs = 60 * 60000;
 const maxCatchUpDays = 13; // keeps a ten-minute-window range within 14 days even across a 25-hour day
 const windowed = (kind: SyncKind) => kind.endsWith('-10m');
-/** Window and measurement (weight, body fat) jobs hold the UTC bounds of Warsaw days; the others hold civil dates. */
+/** Window and measurement (weight, body fat) jobs hold the UTC bounds of days in the day zone; the others hold civil dates. */
 const instantRange = (kind: SyncKind) => windowed(kind) || kind === 'weight' || kind === 'body-fat';
 const addDays = (date: string, days: number) => new Date(Date.parse(`${date}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
 
-/** Civil days are stored as producer dates; ten-minute windows as the UTC bounds of the Warsaw days. */
-function boundsFor(kind: SyncKind, first: string, last: string): { begin: string; end: string } {
-  return instantRange(kind) ? { begin: warsawDay(first).start, end: warsawDay(last).end } : { begin: first, end: addDays(last, 1) };
+/** Civil days are stored as producer dates; ten-minute windows as the UTC bounds of the days in the day zone. */
+function boundsFor(kind: SyncKind, first: string, last: string, zone: string): { begin: string; end: string } {
+  return instantRange(kind) ? { begin: dayBounds(first, zone).start, end: dayBounds(last, zone).end } : { begin: first, end: addDays(last, 1) };
 }
 
 /** Last civil date of the newest complete saved read of this kind (that day may still have been partial when read). */
 function coveredThrough(db: DatabaseSync, kind: SyncKind): string | null {
+  const zone = readDayZone(db);
   const row = db.prepare("SELECT range_end FROM google_read_jobs WHERE kind = ? AND state = 'complete' ORDER BY range_end DESC LIMIT 1").get(kind);
   if (!row || typeof row.range_end !== 'string') return null;
-  return instantRange(kind) ? sourceDay(new Date(Date.parse(row.range_end) - 1).toISOString()) : addDays(row.range_end, -1);
+  return instantRange(kind) ? sourceDay(new Date(Date.parse(row.range_end) - 1).toISOString(), zone) : addDays(row.range_end, -1);
 }
 
 /**
@@ -45,7 +47,7 @@ function coveredThrough(db: DatabaseSync, kind: SyncKind): string | null {
  * extended back to the last covered day after a gap (at most 14 days). Never starts the same completed range twice.
  */
 export function planSync(db: DatabaseSync, today: string, nowMs: number, refreshAfterMs: number): SyncRead[] {
-  const plan: SyncRead[] = [];
+  const plan: SyncRead[] = [], zone = readDayZone(db);
   const completed = db.prepare("SELECT created_at FROM google_read_jobs WHERE kind = ? AND range_start = ? AND range_end = ? AND state = 'complete' ORDER BY created_at DESC LIMIT 1");
   for (const kind of syncKinds) {
     const recentLast = addDays(today, -1);
@@ -54,9 +56,9 @@ export function planSync(db: DatabaseSync, today: string, nowMs: number, refresh
     if (covered !== null && covered < first) first = covered;
     const earliest = addDays(recentLast, -(maxCatchUpDays - 1));
     if (first < earliest) first = earliest;
-    const recent = boundsFor(kind, first, recentLast);
+    const recent = boundsFor(kind, first, recentLast, zone);
     if (!completed.get(kind, recent.begin, recent.end)) plan.push({ kind, first, last: recentLast, ...recent });
-    const current = boundsFor(kind, today, today);
+    const current = boundsFor(kind, today, today, zone);
     const previous = completed.get(kind, current.begin, current.end);
     if (!previous || nowMs - Date.parse(String(previous.created_at)) >= (slowKinds.has(kind) ? Math.max(refreshAfterMs, slowRefreshMs) : refreshAfterMs)) plan.push({ kind, first: today, last: today, ...current });
   }
@@ -71,7 +73,7 @@ export const backfillFrom = '2026-01-01';
 // source lists hold every record (about 200 bytes each), so a week keeps a page well under the 1 MB response limit
 // measurements are a few records a day, so a month fits in one page; the read service allows ranges up to 31 days
 const chunkDays = (kind: SyncKind) => windowed(kind) ? maxCatchUpDays : kind.endsWith('-sources') ? 7 : kind === 'weight' || kind === 'body-fat' ? 30 : maxRollupDays(kind as Exclude<SyncKind, `${string}-10m` | `${string}-sources` | 'weight' | 'body-fat'>);
-const dayEnd = (day: string) => Date.parse(warsawDay(day).end);
+const dayEnd = (day: string, zone: string) => Date.parse(dayBounds(day, zone).end);
 
 /**
  * Reconciliation of older days (plan M1): the producer may correct a day long after the three-day refresh window (a band
@@ -93,17 +95,17 @@ const daysBetween = (from: string, to: string) => Math.round((Date.parse(`${to}T
  * (gaps, days read only while in progress) are absent; they belong to the backfill.
  */
 export function verifiedDays(db: DatabaseSync, kind: SyncKind, from: string, through: string): Map<string, number> {
-  const verified = new Map<string, number>();
+  const verified = new Map<string, number>(), zone = readDayZone(db);
   const jobs = db.prepare("SELECT j.range_start, j.range_end, j.created_at, m.confirmed_at FROM google_read_jobs j LEFT JOIN google_read_job_meta m ON m.job_id = j.id WHERE j.kind = ? AND j.state = 'complete'");
   for (const job of jobs.iterate(kind)) {
     const begin = String(job.range_start), end = String(job.range_end);
     const at = Math.max(Date.parse(String(job.created_at)), typeof job.confirmed_at === 'string' ? Date.parse(job.confirmed_at) : 0);
-    let day = instantRange(kind) ? sourceDay(begin) : begin;
+    let day = instantRange(kind) ? sourceDay(begin, zone) : begin;
     if (day < from) day = from;
     for (; day <= through; day = addDays(day, 1)) {
-      const bounds = boundsFor(kind, day, day);
+      const bounds = boundsFor(kind, day, day, zone);
       if (instantRange(kind) ? Date.parse(bounds.end) > Date.parse(end) : bounds.end > end) break;
-      if ((instantRange(kind) ? Date.parse(bounds.begin) >= Date.parse(begin) : bounds.begin >= begin) && at >= dayEnd(day) && at > (verified.get(day) ?? 0)) verified.set(day, at);
+      if ((instantRange(kind) ? Date.parse(bounds.begin) >= Date.parse(begin) : bounds.begin >= begin) && at >= dayEnd(day, zone) && at > (verified.get(day) ?? 0)) verified.set(day, at);
     }
   }
   return verified;
@@ -115,7 +117,7 @@ export function verifiedDays(db: DatabaseSync, kind: SyncKind, from: string, thr
  * manual run). Least recently verified first, at most `budget` reads.
  */
 export function planReconcile(db: DatabaseSync, today: string, nowMs: number, from: string, budget: number, force = false): SyncRead[] {
-  const through = addDays(today, -4);
+  const through = addDays(today, -4), zone = readDayZone(db);
   if (from > through || budget <= 0) return [];
   const due: { read: SyncRead; verifiedAt: number; order: number }[] = [];
   for (const [order, kind] of syncKinds.entries()) {
@@ -125,7 +127,7 @@ export function planReconcile(db: DatabaseSync, today: string, nowMs: number, fr
       let oldest = Infinity;
       for (let day = first; day <= last && oldest > 0; day = addDays(day, 1)) oldest = Math.min(oldest, verified.get(day) ?? 0);
       if (oldest === 0) continue;
-      if (force || nowMs - oldest >= reconcileInterval(daysBetween(last, today))) due.push({ read: { kind, first, last, ...boundsFor(kind, first, last) }, verifiedAt: oldest, order });
+      if (force || nowMs - oldest >= reconcileInterval(daysBetween(last, today))) due.push({ read: { kind, first, last, ...boundsFor(kind, first, last, zone) }, verifiedAt: oldest, order });
     }
   }
   return due.sort((a, b) => a.verifiedAt - b.verifiedAt || a.order - b.order).slice(0, budget).map(({ read }) => read);
@@ -142,10 +144,10 @@ function projectionInputs(db: DatabaseSync): Map<string, string> {
   }
   return inputs;
 }
-/** First and last day an input's range touches (instants as Warsaw days, civil ranges end-exclusive). */
-function jobSpan(job: string): [string, string] {
+/** First and last day an input's range touches (instants as days of the zone, civil ranges end-exclusive). */
+function jobSpan(job: string, zone: string): [string, string] {
   const [, start = '', end = ''] = job.split('	');
-  return start.includes('T') ? [sourceDay(start), sourceDay(new Date(Date.parse(end) - 1).toISOString())] : [start, addDays(end, -1)];
+  return start.includes('T') ? [sourceDay(start, zone), sourceDay(new Date(Date.parse(end) - 1).toISOString(), zone)] : [start, addDays(end, -1)];
 }
 
 /**
@@ -153,11 +155,11 @@ function jobSpan(job: string): [string, string] {
  * since then (a day takes the newest read covering it, so other days keep their inputs), and the days from the last
  * projection's day to today (a day in progress, or one that has ended since, changes with time alone). Consecutive ranges.
  */
-export function changedDays(before: Map<string, string>, after: Map<string, string>, lastDay: string, from: string, today: string): [string, string][] {
+export function changedDays(before: Map<string, string>, after: Map<string, string>, lastDay: string, from: string, today: string, zone: string): [string, string][] {
   const days = new Set<string>();
   const add = (first: string, last: string) => { for (let day = first < from ? from : first; day <= last && day <= today; day = addDays(day, 1)) days.add(day); };
-  for (const [id, job] of before) if (after.get(id) !== job) add(...jobSpan(job));
-  for (const [id, job] of after) if (before.get(id) !== job) add(...jobSpan(job));
+  for (const [id, job] of before) if (after.get(id) !== job) add(...jobSpan(job, zone));
+  for (const [id, job] of after) if (before.get(id) !== job) add(...jobSpan(job, zone));
   add(lastDay, today);
   const ranges: [string, string][] = [];
   for (const day of [...days].sort()) { const current = ranges.at(-1); if (current && addDays(current[1], 1) === day) current[1] = day; else ranges.push([day, day]); }
@@ -169,15 +171,15 @@ export function changedDays(before: Map<string, string>, after: Map<string, stri
  * had ended. A day read while still in progress is not covered; a read with no data points covers its days (absence, not 0).
  */
 export function coveredDays(db: DatabaseSync, kind: SyncKind, from: string, through: string): Set<string> {
-  const covered = new Set<string>();
+  const covered = new Set<string>(), zone = readDayZone(db);
   for (const job of db.prepare("SELECT range_start, range_end, created_at FROM google_read_jobs WHERE kind = ? AND state = 'complete'").iterate(kind)) {
     const begin = String(job.range_start), end = String(job.range_end), created = Date.parse(String(job.created_at));
-    let day = instantRange(kind) ? sourceDay(begin) : begin;
+    let day = instantRange(kind) ? sourceDay(begin, zone) : begin;
     if (day < from) day = from;
     for (; day <= through; day = addDays(day, 1)) {
-      const bounds = boundsFor(kind, day, day);
+      const bounds = boundsFor(kind, day, day, zone);
       if (instantRange(kind) ? Date.parse(bounds.end) > Date.parse(end) : bounds.end > end) break;
-      if ((instantRange(kind) ? Date.parse(bounds.begin) >= Date.parse(begin) : bounds.begin >= begin) && created >= dayEnd(day)) covered.add(day);
+      if ((instantRange(kind) ? Date.parse(bounds.begin) >= Date.parse(begin) : bounds.begin >= begin) && created >= dayEnd(day, zone)) covered.add(day);
     }
   }
   return covered;
@@ -200,11 +202,11 @@ export function coverageCalendar(db: DatabaseSync, from: string, through: string
  * then leaves recent days with every kind read, so their snapshots are qualified, instead of all days half read.
  */
 export function planBackfill(db: DatabaseSync, from: string, through: string, coveredBy: CoveredDays = coveredDays): SyncRead[] {
-  const plan: SyncRead[] = [];
+  const plan: SyncRead[] = [], zone = readDayZone(db);
   for (const kind of syncKinds) {
     const covered = coveredBy(db, kind, from, through);
     let first: string | null = null; let size = 0;
-    const flush = (last: string) => { if (first) plan.push({ kind, first, last, ...boundsFor(kind, first, last) }); first = null; size = 0; };
+    const flush = (last: string) => { if (first) plan.push({ kind, first, last, ...boundsFor(kind, first, last, zone) }); first = null; size = 0; };
     for (let day = from, previous = from; day <= through; previous = day, day = addDays(day, 1)) {
       if (covered.has(day)) { if (first) flush(previous); continue; }
       if (first && size === chunkDays(kind)) flush(previous);
@@ -258,7 +260,7 @@ export class GoogleSyncService {
   }
   private cachedCoverage(fingerprints: Map<string, string>): CoveredDays {
     return (db, kind, from, through) => {
-      const key = `${kind}|${from}|${through}`, fingerprint = fingerprints.get(kind) ?? 'none', hit = this.coverageCache.get(key);
+      const key = `${readDayZone(db)}|${kind}|${from}|${through}`, fingerprint = fingerprints.get(kind) ?? 'none', hit = this.coverageCache.get(key);
       if (hit && hit.fingerprint === fingerprint) return hit.days;
       const days = coveredDays(db, kind, from, through);
       if (this.coverageCache.size >= 128) this.coverageCache.clear();
@@ -273,6 +275,10 @@ export class GoogleSyncService {
     private readonly options: { intervalMinutes: number | null; now?: () => number; send?: typeof fetch; execute?: Execute; retry?: RetryPolicy; sleep?: (ms: number) => Promise<void>; random?: () => number } = { intervalMinutes: null },
   ) {}
   private now() { return (this.options.now ?? Date.now)(); }
+  /** Whether a refresh or the backfill is working on the store (a change of the day zone waits for it). */
+  isBusy(): boolean { return this.running || this.backfill?.state === 'running' || this.backfill?.state === 'stopping'; }
+  /** Today in the store's day zone. */
+  private today(db: DatabaseSync): string { return sourceDay(new Date(this.now()).toISOString(), readDayZone(db)); }
   private sleep(ms: number) { return (this.options.sleep ?? ((wait: number) => delay(wait)))(ms); }
   private retry<T>(call: () => Promise<T>): Promise<T> {
     return withRateLimitRetry(call, { now: () => this.now(), sleep: (ms) => this.sleep(ms), ...(this.options.retry ? { policy: this.options.retry } : {}), ...(this.options.random ? { random: this.options.random } : {}) });
@@ -310,7 +316,7 @@ export class GoogleSyncService {
   private hasGaps(): boolean {
     try {
       const db = this.open();
-      try { return this.plan(db, backfillFrom, addDays(sourceDay(new Date(this.now()).toISOString()), -1)).length > 0; } finally { db.close(); }
+      try { return this.plan(db, backfillFrom, addDays(this.today(db), -1)).length > 0; } finally { db.close(); }
     } catch { return false; }
   }
   /** Wait before a repeat, waking early when the backfill is stopped. */
@@ -333,9 +339,9 @@ export class GoogleSyncService {
       db = this.open();
       reads += await this.resumeRunning(db);
       const interval = (this.options.intervalMinutes ?? 60) * 60000;
-      const today = sourceDay(new Date(this.now()).toISOString());
+      const today = this.today(db);
       for (const read of planSync(db, today, this.now(), interval / 2)) { await this.execute(db, read); reads++; }
-      for (const read of planReconcile(db, today, this.now(), this.projectionFrom(), options.reconcile === 'force' ? reconcileReadsManual : reconcileReadsPerRun, options.reconcile === 'force')) { await this.execute(db, read); reads++; reconciled++; }
+      for (const read of planReconcile(db, today, this.now(), this.projectionFrom(db), options.reconcile === 'force' ? reconcileReadsManual : reconcileReadsPerRun, options.reconcile === 'force')) { await this.execute(db, read); reads++; reconciled++; }
       const energy = await this.projectEnergy(db);
       const outcome = finish('ok'); outcome.energy = energy;
       return outcome;
@@ -348,10 +354,10 @@ export class GoogleSyncService {
   /** Projection inputs at the last successful refresh projection of this process and its time; the first run projects the whole window. */
   private projected?: { jobs: Map<string, string>; at: number };
   private async projectEnergy(db: DatabaseSync): Promise<{ published: number; unchanged: number } | 'failed'> {
-    const now = this.now(), today = sourceDay(new Date(now).toISOString()), from = this.projectionFrom();
+    const now = this.now(), zone = readDayZone(db), today = this.today(db), from = this.projectionFrom(db);
     try {
       const jobs = projectionInputs(db);
-      const ranges = this.projected ? changedDays(this.projected.jobs, jobs, sourceDay(new Date(this.projected.at).toISOString()), from, today) : [[from, today] as [string, string]];
+      const ranges = this.projected ? changedDays(this.projected.jobs, jobs, sourceDay(new Date(this.projected.at).toISOString(), zone), from, today, zone) : [[from, today] as [string, string]];
       const total = { published: 0, unchanged: 0 };
       for (const [first, last] of ranges) { const part = await publishDayRangeYielding(db, first, last, now); total.published += part.published; total.unchanged += part.unchanged; }
       // after a failure the next run diffs against the last success again, so no change is skipped
@@ -360,8 +366,8 @@ export class GoogleSyncService {
     } catch { return 'failed'; }
   }
   /** First day the refresh re-projects: a year back, not before the automatic history start. */
-  private projectionFrom(): string {
-    const yearBack = addDays(sourceDay(new Date(this.now()).toISOString()), -365);
+  private projectionFrom(db: DatabaseSync): string {
+    const yearBack = addDays(this.today(db), -365);
     return yearBack > backfillFrom ? yearBack : backfillFrom;
   }
   /** Finish pages of jobs left running (by an interrupted run, backfill or restart); returns how many were completed. */
@@ -390,7 +396,7 @@ export class GoogleSyncService {
    */
   startBackfill(from: string = backfillFrom): BackfillStatus {
     if (this.backfill?.state !== 'running' && this.backfill?.state !== 'stopping') {
-      const now = new Date(this.now()).toISOString(), through = addDays(sourceDay(now), -1);
+      const now = new Date(this.now()).toISOString(), through = addDays(this.zoneToday(), -1);
       if (!z.iso.date().safeParse(from).success || from < firstSupportedDay || from > through) throw new Error('invalid_range');
       this.stopRequested = false;
       this.backfill = { state: 'running', from, through, startedAt: now, finishedAt: null, current: null, readsThisRun: 0 };
@@ -398,6 +404,8 @@ export class GoogleSyncService {
     }
     return this.backfillStatus();
   }
+  /** Today in the store's day zone, read from the store (the store must be available). */
+  private zoneToday(): string { const db = this.open(); try { return this.today(db); } finally { db.close(); } }
   /** Settles when the current backfill loop has ended (for tests and orderly shutdown). */
   backfillDone: Promise<void> = Promise.resolve();
   /** Stop after the chunk in progress; saved pages stay, nothing is rolled back. */
@@ -410,7 +418,7 @@ export class GoogleSyncService {
     const end = (state: BackfillStatus['state'], code?: string) => { run.state = state; run.current = null; delete run.retrying; run.finishedAt = new Date(this.now()).toISOString(); if (code) run.code = code; };
     // days before the refresh's projection window (the last year, from 2026) get their snapshots from the run's own range
     const projectRun = async (db: DatabaseSync) => {
-      const window = this.projectionFrom(), last = addDays(window, -1) < run.through ? addDays(window, -1) : run.through;
+      const window = this.projectionFrom(db), last = addDays(window, -1) < run.through ? addDays(window, -1) : run.through;
       if (run.from <= last) { try { await publishDayRangeYielding(db, run.from, last, this.now()); } catch { /* reads stay saved; the next run projects again */ } }
     };
     let previous = '', failures = 0;
@@ -453,13 +461,14 @@ export class GoogleSyncService {
     try { const db = this.open(); try { await action(db); } finally { db.close(); } } catch { /* store unavailable: nothing to project now */ } finally { this.running = false; }
   }
   backfillStatus(): BackfillStatus {
-    const through = this.backfill?.through ?? addDays(sourceDay(new Date(this.now()).toISOString()), -1);
     const from = this.backfill?.from ?? backfillFrom;
-    const total = Math.max(0, Math.round((Date.parse(`${through}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000) + 1);
+    let through = this.backfill?.through ?? '', total = 0;
     let kinds: BackfillStatus['kinds'] = []; let remainingReads: number | null = null;
     try {
       const db = this.open();
       try {
+        through = this.backfill?.through ?? addDays(this.today(db), -1);
+        total = Math.max(0, Math.round((Date.parse(`${through}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000) + 1);
         const fingerprints = this.fingerprints(db), key = `${from}|${through}|${syncKinds.map((kind) => fingerprints.get(kind) ?? 'none').join(',')}`;
         if (this.progressCache?.key !== key) {
           const covered = this.cachedCoverage(fingerprints);
@@ -472,12 +481,14 @@ export class GoogleSyncService {
   }
   /** Coverage calendar of one year (default: the year of the automatic history start) up to yesterday; null when the store is unavailable (unknown, not uncovered). */
   coverage(year: number = Number(backfillFrom.slice(0, 4))): { from: string; through: string; kinds: number; days: { date: string; covered: number }[] } | null {
-    const yesterday = addDays(sourceDay(new Date(this.now()).toISOString()), -1);
-    const from = `${String(year).padStart(4, '0')}-01-01`, through = `${String(year).padStart(4, '0')}-12-31` < yesterday ? `${String(year).padStart(4, '0')}-12-31` : yesterday;
+    const from = `${String(year).padStart(4, '0')}-01-01`;
     if (from < firstSupportedDay) return null;
     try {
       const db = this.open();
-      try { return { from, through, kinds: syncKinds.length, days: through < from ? [] : coverageCalendar(db, from, through, this.cachedCoverage(this.fingerprints(db))) }; } finally { db.close(); }
+      try {
+        const yesterday = addDays(this.today(db), -1);
+        const through = `${String(year).padStart(4, '0')}-12-31` < yesterday ? `${String(year).padStart(4, '0')}-12-31` : yesterday;
+        return { from, through, kinds: syncKinds.length, days: through < from ? [] : coverageCalendar(db, from, through, this.cachedCoverage(this.fingerprints(db))) }; } finally { db.close(); }
     } catch { return null; }
   }
   status() {

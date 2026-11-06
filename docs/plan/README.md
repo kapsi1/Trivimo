@@ -6,7 +6,7 @@ Semantyka: [kontrakty](../data-contracts.md). Wykonane: [docs/completed](../comp
 | --- | --- | --- |
 | P0 | Stos, szkielet, migracje/testy, próby możliwości — **wykonane** | [P0](../completed/01-p0-probes.md) |
 | M1 | Lokalne MVP: 6 metryk z API i Takeout, tabela/wykresy/uwagi, historia 2026 — **wykonane 2026-11-06** (eksport CSV, kopia z UI i historia importów przeniesione do Q, telefon do planu T, strefy czasowe do M2) | [01](01-foundation-mvp.md), [02](02-health-api.md), [03](03-import-migration.md) |
-| M2 | Strefy czasowe, preferencje widoku w bazie, treningi, HR, strefy HR, mapy, dashboardy; pełny katalog API iteracyjnie | [02](02-health-api.md), [04](04-ui-workouts.md) |
+| M2 | Strefy czasowe (jedna strefa globalna **wykonana 2026-11-06**; reszta w [02](02-health-api.md#strefy-czasowe)), preferencje widoku w bazie, treningi, HR, strefy HR, mapy, dashboardy; pełny katalog API iteracyjnie | [02](02-health-api.md), [04](04-ui-workouts.md) |
 | M3 | Dziennik posiłków, produkty/receptury, import obecnych danych i OFF | [05](05-nutrition.md), [06](06-food-sources.md) |
 | M4 | Planer i import FatSecret; zależy od wpisów/produktów, nie od AI | [05](05-nutrition.md), [06](06-food-sources.md) |
 | M5 | Wpisy przez ChatGPT na telefonie albo mobilne web UI, tekst/głos/zdjęcia | [07](07-ai-chatgpt.md) |

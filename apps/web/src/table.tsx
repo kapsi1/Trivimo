@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { z } from 'zod';
 import { bandRangeSchema, groups, metricOf, quality, rangeSchema, useChunkedJson, type DayRow, type Group, type MetricKey } from './api.ts';
 import { StatusChip } from './details.tsx';
-import { addDays, dow, fmtD, formatRational, isoWeek, maxDate, mondayOf, nf, toNumber, warsawToday, WDS , firstDay } from './format.ts';
+import { addDays, dow, fmtD, formatRational, isoWeek, maxDate, mondayOf, nf, toNumber, appToday, WDS , firstDay } from './format.ts';
 import { compareDailyRows } from './sort-days.ts';
 import { Loading } from './logo.tsx';
 
@@ -40,7 +40,7 @@ function loadPrefs(): TablePrefs {
   const fallback: TablePrefs = { range: 30, from: '', to: '', cols: loadColumns(null) };
   try {
     const saved = JSON.parse(localStorage.getItem(storeKey) ?? '{}') as Partial<TablePrefs>;
-    const custom = Number(saved.range) === 0 && isDate(saved.from) && isDate(saved.to) && saved.from <= saved.to && saved.to <= warsawToday();
+    const custom = Number(saved.range) === 0 && isDate(saved.from) && isDate(saved.to) && saved.from <= saved.to && saved.to <= appToday();
     return { range: custom ? 0 : tableRanges.some(([days]) => days === Number(saved.range)) ? Number(saved.range) : 30, from: custom ? saved.from! : '', to: custom ? saved.to! : '', cols: loadColumns(saved.cols) };
   } catch { return fallback; }
 }
@@ -67,7 +67,7 @@ function savePrefs(prefs: TablePrefs) { try { localStorage.setItem(storeKey, JSO
 export const tableRanges: [number, string][] = [[7, 'Tydzień'], [30, 'Miesiąc'], [90, '3 miesiące'], [180, '6 miesięcy'], [365, 'Rok'], [730, '2 lata'], [1825, '5 lat'], [-1, 'Od początku']];
 /** Bounds of the table: a preset ends today; custom bounds are kept as chosen. "Od początku" (range -1) starts at `earliest`, the first day with data in the chosen scope (today while unknown or when there is none). */
 export function tableBounds(prefs: Pick<TablePrefs, 'range' | 'from' | 'to'>, earliest?: string | null): { from: string; to: string } {
-  const today = warsawToday();
+  const today = appToday();
   if (prefs.range < 0) return { from: earliest && earliest <= today ? earliest : today, to: today };
   return prefs.range > 0 ? { from: addDays(today, -(prefs.range - 1)), to: today } : { from: prefs.from, to: prefs.to };
 }
@@ -83,7 +83,7 @@ export function useTablePrefs() {
  * 366 days, the server limit); moving one bound past the other moves the other bound with it.
  */
 export function TableRange({ prefs, earliest, onChange }: { prefs: RangePrefs; earliest?: string | null; onChange: (next: Partial<RangePrefs>) => void }) {
-  const today = warsawToday(), { from, to } = tableBounds(prefs, earliest);
+  const today = appToday(), { from, to } = tableBounds(prefs, earliest);
   const set = (nextFrom: string, nextTo: string) => {
     const preset = nextTo === today ? tableRanges.find(([days]) => days > 0 && addDays(today, -(days - 1)) === nextFrom)?.[0] : undefined;
     onChange(preset ? { range: preset, from: '', to: '' } : earliest && nextTo === today && nextFrom === earliest ? { range: -1, from: '', to: '' } : { range: 0, from: nextFrom, to: nextTo });
@@ -131,7 +131,7 @@ function longest<T>(items: readonly T[], length: (item: T) => number, count = 3)
   return items.map((item) => [item, length(item)] as const).sort((a, b) => b[1] - a[1]).slice(0, count).map(([item]) => item);
 }
 export function TableView({ from, to, cols, onOpenDay, onOpenMetric }: { from: string; to: string; cols: Columns; onOpenDay: (date: string) => void; onOpenMetric: (date: string, key: MetricKey) => void }) {
-  const today = warsawToday(), read = maxDate(firstDay, from), readable = to >= firstDay;
+  const today = appToday(), read = maxDate(firstDay, from), readable = to >= firstDay;
   const [sort, setSort] = useState<{ key: 'date' | MetricKey; desc: boolean }>({ key: 'date', desc: true });
   const result = useChunkedJson('/api/day-range', from, to, rangeSchema, (parts): z.infer<typeof rangeSchema> => parts.every((part) => part.state === 'ready') ? { state: 'ready', days: parts.flatMap((part) => part.state === 'ready' ? part.days : []) } : { state: 'not_ready' });
   const band = useChunkedJson(readable ? '/api/google/band-share-range' : null, read, to, bandRangeSchema, (parts) => parts.flat());
@@ -287,7 +287,7 @@ export function TableView({ from, to, cols, onOpenDay, onOpenMetric }: { from: s
     const style = widthAt(index + 1);
     if (isMetric(key)) { const metric = metricOf(key); return <th key={key} scope="col" style={style} aria-sort={ariaSort(key)}>{sortButton(key, <>{metric.short}{metric.unit && <span className="faint"> {metric.unit}</span>}</>, metric.label)}</th>; }
     if (key === 'food') return <th key={key} scope="col" style={style} className="faint">Spożyte kcal</th>;
-    if (key === 'band') return <th key={key} scope="col" style={style} title="Część doby warszawskiej, w której urządzenie mierzyło tętno (okna 10-minutowe). Dowód pomiaru, nie noszenia przez całe okno.">Opaska</th>;
+    if (key === 'band') return <th key={key} scope="col" style={style} title="Część doby, w której urządzenie mierzyło tętno (okna 10-minutowe). Dowód pomiaru, nie noszenia przez całe okno.">Opaska</th>;
     return <th key={key} scope="col" style={style} className="l">{columnLabels[key]}</th>;
   };
   return <>

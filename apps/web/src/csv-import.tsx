@@ -131,7 +131,7 @@ export function CsvImport() {
         <label>Kolumna daty {columnSelect(mapping.date.column, (column) => change({ ...mapping, date: { ...mapping.date, column: column ?? 0 } }), 'Kolumna daty', false)}</label>{' '}
         <label>Format <select value={mapping.date.format} onChange={(event) => change({ ...mapping, date: { ...mapping.date, format: event.target.value as CsvMapping['date']['format'] } })}>{csvDateFormats.map((format) => <option key={format} value={format}>{formatLabels[format]}</option>)}</select></label>{' '}
         <label>Godzina pomiaru (opcjonalnie) {columnSelect(mapping.time, (column) => change({ ...mapping, time: column }), 'Kolumna godziny', true)}</label>
-        <p className="sub">Data bez strefy jest dobą zapisaną w pliku (bez przeliczania); czas ISO ze strefą trafia do swojej doby warszawskiej.</p>
+        <p className="sub">Data bez strefy jest dobą zapisaną w pliku (bez przeliczania); czas ISO ze strefą trafia do swojej doby w strefie z ustawień.</p>
       </fieldset>
       <fieldset disabled={busy}><legend>Metryki</legend>
         <div className="tw"><table className="simple"><thead><tr><th className="l">Metryka w Trivimo</th><th className="l">Kolumna w pliku CSV</th><th className="l">Jednostka w pliku CSV</th></tr></thead><tbody>

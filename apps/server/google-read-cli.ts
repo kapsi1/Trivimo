@@ -5,7 +5,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { currentStoreVersion } from '../../packages/storage/canonical-days.ts';
 import { dailyRollupTypes } from '../../packages/adapters/google-health/daily-rollup.ts';
-import { warsawDay } from '../../packages/domain/warsaw-day.ts';
+import { dayBounds } from '../../packages/domain/day-zone.ts';
+import { readDayZone } from '../../packages/storage/day-zone.ts';
 import { windowJobKinds, type WindowJobKind } from '../../packages/storage/google-pages.ts';
 import { takeoutDatabasePath } from '../../packages/storage/location.ts';
 import { GoogleAuth } from './google-auth.ts';
@@ -19,15 +20,16 @@ async function main() {
   if (!parsedKind.success || !z.iso.date().safeParse(first).success || !z.iso.date().safeParse(last).success) throw new Error('usage');
   const clientFile = process.env.TRIVIMO_GOOGLE_CLIENT_FILE; const sourcePath = takeoutDatabasePath();
   if (!clientFile || !sourcePath) throw new Error('missing_configuration');
-  // Civil-day kinds keep producer dates; window kinds keep the UTC bounds of the Warsaw days.
+  // Civil-day kinds keep producer dates; window kinds keep the UTC bounds of the days in the store's day zone.
   const windowed = parsedKind.data.endsWith('-10m');
-  const end = windowed ? warsawDay(last!).end : new Date(Date.parse(`${last}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
-  const begin = windowed ? warsawDay(first!).start : first!;
   const auth = GoogleAuth.fromJson(JSON.parse(readFileSync(clientFile, 'utf8')) as unknown, new DpapiTokenStore(join(dirname(sourcePath), 'google-token.dpapi')));
   await auth.restore();
   const db = new DatabaseSync(sourcePath);
   try {
     if (db.prepare('PRAGMA user_version').get()?.user_version !== currentStoreVersion) throw new Error('migration_required');
+    const zone = readDayZone(db);
+    const end = windowed ? dayBounds(last!, zone).end : new Date(Date.parse(`${last}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
+    const begin = windowed ? dayBounds(first!, zone).start : first!;
     if (flag !== '--again' && db.prepare("SELECT 1 FROM google_read_jobs WHERE kind = ? AND range_start = ? AND range_end = ? AND state = 'complete'").get(parsedKind.data, begin, end)) { console.log(`skipped: ${parsedKind.data} ${first}..${last} already read (use --again to repeat)`); return; }
     const id = await startGoogleReadJob(db, auth, parsedKind.data, begin, end);
     let pages = 0;

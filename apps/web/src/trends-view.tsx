@@ -3,7 +3,7 @@ import type { z } from 'zod';
 import { forecastSchema, groups, heartRateRangeSchema, metricOf, metrics, rangeSchema, useChunkedJson, useJson, earliestOf, type Earliest, type Loaded, type MetricKey } from './api.ts';
 import { HR_LEGEND, HrTrendChart, TrendChart, Zoomable, tip } from './charts.tsx';
 import { axisEvents, forecastHint, heartTrend, meanValid, metricTrend, valueOf } from './derive.ts';
-import { addDays, maxDate, nf, warsawToday , firstDay } from './format.ts';
+import { addDays, maxDate, nf, appToday , firstDay } from './format.ts';
 import { tableBounds, type RangePrefs } from './table.tsx';
 import { ZoomDialog, zoomSize } from './zoom.tsx';
 import { Loading } from './logo.tsx';
@@ -14,7 +14,7 @@ export function TrendsView({ earliest, prefs, agg }: { earliest: Loaded<Earliest
   const [zoom, setZoom] = useState<MetricKey | 'hr' | null>(null);
   // "Od początku": on the dashboard the first day of any chart, in a chart's zoom the first day of that chart only
   const first = earliestOf(earliest, zoom ? [zoom] : [...metrics.map((metric) => metric.key), 'hr']);
-  const today = warsawToday(), { from, to } = tableBounds(prefs, first), history = from < addDays(to, -365) ? from : addDays(to, -365);
+  const today = appToday(), { from, to } = tableBounds(prefs, first), history = from < addDays(to, -365) ? from : addDays(to, -365);
   // one request covers every period, so events like the first day of the full calorie model are found in the whole history, not the slice
   const result = useChunkedJson('/api/day-range', history, to, rangeSchema, (parts): z.infer<typeof rangeSchema> => parts.every((part) => part.state === 'ready') ? { state: 'ready', days: parts.flatMap((part) => part.state === 'ready' ? part.days : []) } : { state: 'not_ready' });
   const hr = useChunkedJson(to >= firstDay ? '/api/google/heart-rate-range' : null, maxDate(firstDay, history), to, heartRateRangeSchema, (parts) => parts.flat());

@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { sourceDay } from '../domain/source-day.ts';
+import { readDayZone } from './day-zone.ts';
 import { sourceIdentity, type SourceIdentity } from '../domain/source-identity.ts';
 import { parseSourceValue } from '../domain/source-units.ts';
 import { resolveArtifactAccount } from './source-accounts.ts';
@@ -18,7 +19,7 @@ export interface BodySourceRow {
 /** Read source rows for review, never treating a fallback key as an accepted measurement. */
 export function readBodySourceDay(db: DatabaseSync, kind: 'weight' | 'body_fat', day: string) {
   z.iso.date().parse(day);
-  const rows: BodySourceRow[] = [];
+  const zone = readDayZone(db), rows: BodySourceRow[] = [];
   let unassigned = 0;
   let matched = 0;
   const accounts = new Map<number, string | null>();
@@ -36,7 +37,7 @@ export function readBodySourceDay(db: DatabaseSync, kind: 'weight' | 'body_fat',
     };
     const timestamp = get('timestamp');
     let assigned: string;
-    try { assigned = sourceDay(timestamp); } catch { unassigned++; continue; }
+    try { assigned = sourceDay(timestamp, zone); } catch { unassigned++; continue; }
     if (assigned !== day) continue;
     matched++;
     if (rows.length >= 200) continue;

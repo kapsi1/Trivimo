@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { windowSeconds } from '../adapters/google-health/window-rollup.ts';
-import { warsawDay } from '../domain/warsaw-day.ts';
+import { dayBounds } from '../domain/day-zone.ts';
+import { readDayZone } from './day-zone.ts';
 import { savedWindows } from './google-band-share-day.ts';
 
 export const seriesMetrics = {
@@ -22,11 +23,11 @@ function format(value: bigint): string {
 }
 
 /**
- * Hourly series of one Warsaw day from the saved ten-minute windows (exact sums of the source text).
+ * Hourly series of one day (in the day zone) from the saved ten-minute windows (exact sums of the source text).
  * An hour without any window has no value: absence of a reading is not zero. Null when the day was not read completely.
  */
 export function readDaySeries(db: DatabaseSync, metric: SeriesMetric, date: string) {
-  const day = warsawDay(date); const start = Date.parse(day.start), end = Date.parse(day.end);
+  const day = dayBounds(date, readDayZone(db)); const start = Date.parse(day.start), end = Date.parse(day.end);
   const definition = seriesMetrics[metric];
   const windows = savedWindows(db, definition.kind, definition.type, [{ date, start, end }]).get(date);
   if (!windows) return null;

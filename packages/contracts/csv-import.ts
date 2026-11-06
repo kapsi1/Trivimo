@@ -13,7 +13,7 @@ const metricColumn = <T extends readonly [string, ...string[]]>(units: T) => z.o
 
 /**
  * How the columns of one CSV file map to the application's metrics. Columns are zero-based positions in the file;
- * the day is the civil date written in the file (an ISO time with an offset is assigned to its Warsaw day).
+ * the day is the civil date written in the file (an ISO time with an offset is assigned to its civil day in the day zone active at the import).
  * `dailyRows` decides what several rows of one day mean for daily totals: `single` (copies; differing values are a
  * conflict) or `sum` (parts of the day, added up by this explicit choice). Weight and body fat are always measurements.
  * `note` is a column of remarks: on import they are written to the day notes, like notes typed in the application.

@@ -7,7 +7,7 @@ const input: DayEvidence = {
   date: '2026-01-01',
   weight: { evaluationComplete: true, candidates: [{ identity: 'one', value: '70.25', decision: 'accepted' }, { identity: 'two', value: '71.75', decision: 'accepted' }] },
   bodyFat: { evaluationComplete: false, candidates: [] },
-  steps: { kind: 'steps', value: '0', unit: 'count', reconciliation: 'confirmed', sourceFamily: 'resolved', dayBoundary: 'warsaw_interval', coverage: 'confirmed', day: 'complete', zeroConfirmed: true },
+  steps: { kind: 'steps', value: '0', unit: 'count', reconciliation: 'confirmed', sourceFamily: 'resolved', dayBoundary: 'zone_interval', coverage: 'confirmed', day: 'complete', zeroConfirmed: true },
   distance: { kind: 'distance', value: null, unit: 'unknown', reconciliation: 'unresolved', sourceFamily: 'unknown', dayBoundary: 'unknown', coverage: 'unknown', day: 'complete', zeroConfirmed: false },
   totalEnergy: { kind: 'total', value: '1500', definition: 'basal_only', unit: 'kcal', origin: 'wearable', coverage: 'confirmed', day: 'complete', zeroConfirmed: false },
   activeEnergy: { kind: 'active', value: null, definition: 'unknown', unit: 'unknown', origin: 'unknown', coverage: 'unknown', day: 'complete', zeroConfirmed: false },

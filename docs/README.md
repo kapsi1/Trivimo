@@ -23,6 +23,6 @@ Stan (2026-11-06): M1 wykonane (kryteria odbioru na danych syntetycznych, rekons
 | Dokumenty producentów i materiały Health Sync | [Źródła](references.md) |
 | Pomysły do oceny | [Pomysły](ideas.md) |
 
-Wykonane i archiwalne: [P0](completed/01-p0-probes.md), [M1](completed/02-m1.md), [obserwacje z danych](completed/03-data-findings.md), [archiwum raportu testów](completed/04-test-results-archive.md).
+Wykonane i archiwalne: [P0](completed/01-p0-probes.md), [M1](completed/02-m1.md), [strefy czasowe](completed/05-m2-strefy-czasowe.md), [obserwacje z danych](completed/03-data-findings.md), [archiwum raportu testów](completed/04-test-results-archive.md).
 
 Plany opisują cel; checkboxy to pozostała praca, a modele w planach są propozycjami. Faktyczny stan i wyniki kontroli są w raporcie testów i w `completed/`.

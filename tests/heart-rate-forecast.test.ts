@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseHeartRateWindows } from '../packages/adapters/google-health/window-rollup.ts';
 import { forecastRestingEnergy, minRestWindows } from '../packages/domain/energy-forecast.ts';
-import { warsawDay } from '../packages/domain/warsaw-day.ts';
+import { warsawDay } from './helpers/warsaw-day.ts';
 import { createDemoDatabase } from '../packages/storage/days.ts';
 import { readEnergyForecast } from '../packages/storage/google-energy-forecast.ts';
 import { readHeartRateDay, readHeartRateRange } from '../packages/storage/google-heart-rate.ts';

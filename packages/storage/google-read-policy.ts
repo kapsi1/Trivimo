@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { removeUnusedPageWindows } from './google-page-windows.ts';
 import { sourceDay } from '../domain/source-day.ts';
+import { readDayZone } from './day-zone.ts';
 
 /**
  * Retention policy for automatic reads (decision 2026-11-03, see docs/decisions.md):
@@ -26,8 +27,8 @@ export function registerAutomaticJob(db: DatabaseSync, jobId: string): void {
   db.prepare("INSERT OR IGNORE INTO google_read_job_meta (job_id, origin) VALUES (?, 'automatic')").run(jobId);
 }
 
-function lastDay(rangeStart: string, rangeEnd: string): string {
-  return isInstant(rangeStart) ? sourceDay(new Date(Date.parse(rangeEnd) - 1).toISOString()) : addDays(rangeEnd, -1);
+function lastDay(rangeStart: string, rangeEnd: string, zone: string): string {
+  return isInstant(rangeStart) ? sourceDay(new Date(Date.parse(rangeEnd) - 1).toISOString(), zone) : addDays(rangeEnd, -1);
 }
 
 type Row = Record<string, string | number | bigint | Uint8Array | null>;
@@ -44,7 +45,7 @@ function remove(db: DatabaseSync, old: Row, replacedBy: string, reason: string, 
 
 /** Apply the policy right after an automatic job completed. Runs in one transaction; a failure changes nothing. */
 export function applyReadPolicy(db: DatabaseSync, jobId: string, nowMs: number): PolicyOutcome {
-  const now = new Date(nowMs).toISOString(); const today = sourceDay(now);
+  const now = new Date(nowMs).toISOString(), zone = readDayZone(db), today = sourceDay(now, zone);
   db.exec('BEGIN IMMEDIATE');
   try {
     const job = db.prepare(`SELECT j.id, j.kind, j.account_digest, j.range_start, j.range_end, j.created_at, j.state, m.origin FROM google_read_jobs j
@@ -67,8 +68,8 @@ export function applyReadPolicy(db: DatabaseSync, jobId: string, nowMs: number):
       WHERE j.kind = ? AND j.account_digest = ? AND j.state = 'complete' AND j.id != ? AND j.created_at < ? ORDER BY j.created_at`).all(job.kind, job.account_digest, jobId, job.created_at);
     for (const old of candidates) {
       if (Date.parse(String(old.range_start)) < from || Date.parse(String(old.range_end)) > to) continue;
-      const oldLast = lastDay(String(old.range_start), String(old.range_end)); const oldCreatedDay = sourceDay(String(old.created_at));
-      const intermediate = oldCreatedDay <= oldLast && oldCreatedDay === sourceDay(String(job.created_at));
+      const oldLast = lastDay(String(old.range_start), String(old.range_end), zone); const oldCreatedDay = sourceDay(String(old.created_at), zone);
+      const intermediate = oldCreatedDay <= oldLast && oldCreatedDay === sourceDay(String(job.created_at), zone);
       if (intermediate) removed += remove(db, old, jobId, 'intermediate_current_day', now);
       else if (oldLast < addDays(today, -3)) removed += remove(db, old, jobId, 'superseded_after_correction_window', now);
     }

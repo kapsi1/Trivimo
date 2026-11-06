@@ -1,7 +1,7 @@
-import { warsawDay } from '../../../packages/domain/warsaw-day.ts';
+import { dayBounds } from '../../../packages/domain/day-zone.ts';
 import { metricOf, type DayRow, type Forecast, type HeartRateDay, type HeartRateSummary, type MetricKey, type Series, type Snapshot } from './api.ts';
 import { energyTip, weekTitle, type AxisEvent, type HourKey, type HourPoint, type SlotPoint, type HrTrendPt, type HrWindow, type TrendPt } from './charts.tsx';
-import { addDays, fmtDL, formatRational, hourOf, mondayOf, nf, timeOf, toNumber } from './format.ts';
+import { addDays, fmtDL, formatRational, getDayZone, hourOf, mondayOf, nf, timeOf, toNumber } from './format.ts';
 import { trendPoints } from './trends.ts';
 
 /** A day's value as a number for charts and means: only valid or provisional values count, anything else is a gap. */
@@ -62,11 +62,11 @@ export function dayTotal(snapshot: Snapshot | null | undefined, key: HourKey, ho
 export interface DayHours { hours: HourPoint[]; windows: SlotPoint[]; hr: HrWindow[]; slots: number; dayStart: number }
 const seriesValue = (value: string | null, unit: string) => value === null ? null : unit === 'mm' ? Number(value) / 1e6 : Number(value);
 /**
- * Hours of a Warsaw day (23 or 25 across DST) from the saved ten-minute series. For the day in progress, hours after the
+ * Hours of a day in the day zone (23 or 25 across DST) from the saved ten-minute series. For the day in progress, hours after the
  * last read are future; the forecast fills them window by window (own derivation, never a producer value).
  */
 export function dayHours(date: string, series: Partial<Record<HourKey, Series>>, heart: HeartRateDay | undefined, forecast: Forecast | undefined, today: boolean): DayHours {
-  const bounds = warsawDay(date), dayStart = Date.parse(bounds.start), dayEnd = Date.parse(bounds.end);
+  const bounds = dayBounds(date, getDayZone()), dayStart = Date.parse(bounds.start), dayEnd = Date.parse(bounds.end);
   const count = Math.round((dayEnd - dayStart) / 3600000), slots = count * 6;
   const asOf = today ? (forecast ? Date.parse(forecast.asOf) : Date.now()) : Infinity;
   // expected kcal of the windows after the last read, by window index of the day (the forecast says them window by window)

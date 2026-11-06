@@ -2,7 +2,7 @@ import { parse } from 'csv-parse/sync';
 import { csvMetrics, type CsvMapping, type CsvMetric } from '../../contracts/csv-import.ts';
 import { isInteger, multiply, parseDecimal, rational, type Rational } from '../../domain/rational.ts';
 import { sourceDay } from '../../domain/source-day.ts';
-import { firstSupportedDay } from '../../domain/warsaw-day.ts';
+import { firstSupportedDay } from '../../domain/day-zone.ts';
 import { ungroupDigits } from './decimal.ts';
 
 /**
@@ -52,7 +52,7 @@ const valid = (year: number, month: number, day: number) => { const date = new D
 const iso = (year: number, month: number, day: number) => `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
 /** Civil day (and time of day, when the cell has one) of a date cell in the declared format; null when it does not match. */
-export function parseDay(cell: string, format: CsvMapping['date']['format']): { day: string; time: string | null } | null {
+export function parseDay(cell: string, format: CsvMapping['date']['format'], zone: string): { day: string; time: string | null } | null {
   const text = cell.trim();
   if (format === 'ISO_DATETIME') {
     const match = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(\.\d{1,9})?)?)?(Z|[+-]\d{2}:?\d{2})?$/.exec(text);
@@ -63,7 +63,7 @@ export function parseDay(cell: string, format: CsvMapping['date']['format']): { 
     if (!offset) return { day: `${y}-${m}-${d}`, time };
     if (hh === undefined) return null;
     const normalized = `${y}-${m}-${d}T${time}${offset === 'Z' ? 'Z' : `${offset.slice(0, 3)}:${offset.slice(-2)}`}`;
-    try { return { day: sourceDay(normalized), time: normalized }; } catch { return null; }
+    try { return { day: sourceDay(normalized, zone), time: normalized }; } catch { return null; }
   }
   const pattern = format === 'YYYY-MM-DD' ? /^(\d{4})-(\d{1,2})-(\d{1,2})$/ : format === 'DD.MM.YYYY' ? /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/ : /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
   const match = pattern.exec(text);
@@ -81,9 +81,10 @@ const factors: Record<string, Rational> = {
 
 /**
  * Values of the mapped columns, converted exactly. An empty cell is no value (never 0); a cell that cannot be read
- * rejects that value with a reason and leaves the other columns of the row. Days after `today` are rejected.
+ * rejects that value with a reason and leaves the other columns of the row. Days after `today` are rejected. A time with an
+ * offset is assigned to its civil day in `zone` (the day zone at the time of the import).
  */
-export function parseMappedCsv(text: string, mapping: CsvMapping, today: string): ParsedCsv {
+export function parseMappedCsv(text: string, mapping: CsvMapping, today: string, zone: string): ParsedCsv {
   let rows: string[][];
   try { rows = records(text, mapping.delimiter); } catch (error) { throw new Error(error instanceof Error && /^too_many_/.test(error.message) ? error.message : 'invalid_csv'); }
   const result: ParsedCsv = { values: [], notes: [], rejected: [], empty: 0, dataRows: 0 };
@@ -93,7 +94,7 @@ export function parseMappedCsv(text: string, mapping: CsvMapping, today: string)
     const row = index + 1;
     const dateCell = cells[mapping.date.column];
     if (dateCell === undefined) { result.rejected.push({ row, metric: null, reason: 'missing_column' }); return; }
-    const parsed = parseDay(dateCell, mapping.date.format);
+    const parsed = parseDay(dateCell, mapping.date.format, zone);
     if (!parsed) { result.rejected.push({ row, metric: null, reason: 'invalid_date' }); return; }
     if (parsed.day < firstSupportedDay || parsed.day > today) { result.rejected.push({ row, metric: null, reason: 'date_out_of_range' }); return; }
     let time = parsed.time;

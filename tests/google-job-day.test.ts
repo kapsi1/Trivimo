@@ -3,10 +3,11 @@ import { test } from 'node:test';
 import { createApp } from '../apps/server/app.ts';
 import type { GoogleReadService } from '../apps/server/google-read-service.ts';
 import { createDemoDatabase } from '../packages/storage/days.ts';
+import { warsawDay } from './helpers/warsaw-day.ts';
 
-test('REST tworzy zadanie dla doby warszawskiej i zachowuje wcześniejszy format zakresu', async () => {
+test('REST tworzy zadanie dla doby w strefie magazynu i zachowuje wcześniejszy format zakresu', async () => {
   const calls: string[][] = [];
-  const service = { start: async (...args: string[]) => { calls.push(args); return { id: 'synthetic' }; } } as unknown as GoogleReadService;
+  const service = { dayRange: (date: string) => ({ ...warsawDay(date) }), start: async (...args: string[]) => { calls.push(args); return { id: 'synthetic' }; } } as unknown as GoogleReadService;
   const db = createDemoDatabase(); const server = createApp(db, undefined, undefined, [], undefined, service);
   try {
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));

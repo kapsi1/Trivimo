@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { assessActivity, type ActivityEvidence } from '../packages/domain/activity-qualification.ts';
 
-const steps: ActivityEvidence = { kind: 'steps', value: '100', unit: 'count', reconciliation: 'confirmed', sourceFamily: 'resolved', dayBoundary: 'warsaw_interval', coverage: 'confirmed', day: 'complete', zeroConfirmed: false };
+const steps: ActivityEvidence = { kind: 'steps', value: '100', unit: 'count', reconciliation: 'confirmed', sourceFamily: 'resolved', dayBoundary: 'zone_interval', coverage: 'confirmed', day: 'complete', zeroConfirmed: false };
 
 test('nie uznaje surowej sumy, nieuzgodnionych źródeł ani innej doby', () => {
   assert.equal(assessActivity({ ...steps, reconciliation: 'unresolved' }).reason, 'unresolved_overlap');

@@ -4,7 +4,7 @@ import { parseWindowRollup, windowRollupPage } from '../packages/adapters/google
 import { createDemoDatabase } from '../packages/storage/days.ts';
 import { readBandShareDay, readBandShareRange } from '../packages/storage/google-band-share-day.ts';
 import { readDaySeries } from '../packages/storage/google-day-series.ts';
-import { warsawDay } from '../packages/domain/warsaw-day.ts';
+import { warsawDay } from './helpers/warsaw-day.ts';
 
 const point = (start: string, extra: object) => ({ startTime: start, endTime: new Date(Date.parse(start) + 600000).toISOString(), ...extra });
 

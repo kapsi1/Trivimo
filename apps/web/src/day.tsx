@@ -3,7 +3,7 @@ import { dayResponseSchema, forecastSchema, groups, heartRateDaySchema, heartRat
 import { DayMini, EnergyLegend, HourChart, HR_LEGEND, HrDayChart, HrDayMini, type HourKey } from './charts.tsx';
 import { dayHours, dayTotal, forecastHint, hrOf, lastMeasured, meanValid, valueOf, type DayHours } from './derive.ts';
 import { StatusChip, hourMetricLabel } from './details.tsx';
-import { addDays, fmtD, formatRational, nf, warsawToday, whenOf, firstDay } from './format.ts';
+import { addDays, fmtD, formatRational, nf, appToday, whenOf, firstDay } from './format.ts';
 import { Placeholder } from './placeholders.tsx';
 import { Segmented, ZoomDialog, zoomSize } from './zoom.tsx';
 import { z } from 'zod';
@@ -17,7 +17,7 @@ const windowDays = 150;
 const windowEnd = (date: string, today: string) => { const later = addDays(date, 30); return later < today ? later : today; };
 
 export function DayView({ date, tab, onTab, sync, onDirty }: { date: string; tab: DayTab; onTab: (tab: DayTab) => void; sync: SyncStatus | undefined; onDirty: (dirty: boolean) => void }) {
-  const today = warsawToday(), isToday = date === today, read = date >= firstDay;
+  const today = appToday(), isToday = date === today, read = date >= firstDay;
   const [zoom, setZoom] = useState<Zoom | null>(null);
   const [showHr, setShowHr] = useState(true); // heart-rate line in the zoomed hourly chart; kept between zooms
   const [refresh, setRefresh] = useState(0);

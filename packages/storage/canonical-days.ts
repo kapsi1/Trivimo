@@ -5,6 +5,7 @@ import { projectIssueNotes } from '../domain/data-issues.ts';
 import { csvMappingSchema } from '../contracts/csv-import.ts';
 import { parseMappedCsv } from '../adapters/csv/mapped-csv.ts';
 import { sourceDay } from '../domain/source-day.ts';
+import { dayZoneRule, defaultDayZone } from '../domain/day-zone.ts';
 import { backupToNewFile } from './backup.ts';
 import { verifyTakeout } from './verify-takeout.ts';
 import { fillPageWindows } from './google-page-windows.ts';
@@ -214,7 +215,7 @@ export async function migrateCsvNotes(db: DatabaseSync, backupPath: string): Pro
     const revisions = db.prepare('SELECT revision, content FROM user_note_versions WHERE day = ? AND created_at = ? ORDER BY revision');
     const previous = db.prepare('SELECT content FROM user_note_versions WHERE day = ? AND revision = ?');
     for (const row of db.prepare("SELECT id, content, mapping, created_at FROM csv_imports WHERE json_extract(mapping, '$.note') IS NOT NULL ORDER BY created_at, id").all()) {
-      const parsed = parseMappedCsv(String(row.content), csvMappingSchema.parse(JSON.parse(String(row.mapping))), sourceDay(String(row.created_at)));
+      const parsed = parseMappedCsv(String(row.content), csvMappingSchema.parse(JSON.parse(String(row.mapping))), sourceDay(String(row.created_at), defaultDayZone), defaultDayZone);
       for (const [day, texts] of remarksByDay(parsed.notes)) {
         note.run(row.id, day, texts.join('\n'));
         for (const revision of revisions.all(day, row.created_at)) {
@@ -248,8 +249,23 @@ export async function migratePageWindows(db: DatabaseSync, backupPath: string): 
     PRAGMA user_version = 13;`, () => fillPageWindows(db));
 }
 
+/**
+ * Version 14: the day zone setting (rule `day-zone-v1`). Every day so far was cut in Europe/Warsaw, so revision 1 records
+ * that; the snapshots published before this version carry no zone and are read as Warsaw days. A later change of the
+ * zone adds a revision and is applied by an explicit recomputation of the days (originals and snapshot history kept).
+ */
+export async function migrateDayZone(db: DatabaseSync, backupPath: string): Promise<void> {
+  await migrateWithBackup(db, backupPath, 13, `CREATE TABLE day_zone_versions (
+      revision INTEGER PRIMARY KEY CHECK (revision > 0), zone TEXT NOT NULL, rule TEXT NOT NULL,
+      reason TEXT NOT NULL CHECK(reason IN ('initial','user')), created_at TEXT NOT NULL
+    ) STRICT;
+    PRAGMA user_version = 14;`, () => {
+    db.prepare("INSERT INTO day_zone_versions VALUES (1, ?, ?, 'initial', ?)").run(defaultDayZone, dayZoneRule, new Date().toISOString());
+  });
+}
+
 /** Store version the server, services and CLI expect. */
-export const currentStoreVersion = 13;
+export const currentStoreVersion = 14;
 /** Whether a store version has the given feature version (and is not newer than this code understands). */
 export const storeHas = (version: unknown, since: number): boolean => typeof version === 'number' && version >= since && version <= currentStoreVersion;
 

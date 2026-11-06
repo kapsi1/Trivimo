@@ -9,9 +9,9 @@ import { inspectCsv, parseDay, parseMappedCsv, ungroupDigits } from '../packages
 import { guessDecimal } from '../packages/adapters/csv/decimal.ts';
 import { initializeTakeoutStore } from '../packages/adapters/takeout/import.ts';
 import type { CsvMapping } from '../packages/contracts/csv-import.ts';
-import { warsawDay } from '../packages/domain/warsaw-day.ts';
+import { warsawDay } from './helpers/warsaw-day.ts';
 import { toText } from '../packages/domain/rational.ts';
-import { migrateCalorieJobs, migrateCanonicalDays, migrateCsvImports, migrateCsvNotes, migratePageWindows, migrateDailyRollups, migrateGooglePages, migrateReadPolicy, migrateSourceAccounts, migrateSourceLists, migrateUserNotes, migrateWindowJobs, readCanonicalDay } from '../packages/storage/canonical-days.ts';
+import { migrateCalorieJobs, migrateCanonicalDays, migrateCsvImports, migrateCsvNotes, migratePageWindows, migrateDayZone, migrateDailyRollups, migrateGooglePages, migrateReadPolicy, migrateSourceAccounts, migrateSourceLists, migrateUserNotes, migrateWindowJobs, readCanonicalDay } from '../packages/storage/canonical-days.ts';
 import { csvDayOrigin, csvDayValues, decideCsvImport, saveCsvImport } from '../packages/storage/csv-imports.ts';
 import { readUserNote, saveUserNote } from '../packages/storage/user-notes.ts';
 import { compareGoogleDays, publishGoogleDays } from '../packages/storage/google-day-snapshots.ts';
@@ -25,15 +25,15 @@ const today = '2026-11-04';
 const text = (value: ReturnType<typeof toText>) => `${value.numerator}/${value.denominator}`;
 
 test('CSV: formaty daty, strefa ISO przypisana do doby warszawskiej, odrzucenie nieistniejącej daty', () => {
-  assert.deepEqual(parseDay('2024-03-05', 'YYYY-MM-DD'), { day: '2024-03-05', time: null });
-  assert.deepEqual(parseDay('5.3.2024', 'DD.MM.YYYY'), { day: '2024-03-05', time: null });
-  assert.deepEqual(parseDay('03/05/2024', 'MM/DD/YYYY'), { day: '2024-03-05', time: null });
-  assert.deepEqual(parseDay('03/05/2024', 'DD/MM/YYYY'), { day: '2024-05-03', time: null });
-  assert.equal(parseDay('2024-02-30', 'YYYY-MM-DD'), null);
+  assert.deepEqual(parseDay('2024-03-05', 'YYYY-MM-DD', 'Europe/Warsaw'), { day: '2024-03-05', time: null });
+  assert.deepEqual(parseDay('5.3.2024', 'DD.MM.YYYY', 'Europe/Warsaw'), { day: '2024-03-05', time: null });
+  assert.deepEqual(parseDay('03/05/2024', 'MM/DD/YYYY', 'Europe/Warsaw'), { day: '2024-03-05', time: null });
+  assert.deepEqual(parseDay('03/05/2024', 'DD/MM/YYYY', 'Europe/Warsaw'), { day: '2024-05-03', time: null });
+  assert.equal(parseDay('2024-02-30', 'YYYY-MM-DD', 'Europe/Warsaw'), null);
   // 23:30 UTC on the last day of March (summer time) is already 1 April in Warsaw; without an offset the written date counts
-  assert.equal(parseDay('2024-03-31T23:30:00Z', 'ISO_DATETIME')?.day, '2024-04-01');
-  assert.equal(parseDay('2024-03-31 23:30', 'ISO_DATETIME')?.day, '2024-03-31');
-  assert.equal(parseDay('2024-10-27T00:30:00+0200', 'ISO_DATETIME')?.day, '2024-10-27');
+  assert.equal(parseDay('2024-03-31T23:30:00Z', 'ISO_DATETIME', 'Europe/Warsaw')?.day, '2024-04-01');
+  assert.equal(parseDay('2024-03-31 23:30', 'ISO_DATETIME', 'Europe/Warsaw')?.day, '2024-03-31');
+  assert.equal(parseDay('2024-10-27T00:30:00+0200', 'ISO_DATETIME', 'Europe/Warsaw')?.day, '2024-10-27');
 });
 
 test('CSV: wykrycie separatora, BOM, cudzysłowy i przecinek dziesiętny; jednostki przeliczone dokładnie, pusta komórka to brak', () => {
@@ -41,7 +41,7 @@ test('CSV: wykrycie separatora, BOM, cudzysłowy i przecinek dziesiętny; jednos
   const info = inspectCsv(file);
   assert.equal(info.delimiter, ';'); assert.equal(info.columns, 6); assert.equal(info.rows, 5); assert.equal(info.head[0]?.[0], 'Data');
   const mapping: CsvMapping = { ...base, delimiter: ';', decimal: ',', metrics: { weight: { column: 1, unit: 'lb' }, steps: { column: 2, unit: 'count' }, distance: { column: 3, unit: 'mi' }, total_energy: { column: 4, unit: 'kJ' }, body_fat: { column: 5, unit: 'fraction' } } };
-  const parsed = parseMappedCsv(file, mapping, today);
+  const parsed = parseMappedCsv(file, mapping, today, 'Europe/Warsaw');
   const first = parsed.values.filter((value) => value.row === 2);
   const of = (metric: string) => text(toText(first.find((value) => value.metric === metric)!.value));
   assert.equal(of('weight'), '16011810661/200000000'); // 176.5 lb × 0.45359237 = 80.059053305 kg (exact)
@@ -54,7 +54,7 @@ test('CSV: wykrycie separatora, BOM, cudzysłowy i przecinek dziesiętny; jednos
   assert.deepEqual(parsed.rejected.map((item) => [item.row, item.metric, item.reason]), [
     [3, 'body_fat', 'out_of_range'], [4, 'weight', 'invalid_number'], [4, 'steps', 'not_integer'], [5, null, 'date_out_of_range'],
   ]);
-  assert.throws(() => parseMappedCsv('a,"b\n', base, today), /invalid_csv/);
+  assert.throws(() => parseMappedCsv('a,"b\n', base, today, 'Europe/Warsaw'), /invalid_csv/);
 });
 
 async function store() {
@@ -63,10 +63,10 @@ async function store() {
   await migrateCanonicalDays(db, join(dir, 'v1.sqlite')); await migrateUserNotes(db, join(dir, 'v2.sqlite'));
   await migrateSourceAccounts(db, join(dir, 'v3.sqlite'), true); await migrateGooglePages(db, join(dir, 'v4.sqlite'));
   await migrateDailyRollups(db, join(dir, 'v5.sqlite')); await migrateCalorieJobs(db, join(dir, 'v6.sqlite')); await migrateWindowJobs(db, join(dir, 'v7.sqlite'));
-  await migrateReadPolicy(db, join(dir, 'v8.sqlite')); await migrateSourceLists(db, join(dir, 'v9.sqlite')); await migrateCsvImports(db, join(dir, 'v10.sqlite')); await migrateCsvNotes(db, join(dir, 'v11.sqlite')); await migratePageWindows(db, join(dir, 'v12.sqlite'));
+  await migrateReadPolicy(db, join(dir, 'v8.sqlite')); await migrateSourceLists(db, join(dir, 'v9.sqlite')); await migrateCsvImports(db, join(dir, 'v10.sqlite')); await migrateCsvNotes(db, join(dir, 'v11.sqlite')); await migratePageWindows(db, join(dir, 'v12.sqlite')); await migrateDayZone(db, join(dir, 'v13.sqlite'));
   return { dir, path, db, dispose: () => { db.close(); rmSync(dir, { recursive: true, force: true }); } };
 }
-const save = (db: DatabaseSync, content: string, mapping: CsvMapping) => saveCsvImport(db, { fileName: 'syntetyczny.csv', content, mapping, parsed: parseMappedCsv(content, mapping, today), now: '2026-11-04T10:00:00.000Z' });
+const save = (db: DatabaseSync, content: string, mapping: CsvMapping) => saveCsvImport(db, { fileName: 'syntetyczny.csv', content, mapping, parsed: parseMappedCsv(content, mapping, today, 'Europe/Warsaw'), now: '2026-11-04T10:00:00.000Z' });
 
 test('CSV w magazynie: idempotentny zapis, średnia unikalnych ważeń, konflikt sum dobowych, suma z wyboru i wykluczenie importu', async () => {
   const env = await store();
@@ -158,13 +158,13 @@ test('serwis i REST CSV: podgląd wiąże plik i mapowanie, zmiana wymaga nowego
 
 test('CSV: procent ze znakiem „%” jest liczbą tylko dla jednostki %, uwagi są tekstem doby', () => {
   const file = 'Data;Tłuszcz;Uwagi\n2025-03-01;20,90%;spacer\n2025-03-02;21,5 %;\n2025-03-03;0,2%;  basen  \n';
-  const parsed = parseMappedCsv(file, { ...base, delimiter: ';', decimal: ',', note: 2, metrics: { body_fat: { column: 1, unit: '%' } } }, today);
+  const parsed = parseMappedCsv(file, { ...base, delimiter: ';', decimal: ',', note: 2, metrics: { body_fat: { column: 1, unit: '%' } } }, today, 'Europe/Warsaw');
   assert.deepEqual(parsed.values.map((value) => [value.day, text(toText(value.value)), value.sourceText]), [['2025-03-01', '209/10', '20,90%'], ['2025-03-02', '43/2', '21,5 %'], ['2025-03-03', '1/5', '0,2%']]);
   assert.deepEqual(parsed.notes, [{ row: 2, day: '2025-03-01', text: 'spacer' }, { row: 4, day: '2025-03-03', text: 'basen' }]);
   // with a fraction unit the sign is not part of a number
-  const fraction = parseMappedCsv(file, { ...base, delimiter: ';', decimal: ',', metrics: { body_fat: { column: 1, unit: 'fraction' } } }, today);
+  const fraction = parseMappedCsv(file, { ...base, delimiter: ';', decimal: ',', metrics: { body_fat: { column: 1, unit: 'fraction' } } }, today, 'Europe/Warsaw');
   assert.deepEqual(fraction.rejected.map((item) => item.reason), ['invalid_number', 'invalid_number', 'invalid_number']);
-  assert.deepEqual(parseMappedCsv(`date,n\n2025-03-01,${'x'.repeat(10001)}\n`, { ...base, note: 1 }, today).rejected, [{ row: 2, metric: 'note', reason: 'note_too_long' }]);
+  assert.deepEqual(parseMappedCsv(`date,n\n2025-03-01,${'x'.repeat(10001)}\n`, { ...base, note: 1 }, today, 'Europe/Warsaw').rejected, [{ row: 2, metric: 'note', reason: 'note_too_long' }]);
 });
 
 test('uwagi z CSV są zapisywane jako notatki dni: nowa notatka, dopisanie do istniejącej, ponowny import bez zmian, historia rewizji', async () => {
@@ -215,7 +215,7 @@ test('CSV: grupy cyfr ze spacją, NBSP, wąską NBSP lub cienką spacją („12 
   assert.deepEqual(['12 345', '1 234 567', '12 345', '12 345', '12 345', '1 234,5', ' 9 999 ', '12345', '1 23', '12 3456', '1  234', ' '].map(ungroupDigits),
     ['12345', '1234567', '12345', '12345', '12345', '1234,5', '9999', '12345', '1 23', '12 3456', '1  234', '']);
   const file = 'Data;Kroki;Kalorie;Tłuszcz\n2025-04-01;12 345;2 150,5;20,90 %\n2025-04-02;1 23;;\n';
-  const parsed = parseMappedCsv(file, { ...base, delimiter: ';', decimal: ',', metrics: { steps: { column: 1, unit: 'count' }, total_energy: { column: 2, unit: 'kcal' }, body_fat: { column: 3, unit: '%' } } }, today);
+  const parsed = parseMappedCsv(file, { ...base, delimiter: ';', decimal: ',', metrics: { steps: { column: 1, unit: 'count' }, total_energy: { column: 2, unit: 'kcal' }, body_fat: { column: 3, unit: '%' } } }, today, 'Europe/Warsaw');
   assert.deepEqual(parsed.values.map((value) => [value.metric, text(toText(value.value)), value.sourceText]), [['body_fat', '209/10', '20,90 %'], ['steps', '12345/1', '12 345'], ['total_energy', '4301/2', '2 150,5']]);
   assert.deepEqual(parsed.rejected.map((item) => [item.row, item.metric, item.reason]), [[3, 'steps', 'invalid_number']]);
 });
@@ -229,7 +229,7 @@ test('CSV: przecinek dziesiętny w cudzysłowach („88,9”) w pliku z przecink
   assert.equal(guessDecimal([['80.5', '1,5', '2.25']], ','), '.');
   assert.equal(guessDecimal([['9000']], ';'), ',');
   assert.equal(guessDecimal([['9000']], ','), '.');
-  const parsed = parseMappedCsv(file, { ...base, decimal: ',', metrics: { weight: { column: 1, unit: 'kg' }, steps: { column: 2, unit: 'count' }, body_fat: { column: 3, unit: '%' } } }, today);
+  const parsed = parseMappedCsv(file, { ...base, decimal: ',', metrics: { weight: { column: 1, unit: 'kg' }, steps: { column: 2, unit: 'count' }, body_fat: { column: 3, unit: '%' } } }, today, 'Europe/Warsaw');
   assert.deepEqual(parsed.values.map((value) => [value.day, value.metric, text(toText(value.value))]), [['2025-04-01', 'weight', '889/10'], ['2025-04-01', 'body_fat', '209/10'], ['2025-04-01', 'steps', '12345/1'], ['2025-04-02', 'weight', '1783/20'], ['2025-04-02', 'steps', '9000/1']]);
   assert.equal(parsed.rejected.length, 0);
 });

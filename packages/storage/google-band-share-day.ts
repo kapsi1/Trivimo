@@ -1,7 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { windowSeconds, type WindowRollupType } from '../adapters/google-health/window-rollup.ts';
 import { derivedReader, pageParsers, windowParser, type PageParser } from './google-page-windows.ts';
-import { warsawDay } from '../domain/warsaw-day.ts';
+import { dayBounds } from '../domain/day-zone.ts';
+import { readDayZone } from './day-zone.ts';
 import type { WindowJobKind } from './google-pages.ts';
 
 const scale = 1000000n;
@@ -17,17 +18,17 @@ function format(value: bigint): string {
 export interface Day { date: string; start: number; end: number }
 export type Window = { start: number; value: string | null };
 
-function dates(from: string, to: string): Day[] {
+function dates(from: string, to: string, zone: string): Day[] {
   const days: Day[] = [];
   for (let at = Date.parse(`${from}T00:00:00Z`); at <= Date.parse(`${to}T00:00:00Z`); at += 86400000) {
-    const date = new Date(at).toISOString().slice(0, 10); const bounds = warsawDay(date);
+    const date = new Date(at).toISOString().slice(0, 10); const bounds = dayBounds(date, zone);
     days.push({ date, start: Date.parse(bounds.start), end: Date.parse(bounds.end) });
   }
   return days;
 }
 
 /**
- * For each Warsaw day the windows of the newest complete saved job whose UTC range covers the whole day.
+ * For each day (in the day zone) the windows of the newest complete saved job whose UTC range covers the whole day.
  * A day covered by a job with no windows maps to an empty list (read, nothing there); an unread day is absent.
  */
 export function savedWindows(db: DatabaseSync, kind: WindowJobKind, type: WindowRollupType, days: Day[]): Map<string, Window[]> {
@@ -76,15 +77,16 @@ export function savedWindowsWith<P extends PageParser>(db: DatabaseSync, kind: W
   return claimed as Map<string, ReturnType<(typeof pageParsers)[P]>>;
 }
 
-export function warsawDays(from: string, to: string): Day[] { return dates(from, to); }
+/** Days of [from, to] with their bounds in the store's day zone. */
+export function storedDays(db: DatabaseSync, from: string, to: string): Day[] { return dates(from, to, readDayZone(db)); }
 
 /**
- * Wear evidence per Warsaw day: share of ten-minute windows with heart rate and the split of active energy by it.
+ * Wear evidence per day: share of ten-minute windows with heart rate and the split of active energy by it.
  * Derived from saved original pages; heart rate shows that a wearable measured, not that it was worn for the whole window.
  * Heart rate absent for a day means "not read", never zero windows; the split needs both reads.
  */
 export function readBandShareRange(db: DatabaseSync, from: string, to: string) {
-  const days = dates(from, to);
+  const days = storedDays(db, from, to);
   if (days.length > 366) throw new Error('range_too_large');
   const heart = savedWindows(db, 'heart-rate-10m', 'heart-rate', days);
   const active = savedWindows(db, 'active-energy-10m', 'active-energy-burned', days);

@@ -2,6 +2,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { lstatSync } from 'node:fs';
 import { z } from 'zod';
 import { currentStoreVersion } from '../../packages/storage/canonical-days.ts';
+import { dayBounds } from '../../packages/domain/day-zone.ts';
+import { readDayZone } from '../../packages/storage/day-zone.ts';
 import { createHash } from 'node:crypto';
 import { listBodyPage } from '../../packages/adapters/google-health/body-read.ts';
 import { googleHttpError } from '../../packages/adapters/google-health/rate-limit.ts';
@@ -81,6 +83,11 @@ export class GoogleReadService {
     const db = this.open();
     try { return db.prepare('SELECT j.id, j.kind, j.range_start AS start, j.range_end AS end, j.state, j.created_at AS createdAt, (SELECT COUNT(*) FROM google_read_pages p WHERE p.job_id = j.id) AS pages FROM google_read_jobs j ORDER BY j.created_at DESC LIMIT 50').all(); }
     finally { db.close(); }
+  }
+  /** UTC bounds of one civil date in the store's day zone (for the jobs that hold the bounds of days). */
+  dayRange(date: string): { start: string; end: string } {
+    const db = this.open();
+    try { return { ...dayBounds(date, readDayZone(db)) }; } finally { db.close(); }
   }
   async start(kind: GoogleJobKind, start: string, end: string) {
     if (Date.parse(end) - Date.parse(start) > (isDaily(kind) ? maxRollupDays(kind) : isSourceListKind(kind) ? maxSourceListDays : isWindowKind(kind) ? 14 : 31) * 86400000) throw new Error('range_too_large');

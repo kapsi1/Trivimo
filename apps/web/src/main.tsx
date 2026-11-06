@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { earliestOf, earliestSchema, metrics, post, syncStatusSchema, useJson } from './api.ts';
+import { dayZoneSchema, earliestOf, earliestSchema, metrics, post, syncStatusSchema, useJson } from './api.ts';
 import { Tooltip } from './charts.tsx';
 import { DayView, type DayTab } from './day.tsx';
-import { addDays, fmtDL, timeOf, warsawToday, whenOf , firstDay } from './format.ts';
+import { addDays, fmtDL, timeOf, appToday, whenOf , firstDay, setDayZone } from './format.ts';
 import { Loading, LogoMark } from './logo.tsx';
 import { BackfillNotice } from './notice.tsx';
 import { FoodView, WorkoutsView, type FoodTab } from './placeholders.tsx';
@@ -34,7 +34,7 @@ function parseHash(hash: string): Route {
 const pick = <T extends string>(list: readonly T[], value: string): T => list.find((item) => item === value) ?? list[0]!;
 const validDay = (param: string, today: string) => /^\d{4}-\d{2}-\d{2}$/.test(param) && param >= firstDay && param <= today && !Number.isNaN(Date.parse(param)) ? param : today;
 const tabHash = (view: View, tab: string, list: readonly string[]) => tab === list[0] ? view : `${view}/${tab}`;
-const dayHash = (day: string, tab: DayTab) => ['dzien', day === warsawToday() ? '' : day, tab === dayTabs[0] ? '' : tab].filter(Boolean).join('/');
+const dayHash = (day: string, tab: DayTab) => ['dzien', day === appToday() ? '' : day, tab === dayTabs[0] ? '' : tab].filter(Boolean).join('/');
 
 const icon = (path: ReactNode) => <svg viewBox="0 0 24 24" aria-hidden="true">{path}</svg>;
 const I = {
@@ -74,7 +74,7 @@ function Shell() {
   const toggleSide = () => setCollapsed((value) => { try { localStorage.setItem('trivimo-side', value ? 'open' : 'collapsed'); } catch { /* per-browser convenience only */ } return !value; });
   const dirty = useRef(false);
   const current = useRef(location.hash);
-  const today = warsawToday();
+  const today = appToday();
   const date = validDay(route.day, today);
   const dayTab = pick(dayTabs, route.tab), srcTab = pick(srcTabs, route.tab), foodTab = pick(foodTabs, route.tab);
   const sync = useJson('/api/google/sync-status', syncStatusSchema, syncTick);
@@ -86,7 +86,7 @@ function Shell() {
   useEffect(() => {
     const change = () => {
       const next = parseHash(location.hash), previous = parseHash(current.current);
-      const leaving = previous.view === 'dzien' && (next.view !== 'dzien' || validDay(next.day, warsawToday()) !== validDay(previous.day, warsawToday()));
+      const leaving = previous.view === 'dzien' && (next.view !== 'dzien' || validDay(next.day, appToday()) !== validDay(previous.day, appToday()));
       if (leaving && dirty.current && !window.confirm('Notatka ma niezapisane zmiany. Opuścić ten dzień?')) { history.replaceState(null, '', current.current || '#dzien'); return; }
       if (leaving) dirty.current = false;
       current.current = location.hash; setRoute(next); setAddOpen(false);
@@ -96,7 +96,7 @@ function Shell() {
     return () => { window.removeEventListener('hashchange', change); window.removeEventListener('beforeunload', unload); };
   }, []);
   const go = useCallback((hash: string) => { if (location.hash === `#${hash}`) return; location.hash = hash; }, []);
-  const setDay = (next: string, tab: DayTab = route.view === 'dzien' ? dayTab : dayTabs[0]) => { if (next < firstDay || next > warsawToday()) return; go(dayHash(next, tab)); };
+  const setDay = (next: string, tab: DayTab = route.view === 'dzien' ? dayTab : dayTabs[0]) => { if (next < firstDay || next > appToday()) return; go(dayHash(next, tab)); };
   const openDay = (next: string, tab: DayTab = dayTabs[0]) => setDay(next, tab);;
 
   useEffect(() => {
@@ -106,7 +106,7 @@ function Shell() {
       if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable]')) return;
       if (event.key === 'ArrowLeft') setDay(addDays(date, -1));
       else if (event.key === 'ArrowRight') setDay(addDays(date, 1));
-      else if (event.key === 't') setDay(warsawToday());
+      else if (event.key === 't') setDay(appToday());
     };
     document.addEventListener('keydown', key);
     return () => document.removeEventListener('keydown', key);
@@ -149,9 +149,9 @@ function Shell() {
       <div className="side-foot"><button type="button" className="sync" disabled={refreshBusy} title={`${sync.error ? 'Stan niedostępny' : lastOk ? `Odświeżono ${whenOf(lastOk)}` : 'Brak odczytu'}${syncData?.automatic ? ` · automatycznie co ${syncData.automatic} min` : ''} · kliknij, aby odświeżyć teraz`} onClick={() => void refreshNow()}><span className={`dot ${syncBad || refreshFailed ? 'warn' : ''} ${refreshBusy ? 'busy' : ''}`} /><span>{refreshBusy ? 'odświeżanie…' : refreshFailed ? 'nie udało się odświeżyć' : sync.error ? 'stan niedostępny' : lastOk ? `odświeżono ${whenOf(lastOk).replace(/^dziś /, '')}` : 'brak odczytu'}{!refreshBusy && !refreshFailed && syncBad && syncData?.last ? ' · błąd' : ''}</span></button></div>
     </aside>
     <div className="main">
-      <header className="topbar"><h1>{route.view === 'dzien' ? fmtDL(date) : titles[route.view]}</h1>{route.view === 'dzien' && date === warsawToday() && <span className="live">w toku{lastOk ? ` · stan na ${timeOf(lastOk)}` : ''}</span>}{context}
+      <header className="topbar"><h1>{route.view === 'dzien' ? fmtDL(date) : titles[route.view]}</h1>{route.view === 'dzien' && date === appToday() && <span className="live">w toku{lastOk ? ` · stan na ${timeOf(lastOk)}` : ''}</span>}{context}
         <div className="menuwrap"><button type="button" className="btn primary" aria-label="Dodaj" title="Dodaj" aria-haspopup="menu" aria-expanded={addOpen} onClick={() => setAddOpen(!addOpen)}>{I.plus}<span className="hide-sm">Dodaj</span></button>
-          {addOpen && <div className="menu" role="menu"><button type="button" role="menuitem" onClick={() => { setAddOpen(false); setDay(route.view === 'dzien' ? date : warsawToday(), 'przebieg'); setTimeout(() => document.getElementById('usernote')?.focus(), 150); }}>Notatka do dnia</button>
+          {addOpen && <div className="menu" role="menu"><button type="button" role="menuitem" onClick={() => { setAddOpen(false); setDay(route.view === 'dzien' ? date : appToday(), 'przebieg'); setTimeout(() => document.getElementById('usernote')?.focus(), 150); }}>Notatka do dnia</button>
             <button type="button" role="menuitem" disabled>Posiłek</button><button type="button" role="menuitem" disabled>Pomiar wagi</button></div>}</div></header>
       <main className="content">{content}</main>
     </div>
@@ -160,4 +160,23 @@ function Shell() {
   </div>;
 }
 
-createRoot(document.getElementById('root')!).render(<App />);
+/** The day zone is read once before the first render: every view formats days and times in it (a change reloads the page). */
+function Root() {
+  const [zone, setZone] = useState<{ value: string | null } | null>(null);
+  useEffect(() => {
+    void (async () => {
+      let value: string | null = null;
+      try {
+        await fetch('/api/session'); // the setting needs the session cookie
+        const response = await fetch('/api/settings/day-zone');
+        if (response.ok) value = dayZoneSchema.parse(await response.json()).zone;
+      } catch { /* unreadable setting (no store yet): the views show their own unavailable states, in the default zone of a new store */ }
+      if (value) setDayZone(value);
+      setZone({ value });
+    })();
+  }, []);
+  if (!zone) return <Loading />;
+  return <App key={zone.value ?? 'default'} />;
+}
+
+createRoot(document.getElementById('root')!).render(<Root />);

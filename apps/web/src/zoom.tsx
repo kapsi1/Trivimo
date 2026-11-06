@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { addDays, warsawToday , firstDay } from './format.ts';
+import { addDays, appToday , firstDay } from './format.ts';
 import { CloseIcon, useDialog } from './details.tsx';
 
 /** Size of a zoomed chart: wide on desktop, narrower on a phone; the window height stays fixed across metric switches. */
@@ -12,7 +12,7 @@ export function Segmented<T extends string | number>({ items, value, onChange, l
 const arrow = (path: string) => <svg viewBox="0 0 24 24" aria-hidden="true"><path d={path} /></svg>;
 /** Day picker: arrows, date field and "Dziś"; days from the first supported day to today. Used in the top bar and in day zooms. */
 export function DateControl({ date, onDate }: { date: string; onDate: (date: string) => void }) {
-  const today = warsawToday();
+  const today = appToday();
   return <div className="datectl">
     <button type="button" className="iconbtn" aria-label="Poprzedni dzień" disabled={date <= firstDay} onClick={() => onDate(addDays(date, -1))}>{arrow('M15 5l-7 7 7 7')}</button>
     <input type="date" value={date} min={firstDay} max={today} aria-label="Wybierz dzień" onChange={(event) => { if (event.target.value) onDate(event.target.value); }} />

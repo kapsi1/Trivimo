@@ -21,8 +21,8 @@ Brak HR nie dowodzi braku opaski, a jedna próbka nie dowodzi noszenia przez ca�
 
 ## Czas, jednostki i agregacja
 
-- Przechowuj czas UTC, oryginalny offset/strefę, datę cywilną źródła i regułę przypisania dnia. Dzień aplikacji: Europe/Warsaw (jedyna obsługiwana strefa, zob. [plan M2](plan/02-health-api.md#strefy-czasowe)), przedział `[start, end)`, bez założenia 86 400 s. Strefa nie zmienia się niejawnie podczas podróży.
-- Doba cywilna producenta nie musi równać się warszawskiemu przedziałowi UTC. Gdy nie da się tego potwierdzić, wynik jest nieporównywalny z uwagą, a nie podmieniany.
+- Przechowuj czas UTC, oryginalny offset/strefę, datę cywilną źródła i regułę przypisania dnia. Dzień aplikacji: doba w strefie z ustawienia (reguła `day-zone-v1`, domyślnie Europe/Warsaw, zob. [strefa doby](#strefa-doby-day-zone-v1)), przedział `[start, end)`, bez założenia 86 400 s. Strefa nie zmienia się niejawnie podczas podróży.
+- Doba cywilna producenta nie musi równać się przedziałowi UTC doby w strefie ustawienia. Gdy nie da się tego potwierdzić, wynik jest nieporównywalny z uwagą, a nie podmieniany.
 - Jednostki wewnętrzne jawne; zachowaj dokładną liczbę i jednostkę źródła, zaokrąglaj tylko w prezentacji. kJ/kcal, procent/ułamek, mg/g, milli-breaths/min wymagają testów.
 - Reconciliation dostawcy ≠ suma surowych rekordów. Ten sam dzień daje ten sam wynik niezależnie od porcji zapytania.
 - Sen przypisuj według końca snu, z zachowaniem sesji i rozróżnieniem nocy/drzemki; nie sumuj nakładających się wersji algorytmu ani faz bez rozstrzygnięcia.
@@ -50,7 +50,7 @@ Szacunek telefonu bez opaski jest porównywalny z opaską, jeśli źródło szac
 
 ### Reguła `google-energy-v1` (2026-11-03)
 
-Wartości to sumy dobowe producenta (`dailyRollUp`, `all-sources`), równe sumom okien 10-minutowych doby warszawskiej. Model doby rozpoznaje się z okien `total-calories` i aktywnej energii:
+Wartości to sumy dobowe producenta (`dailyRollUp`, `all-sources`), równe sumom okien 10-minutowych doby aplikacji (w strefie ustawienia). Model doby rozpoznaje się z okien `total-calories` i aktywnej energii:
 
 - **sam BMR** (tylko doba zakończona): brak aktywnych kcal albo zero, okna pokrywają ≥ 90 % doby, a okna istotne (> 1 % największego okna) w ≥ 95 % mieszczą się w 1 % od mediany. Total poza tabelą, uwaga „tylko energia bazowa”. Sama równość sumy ze stawką BMR niczego nie dowodzi.
 - **pełny model**: producent podaje aktywne kcal (od 2026-05-07). Cicha doba telefonu z niezerowymi aktywnymi kcal to prawdziwy total.
@@ -61,7 +61,7 @@ Wartości to sumy dobowe producenta (`dailyRollUp`, `all-sources`), równe sumom
 
 ### Reguła `google-activity-v1` (2026-11-03)
 
-Kroki i dystans to wartość dobowa producenta (`dailyRollUp`, `all-sources`; dystans z mm na km dokładnym przesunięciem przecinka); producent nie sumuje replik źródeł. Wartość należy do doby warszawskiej, gdy suma okien 10-minutowych tej doby jest jej dokładnie równa; przy niezgodności — nieporównywalna z uwagą „inny lub nieustalony dzień źródła”, bez odczytu okien — granica nieustalona. Dla doby w toku zgodność się zakłada. Stany częściowe i zero jak w `google-energy-v1`; brak odczytu to brak danych.
+Kroki i dystans to wartość dobowa producenta (`dailyRollUp`, `all-sources`; dystans z mm na km dokładnym przesunięciem przecinka); producent nie sumuje replik źródeł. Wartość należy do doby aplikacji, gdy suma okien 10-minutowych tej doby jest jej dokładnie równa; przy niezgodności — nieporównywalna z uwagą „inny lub nieustalony dzień źródła”, bez odczytu okien — granica nieustalona. Dla doby w toku zgodność się zakłada. Stany częściowe i zero jak w `google-energy-v1`; brak odczytu to brak danych.
 
 ### Reguła `google-body-v1` (2026-11-04)
 
@@ -78,7 +78,7 @@ Odczyt API wcześniejszych lat uruchamia użytkownik datą początkową uzupełn
 ### Reguła `csv-fill-v1` — import CSV (2026-11-04)
 
 - Plik (UTF-8, ≤ 8 MiB, 200 000 wierszy, 256 kolumn) zachowany w bazie ze skrótem SHA-256, mapowaniem i wersją parsera (`csv-mapped-v1`; `v2`: „%” po wartości i kolumna uwag; `v3`: grupy cyfr ze spacją). Starsze importy zachowują swoje wartości. Ten sam plik z tym samym mapowaniem nie jest zapisywany ponownie. Treść pliku jest niezaufana.
-- Mapowanie wybiera użytkownik: kolumna i format daty (`RRRR-MM-DD`, `DD.MM.RRRR`, `DD/MM/RRRR`, `MM/DD/RRRR`, ISO 8601), opcjonalna godzina, separatory, kolumna i jednostka metryk. Data bez strefy to doba z pliku; ISO ze strefą trafia do doby warszawskiej. Doby przed 2000-01-01 i przyszłe są odrzucane.
+- Mapowanie wybiera użytkownik: kolumna i format daty (`RRRR-MM-DD`, `DD.MM.RRRR`, `DD/MM/RRRR`, `MM/DD/RRRR`, ISO 8601), opcjonalna godzina, separatory, kolumna i jednostka metryk. Data bez strefy to doba z pliku; ISO ze strefą trafia do doby w strefie aktywnej w chwili importu (przypisanie zapisane w wartościach, nie przeliczane po zmianie strefy). Doby przed 2000-01-01 i przyszłe są odrzucane.
 - Przeliczenia dokładne (liczby wymierne): lb × 0,45359237, g ÷ 1000, mile × 1,609344, m ÷ 1000, kJ ÷ 4,184, ułamek × 100. Kroki całkowite, tłuszcz ≤ 100 %. Grupy cyfr po trzy (spacja, U+00A0, U+202F, U+2009); nieregularne odrzucane. „%” po wartości tylko przy jednostce `%`. Pusta komórka to brak, jawne 0 to wartość; nieczytelna komórka odrzuca tylko tę wartość (wiersz i powód w podglądzie).
 - Masa/tłuszcz: średnia unikalnych pomiarów (ta sama doba, godzina i wartość to jeden pomiar, także między plikami). Kroki, dystans, kalorie: kilka wierszy doby to kopie (różne wartości = konflikt); sumowanie wymaga wyboru „części doby”. Różne sumy tej samej doby z różnych plików to konflikt.
 - CSV **uzupełnia tylko braki**: wartość trafia do snapshotu wyłącznie dla metryki o stanie `missing` w projekcji Google. Snapshot zapisuje, które metryki i importy go uzupełniły (UI od 2026-11-05 tego nie pokazuje).
@@ -87,9 +87,18 @@ Odczyt API wcześniejszych lat uruchamia użytkownik datą początkową uzupełn
 
 ### Pochodne prezentacyjne UI (2026-11-04)
 
+### Strefa doby (`day-zone-v1`)
+
+Wykonane 2026-11-06 (magazyn v14). Jedna strefa globalna dla całej aplikacji, ustawienie w bazie (`day_zone_versions`: numer wersji, nazwa IANA w dokładnej pisowni znanej środowisku wykonawczemu, reguła, powód `initial`/`user`, czas). Wersja 1 to Europe/Warsaw — tak liczono wszystkie doby do tej pory. Doba to `[północ lokalna, następna północ)` (23, 24 lub 25 godzin; gdy północ nie istnieje, doba zaczyna się od pierwszej chwili tej daty).
+
+- **Zależy od strefy:** granice doby, przypisanie chwili z offsetem (próbki wagi i tłuszczu, Takeout, CSV ISO) do doby, zadania odczytu trzymające granice UTC doby (`*-10m`, `weight`, `body-fat`: granice z chwili odczytu), „dziś”, godziny zegara ściennego (prognoza, etykiety godzin), pokrycie historii i plan odczytów. **Nie zależy:** sumy dobowe producenta (jego daty cywilne); porównanie z oknami doby aplikacji daje `zone_interval` albo nieporównywalność „inny lub nieustalony dzień źródła”.
+- **Snapshot** zapisuje `zone`; brak pola oznacza Europe/Warsaw (snapshoty sprzed v14). Strefa jest częścią treści snapshotu: ta sama doba cięta inaczej to nowa rewizja.
+- **Zmiana strefy** dodaje wersję ustawienia i przelicza opublikowane doby z zapisanych oryginałów jako nowe rewizje; poprzednie rewizje i oryginały zostają. Doba bez pełnego odczytu w nowej strefie (okna z granicami starej strefy jej nie pokrywają) jest nieporównywalna albo pusta do ponownego odczytu okien (uzupełnianie historii) — nigdy zero. Powrót do poprzedniej strefy przywraca wartości z zachowanych odczytów. Przerwane przeliczenie wznawia to samo żądanie (stan `staleDays` pokazuje doby z innej strefy). Zmiany odmawia się, gdy trwa odświeżanie lub uzupełnianie.
+- **Poza zakresem tej wersji:** strefa przypisana do doby (podróże: doba zapisana tam, gdzie mierzono); wartości CSV (`csv_import_values.day`) i notatki dnia (klucz = data) zachowują dobę przypisaną w chwili importu/zapisu i nie są przeliczane po zmianie strefy. Strefy bez godzinowych przesunięć okien (np. +5:45) nie mają osobnego testu poza dobą 24 h; wyrównanie okien producenta do UTC w takich strefach niepotwierdzone.
+
 - Tętno: `beatsPerMinuteAvg/Min/Max` z okien `heart-rate-10m`; brak min/maks. zastępuje średnia okna. Doba: min i maks. okien oraz średnia średnich (nieważona). Nieodczytana doba ≠ doba bez okien; żadna z tych wartości nie jest tętnem spoczynkowym.
 - `prognoza-spoczynek-v0` (tylko bieżąca doba): suma dzisiejszych okien total + średnia total okien bez kroków i bez aktywnych kcal × okna do końca doby (23/25 h przy zmianie czasu). Wymaga odczytu okien kroków i aktywnych kcal oraz ≥ 6 okien spoczynkowych. Nie jest wartością producenta ani BMR; nie trafia do tabeli, średnich ani eksportu.
-- `prognoza-bez-wysilku-v2` (tylko bieżąca doba, od 2026-11-06; zastępuje krótko wdrożoną `prognoza-profil-v1`): spalone dotąd (suma dzisiejszych okien total) + dla każdego okna do końca doby średnia total okien tej samej godziny zegara ściennego `Europe/Warsaw` z ostatnich 14 kompletnych dób (z 21 ostatnich; minimum 7), liczona tylko z okien bez znaczących kalorii aktywnych (aktywne ≤ 3 kcal na okno; brak okna aktywnych to brak aktywności). Doba historii jest kompletna, gdy ma wszystkie okna total i odczytane okna aktywnych kcal. Godzina z mniej niż 10 oknami codziennymi, za mało dób historii lub brak okien total → v0 z własną etykietą (nigdy zero). Wynik nie jest niższy niż `prognoza-spoczynek-v0` („co najmniej”); okna do końca doby są rozciągane do tej granicy. Wymaga tylko okien total dnia. To prognoza „bez znaczącego wysiłku”: nie zna planów dnia i nie przewiduje treningu. Nie jest wartością producenta; nie trafia do tabeli, średnich ani eksportu; nie jest zapisywana, więc zmiana reguły nie wymaga migracji. Doby 23/25 h: godziny po zegarze ściennym, okno po oknie.
+- `prognoza-bez-wysilku-v2` (tylko bieżąca doba, od 2026-11-06; zastępuje krótko wdrożoną `prognoza-profil-v1`): spalone dotąd (suma dzisiejszych okien total) + dla każdego okna do końca doby średnia total okien tej samej godziny zegara ściennego w strefie doby z ostatnich 14 kompletnych dób (z 21 ostatnich; minimum 7), liczona tylko z okien bez znaczących kalorii aktywnych (aktywne ≤ 3 kcal na okno; brak okna aktywnych to brak aktywności). Doba historii jest kompletna, gdy ma wszystkie okna total i odczytane okna aktywnych kcal. Godzina z mniej niż 10 oknami codziennymi, za mało dób historii lub brak okien total → v0 z własną etykietą (nigdy zero). Wynik nie jest niższy niż `prognoza-spoczynek-v0` („co najmniej”); okna do końca doby są rozciągane do tej granicy. Wymaga tylko okien total dnia. To prognoza „bez znaczącego wysiłku”: nie zna planów dnia i nie przewiduje treningu. Nie jest wartością producenta; nie trafia do tabeli, średnich ani eksportu; nie jest zapisywana, więc zmiana reguły nie wymaga migracji. Doby 23/25 h: godziny po zegarze ściennym, okno po oknie.
 
 ## „Uwagi” i notatki
 

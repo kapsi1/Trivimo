@@ -40,13 +40,15 @@ Pełny katalog API zastępuje dawne ograniczenia Health Sync do wybranych pól. 
 
 **2026-11-04 — historia sprzed 2026 i CSV.** Odczyt API starszych lat uruchamiany ręcznie datą początkową, doby kwalifikowane regułami 2026 (audyt lat otwarty). Import dowolnego CSV z mapowaniem kolumn w wariancie „uzupełnia braki” — nie nadpisuje i nie sumuje się z Google (`csv-fill-v1`).
 
+**2026-11-06 — strefa doby (magazyn v14).** Jedna strefa globalna w bazie (domyślnie Europe/Warsaw) zamiast stałej w kodzie; strefa przypisana do doby (podróże) odłożona. Zmiana strefy to wersja ustawienia i jawne przeliczenie dób z oryginałów jako nowych rewizji (zasada wersji reguły z kontraktów), nie cicha zmiana etykiety. Wybór modelu: użytkownik, 2026-11-06. Reguły: [kontrakty](data-contracts.md#strefa-doby-day-zone-v1).
+
 **2026-11-05 — wydajność (magazyn v13).** Sparsowane okna 10-minutowe zapisywane jako warstwa pochodna obok oryginałów, projekcja po odświeżeniu przyrostowa. Przepisanie backendu na inny język odrzucono: koszt był w architekturze, nie w języku.
 
 **2026-11-06 — plan M2.** (1) Zadania użycia aplikacji na telefonie mają osobny [plan 10](plan/10-mobile.md). (2) Stan kafelków i pozostałe opcje widoku zapisujemy w bazie, wspólnie dla desktopu i telefonu ([plan 04](plan/04-ui-workouts.md#preferencje-widoku-w-bazie)); przeglądarka jest tylko pamięcią podręczną. Synchronizacja z telefonem wymaga dostępu do tego samego serwera (decyzje otwarte poniżej). (3) Nie pokazujemy panelu metadanych wartości (źródła, model, definicja, identyfikatory); dalsze metadane w widokach użytkownik rozstrzyga przypadek po przypadku; lista treningów bez filtra źródła; pochodzenie i diagnostyka są w „Źródłach danych”. Zwinięcie lewej nawigacji zostaje lokalne dla urządzenia. (4) Strefy czasowe przeniesiono z etapu Q do M2.
 
 ## Ustalenia techniczne
 
-Stos: TypeScript, React/Vite, Node z wbudowanym SQLite, lokalny serwer REST na 127.0.0.1 ([środowisko](development.md)). Próba parserów Kotlin nie uzasadniła mostu JVM ([P0](completed/01-p0-probes.md)). MCP będzie adapterem tych samych komend. Dzień kanoniczny: Europe/Warsaw, z zachowaniem czasu źródła i osobnych podsumowań cywilnych producenta.
+Stos: TypeScript, React/Vite, Node z wbudowanym SQLite, lokalny serwer REST na 127.0.0.1 ([środowisko](development.md)). Próba parserów Kotlin nie uzasadniła mostu JVM ([P0](completed/01-p0-probes.md)). MCP będzie adapterem tych samych komend. Dzień kanoniczny: doba w strefie z ustawienia (domyślnie Europe/Warsaw, od 2026-11-06 zmienna, zob. niżej), z zachowaniem czasu źródła i osobnych podsumowań cywilnych producenta.
 
 ## Decyzje otwarte
 

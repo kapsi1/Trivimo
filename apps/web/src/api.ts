@@ -75,6 +75,13 @@ export const syncStatusSchema = z.object({
   backfill: z.object({ state: z.enum(['idle', 'running', 'stopping', 'stopped', 'done', 'error']), from: z.string(), finishedAt: z.string().nullable(), code: z.string().optional() }).optional(),
 });
 export type SyncStatus = z.infer<typeof syncStatusSchema>;
+/** The day zone setting: current zone, its history and how many published days were cut in another zone (still to recompute). */
+export const dayZoneSchema = z.object({
+  zone: z.string(), rule: z.string(), revision: z.number().int().positive().nullable(), default: z.string(), since: z.string().nullable(),
+  history: z.array(z.object({ revision: z.number().int().positive(), zone: z.string(), reason: z.enum(['initial', 'user']), createdAt: z.string() })),
+  days: z.number().int().nonnegative(), staleDays: z.number().int().nonnegative(), zones: z.array(z.string()),
+});
+export type DayZoneState = z.infer<typeof dayZoneSchema>;
 export const coverageSchema = z.object({ from: z.iso.date(), through: z.iso.date(), kinds: z.number().int().positive(), days: z.array(z.object({ date: z.iso.date(), covered: z.number().int().nonnegative() })) });
 
 /** State of one GET: undefined while loading, `error` on failure (the view says so), never a silent empty value. */

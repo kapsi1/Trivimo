@@ -2,6 +2,12 @@
 
 Najnowsze wpisy na górze. Starsze (2026-11-02 – 2026-11-04): [archiwum](completed/04-test-results-archive.md). Pakiety instaluje pnpm; skrypty `npm run …` w raporcie działają tak samo jak `pnpm run …`.
 
+## 2026-11-06 — strefy czasowe (`day-zone-v1`, magazyn v14)
+
+- `pnpm test`: 173 testy zaliczone (nowe: `day-zone` — granice doby w UTC, Kolkata +5:30, Nowy Jork, Sydney, Auckland i Kuba (północ nieistniejąca/powtórzona), doby 23/25 h na obu półkulach, brak luk i zakładek między dobami przez cały 2026 w czterech strefach, odrzucanie stref spoza IANA; `source-day` w kilku strefach; `day-zone-store` — migracja 13→14, zmiana strefy z historią rewizji i powrotem do poprzedniej strefy bez utraty oryginałów, snapshot sprzed v14 jako doba warszawska i wznowienie przeliczenia, planowanie odczytów z granicami UTC dla +5:30, niezależność pokrycia od porcji przy dobie 23 h, REST). Pozostałe testy bez zmian wyników (strefa Europe/Warsaw); `pnpm run typecheck` i `pnpm run build` bez błędów.
+- Przeglądarka (serwer dev na pustym magazynie w katalogu tymczasowym poza repozytorium, bez żądań do Google): Ustawienia → zmiana strefy na Pacific/Auckland z potwierdzeniem → po przeładowaniu wersja ustawienia 2 (historia: Europe/Warsaw „initial”, Pacific/Auckland „user”), widok Dnia pokazuje „sobota, 7 listopada 2026” podczas gdy w Warszawie jest 6 listopada. Wykryty i naprawiony błąd: pierwsze żądanie strefy szło przed ciasteczkiem sesji (401) i interfejs wracał do strefy domyślnej.
+- Nie sprawdzono: migracji magazynu użytkownika 13 → 14 (do wykonania przy zatrzymanym serwerze: `pnpm run migrate:canonical -- '<kopia>'`), `verify:restore` na magazynie v14, zmiany strefy na danych użytkownika i uzupełnienia historii okien w nowej strefie, dób z podróżą (strefa na dobę niewdrożona), przeliczenia wartości CSV i notatek po zmianie strefy, stref o przesunięciu niepodzielnym przez 10 minut (np. +5:45) poza dobą 24 h.
+
 ## 2026-11-06 — `prognoza-bez-wysilku-v2` (po `prognoza-profil-v1`)
 
 - `prognoza-profil-v1` (średni profil) wdrożona i sprawdzona w przeglądarce, potem zastąpiona po uwadze użytkownika (profil oczekiwał treningu). Test wsteczny na tych samych 77 dobach (skrypt i wartości poza repozytorium): na dobach z resztą dnia bez znaczącej aktywności v1/E zawyża o 9–17%, a profil z okien bez znaczących kalorii aktywnych (próg 3 kcal) ma błąd 0,4–0,6% i obciążenie −0,4…+0,1%; na wszystkich dobach jak v0 (obciążenie −2…−19%).

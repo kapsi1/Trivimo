@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { sourcePageSchema, type SourceKind, type SourcePage } from '../../../packages/contracts/source-records.ts';
 import { coverageSchema, post, useJson, type SyncStatus } from './api.ts';
-import { addDays, diffDays, firstDay, MON, mondayOf, warsawToday, whenOf } from './format.ts';
+import { addDays, diffDays, firstDay, MON, mondayOf, appToday, whenOf } from './format.ts';
 import { Segmented } from './zoom.tsx';
 import { CsvImport } from './csv-import.tsx';
 import { Loading } from './logo.tsx';
@@ -81,7 +81,7 @@ function Connections({ sync, onSyncChanged, onImports }: { sync: SyncStatus | un
 
 /** Year picker over the coverage calendar: the current year by default, earlier years after a history read. */
 function CoverageYears() {
-  const current = Number(warsawToday().slice(0, 4));
+  const current = Number(appToday().slice(0, 4));
   const [year, setYear] = useState(current);
   const years: [number, string][] = Array.from({ length: Math.min(current - Number(firstDay.slice(0, 4)) + 1, 8) }, (_, index) => current - index).reverse().map((value) => [value, String(value)]);
   return <><div className="toolbar"><Segmented label="Rok" items={years} value={year} onChange={setYear} />
@@ -94,7 +94,7 @@ function Coverage({ year: selected }: { year: number }) {
   const coverage = useJson(`/api/google/coverage?year=${selected}`, coverageSchema);
   if (coverage.error) return <section className="panel"><p role="alert">Nie udało się odczytać pokrycia historii (magazyn niedostępny lub Google nie jest skonfigurowany).</p></section>;
   if (!coverage.data) return <section className="panel"><Loading /></section>;
-  const { days, kinds } = coverage.data, today = warsawToday(), year = coverage.data.from.slice(0, 4);
+  const { days, kinds } = coverage.data, today = appToday(), year = coverage.data.from.slice(0, 4);
   const byDate = new Map(days.map((day) => [day.date, day.covered]));
   const start = mondayOf(`${year}-01-01`), end = `${year}-12-31`, weeks = Math.ceil((diffDays(start, end) + 1) / 7), cs = 12, gp = 2, W = 24 + weeks * (cs + gp);
   const cells = [];
@@ -188,7 +188,7 @@ function GoogleBackfill() {
   const total = status?.kinds.reduce((sum, item) => sum + item.total, 0) ?? 0;
   const percent = total > 0 ? Math.floor((covered / total) * 100) : null;
   const eta = status ? backfillEta(status, Date.now()) : null;
-  const yesterday = addDays(warsawToday(), -1);
+  const yesterday = addDays(appToday(), -1);
   const failed = error !== '' || status?.state === 'error';
   // one line above the bar: progress, or the error in its place ("Przerwano - błąd serwera (kod: …). Spróbuj ponownie")
   const reason = backfillReason;
@@ -214,7 +214,7 @@ function GoogleBackfill() {
 function GoogleReadJobs() {
   const [jobs, setJobs] = useState<z.infer<typeof googleJobSchema>[] | null>(null);
   const [kind, setKind] = useState<'weight' | 'body-fat' | 'steps' | 'distance' | 'total-calories' | 'active-energy-burned' | 'heart-rate-10m' | 'active-energy-10m' | 'total-calories-10m' | 'steps-10m' | 'distance-10m'>('weight');
-  const [date, setDate] = useState(() => { const d = new Date(`${warsawToday()}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); });
+  const [date, setDate] = useState(() => { const d = new Date(`${appToday()}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); });
   const [lastDate, setLastDate] = useState('');
   const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false);
   const daily = kind === 'steps' || kind === 'distance' || kind === 'total-calories' || kind === 'active-energy-burned';
@@ -242,9 +242,9 @@ function GoogleReadJobs() {
     } catch (error) { const code = error instanceof Error ? error.message : ''; setMessage(code === 'account_changed' ? 'Zadanie należy do innego konta Google.' : code === 'authorization_required' || code === 'scope_missing' ? 'Ponów autoryzację z wymaganym zakresem.' : `Nie udało się wykonać operacji. Zapisane strony i postęp pozostają bez zmian.${error instanceof Error && 'detail' in error && typeof error.detail === 'string' ? ` Kod: ${error.detail}.` : ''}`); }
     finally { setBusy(false); }
   }
-  return <section><h3>Odczyt próbny</h3><p>Jedno zadanie obejmuje wybrany dzień i rodzaj pomiaru; masa i tłuszcz używają dnia warszawskiego, kroki, dystans i kalorie doby cywilnej producenta. Przygotowanie zapisuje zadanie; pobranie strony odczytuje jedną porcję danych Google. Odczyt próbny nie zmienia tabeli dni poza tym, że jego oryginały są brane pod uwagę przy kolejnym przeliczeniu; nie jest łączony z Takeout.</p>
-    <label>Rodzaj <select value={kind} disabled={busy} onChange={(event) => setKind(event.target.value as typeof kind)}><optgroup label="Pomiary (doba warszawska)"><option value="weight">Masa ciała</option><option value="body-fat">Tkanka tłuszczowa</option></optgroup><optgroup label="Sumy dobowe (doba producenta)"><option value="steps">Kroki — suma doby</option><option value="distance">Dystans — suma doby</option><option value="total-calories">Kalorie total — suma doby (zawiera BMR)</option><option value="active-energy-burned">Kalorie aktywne — suma doby</option></optgroup><optgroup label="Okna 10 min (doba warszawska)"><option value="heart-rate-10m">Tętno — okna 10 min</option><option value="active-energy-10m">Kalorie aktywne — okna 10 min</option><option value="total-calories-10m">Kalorie total — okna 10 min</option><option value="steps-10m">Kroki — okna 10 min</option><option value="distance-10m">Dystans — okna 10 min</option></optgroup></select></label>{' '}
-    <label>Data w Warszawie <input type="date" min={firstDay} max="9998-12-31" value={date} disabled={busy} onChange={(event) => setDate(event.target.value)} /></label>{' '}
+  return <section><h3>Odczyt próbny</h3><p>Jedno zadanie obejmuje wybrany dzień i rodzaj pomiaru; masa i tłuszcz używają doby w strefie z ustawień, kroki, dystans i kalorie doby cywilnej producenta. Przygotowanie zapisuje zadanie; pobranie strony odczytuje jedną porcję danych Google. Odczyt próbny nie zmienia tabeli dni poza tym, że jego oryginały są brane pod uwagę przy kolejnym przeliczeniu; nie jest łączony z Takeout.</p>
+    <label>Rodzaj <select value={kind} disabled={busy} onChange={(event) => setKind(event.target.value as typeof kind)}><optgroup label="Pomiary (doba w strefie ustawień)"><option value="weight">Masa ciała</option><option value="body-fat">Tkanka tłuszczowa</option></optgroup><optgroup label="Sumy dobowe (doba producenta)"><option value="steps">Kroki — suma doby</option><option value="distance">Dystans — suma doby</option><option value="total-calories">Kalorie total — suma doby (zawiera BMR)</option><option value="active-energy-burned">Kalorie aktywne — suma doby</option></optgroup><optgroup label="Okna 10 min (doba w strefie ustawień)"><option value="heart-rate-10m">Tętno — okna 10 min</option><option value="active-energy-10m">Kalorie aktywne — okna 10 min</option><option value="total-calories-10m">Kalorie total — okna 10 min</option><option value="steps-10m">Kroki — okna 10 min</option><option value="distance-10m">Dystans — okna 10 min</option></optgroup></select></label>{' '}
+    <label>Data doby <input type="date" min={firstDay} max="9998-12-31" value={date} disabled={busy} onChange={(event) => setDate(event.target.value)} /></label>{' '}
     {daily && <><label>Do dnia (włącznie, opcjonalnie; do {kind === 'total-calories' ? 14 : 90} dób) <input type="date" min={date} max="9998-12-31" value={lastDate} disabled={busy} onChange={(event) => setLastDate(event.target.value)} /></label>{' '}</>}
     <button type="button" disabled={busy || !date || !jobs || rangeInvalid} onClick={() => void run('/api/google/jobs', daily && lastDate ? { kind, start: date, end: nextCivilDay(lastDate) } : { kind, date })}>Przygotuj zadanie</button>
     {message && <p role="status">{message}</p>}

@@ -30,7 +30,7 @@ Baza `takeout-raw.sqlite` leży w katalogu danych, obok `google-token.dpapi` i p
 
 ## Migracje, kopia i odtworzenie
 
-Serwer wymaga dokładnej wersji magazynu (dziś 13); inaczej serwer, odświeżanie i import zgłaszają „wymaga migracji”. Przy zatrzymanym serwerze:
+Serwer wymaga dokładnej wersji magazynu (dziś 14); inaczej serwer, odświeżanie i import zgłaszają „wymaga migracji”. Przy zatrzymanym serwerze:
 
 ```powershell
 pnpm run migrate:canonical -- 'D:\Trivimo-bak\przed-vNN.sqlite'   # kopia + jeden krok migracji
@@ -75,6 +75,7 @@ Import zachowuje bajty wszystkich plików Google Health, a dla sześciu typów M
 Wszystkie punkty wymagają lokalnego ciasteczka sesji (`GET /api/session`, `HttpOnly`, `SameSite=Strict`) i kontroli Host/Origin; POST dodatkowo nagłówka `X-Trivimo-Request`. Główne grupy (lista w `apps/server/app.ts`):
 
 - Dni: `/api/day`, `/api/day-range`, `/api/earliest-days`, `POST /api/day/note`.
+- Ustawienia: `GET /api/settings/day-zone` (strefa, historia wersji, liczba dób z innej strefy, lista stref), `POST /api/settings/day-zone` z `{"zone":"Europe/Warsaw"}` (zmiana i przeliczenie dób; 409 `sync_running` podczas odświeżania lub uzupełniania).
 - Google: `/api/google/status|start|callback`, `sync-status`, `POST sync`, `POST backfill`, `coverage?year=`, `jobs`, `daily-candidates`, `body-candidates`, `band-share`, `band-share-range`, `day-series`, `heart-rate`, `heart-rate-range`, `energy-forecast`.
 - Importy: `/api/takeout/upload|zip-preview|preview|import`, `/api/source-account/*`, `/api/source-records`, `/api/csv/inspect|preview|import|decision|imports|day`.
 

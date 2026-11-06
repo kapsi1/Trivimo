@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
-import { warsawDay } from '../domain/warsaw-day.ts';
+import { dayBounds } from '../domain/day-zone.ts';
+import { readDayZone } from './day-zone.ts';
 import { sourceDay } from '../domain/source-day.ts';
 import { parseSourceValue } from '../domain/source-units.ts';
 
@@ -11,9 +12,9 @@ const pointSchema = z.object({
 }).passthrough();
 const rawSchema = z.object({ dataPoints: z.array(z.unknown()).max(100).optional() }).passthrough();
 
-/** Bounded review of saved pages overlapping the Warsaw day; never deduplicates or qualifies. */
+/** Bounded review of saved pages overlapping the day (in the day zone); never deduplicates or qualifies. */
 export function readGoogleBodySourceDay(db: DatabaseSync, kind: 'weight' | 'body_fat', date: string) {
-  const day = warsawDay(date); const apiKind = kind === 'weight' ? 'weight' : 'body-fat';
+  const zone = readDayZone(db), day = dayBounds(date, zone); const apiKind = kind === 'weight' ? 'weight' : 'body-fat';
   const jobRows = db.prepare(`SELECT range_start, range_end, state FROM google_read_jobs
     WHERE kind = ? AND julianday(range_start) < julianday(?) AND julianday(range_end) > julianday(?)
     ORDER BY created_at DESC, id LIMIT 51`).all(apiKind, day.end, day.start);
@@ -40,7 +41,7 @@ export function readGoogleBodySourceDay(db: DatabaseSync, kind: 'weight' | 'body
       const timestamp = measurement?.sampleTime?.physicalTime;
       if (!timestamp) { unassigned++; continue; }
       let assigned: string;
-      try { assigned = sourceDay(timestamp); } catch { unassigned++; continue; }
+      try { assigned = sourceDay(timestamp, zone); } catch { unassigned++; continue; }
       if (assigned !== date) continue;
       matched++;
       if (rows.length >= 200) { rowLimitReached = true; break pageLoop; }

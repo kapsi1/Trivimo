@@ -19,13 +19,15 @@ export const snapshotInputSchema = z.object({
     .refine((metrics) => { const parts = metrics.steps.value && integers(metrics.steps.value); return !metrics.steps.value || !!parts && parts[0] % parts[1] === 0n; }, { path: ['steps'], message: 'Kroki muszą być liczbą całkowitą' })
     .refine((metrics) => { const parts = metrics.body_fat.value && integers(metrics.body_fat.value); return !metrics.body_fat.value || !!parts && parts[0] <= 100n * parts[1]; }, { path: ['body_fat'], message: 'Procent poza zakresem' }),
   issues: z.array(issueSchema).max(1000),
+  /** Day zone (IANA name) the day was cut in, rule day-zone-v1. Absent in snapshots published before the setting: Europe/Warsaw. */
+  zone: z.string().min(1).max(64).optional(),
   /** Calorie qualification evidence: rule version, producer model and the band share that marks whose estimate it is. */
   energy: z.object({
     rule: z.literal('google-energy-v1'), model: z.enum(['current', 'legacy', 'basal_only', 'unknown']),
     heartRateWindows: z.number().int().nonnegative().nullable(), dayWindows: z.number().int().positive(),
     activeWithHeartRateKcal: z.string().regex(/^\d{1,9}\.\d{2}$/).nullable(), activeWithoutHeartRateKcal: z.string().regex(/^\d{1,9}\.\d{2}$/).nullable(),
   }).strict().optional(),
-  /** Steps and distance qualification evidence: rule version and whether the Warsaw-day windows sum to the daily value. */
+  /** Steps and distance qualification evidence: rule version and whether the day's windows sum to the daily value. */
   activity: z.object({ rule: z.literal('google-activity-v1'), stepsMatchWindows: z.boolean().nullable(), distanceMatchWindows: z.boolean().nullable() }).strict().optional(),
   /** Weight and body fat evidence: rule version, records read for the day and how many were copies of the same measurement. */
   body: z.object({
