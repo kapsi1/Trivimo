@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { setImmediate as nextTurn } from 'node:timers/promises';
+import { agreedValues, dailySummaryTypes, groupByDay, parseDailySummary, type DailySummaryType } from '../adapters/google-health/daily-summary.ts';
 import { parseDailyRollup, type DailyRollupType } from '../adapters/google-health/daily-rollup.ts';
 import { snapshotInputSchema, type DaySnapshotInput } from '../contracts/day-snapshot.ts';
 import { csvMetrics, type CsvMetric } from '../contracts/csv-import.ts';
@@ -34,6 +35,31 @@ function savedDailyValues(db: DatabaseSync, kind: DailyRollupType, from: string,
       for (const day of parseDailyRollup(page.raw_json, kind).days) values.set(day.date, day.value);
     }
     for (const day of needed) claimed.set(day, { value: values.get(day) ?? null, readAt: Date.parse(String(job.created_at)) });
+  }
+  return claimed;
+}
+
+type SummaryRead = { status: 'value'; values: Record<string, string> } | { status: 'conflict'; candidates: Record<string, string>[] } | { status: 'agreed'; values: Record<string, string>; candidates: Record<string, string>[] } | { status: 'absent' };
+/** Newest complete read of a daily summary kind covering each date of [from, to] decides it: a point, or absence after a complete read. An unread date is absent from the map. */
+function savedDailySummaries(db: DatabaseSync, kind: DailySummaryType, from: string, to: string): Map<string, SummaryRead> {
+  const claimed = new Map<string, SummaryRead>();
+  const pages = db.prepare('SELECT raw_json FROM google_read_pages WHERE job_id = ? ORDER BY page_number LIMIT 50');
+  for (const job of db.prepare("SELECT id, range_start, range_end FROM google_read_jobs WHERE kind = ? AND state = 'complete' AND range_start <= ? AND range_end > ? ORDER BY created_at DESC, id").iterate(kind, to, from)) {
+    const first = String(job.range_start) < from ? from : String(job.range_start);
+    const needed: string[] = [];
+    for (let day = first; day < String(job.range_end) && day <= to; day = addDays(day, 1)) if (!claimed.has(day)) needed.push(day);
+    if (needed.length === 0) continue;
+    const points: { date: string; values: Record<string, string> }[] = [];
+    for (const page of pages.iterate(job.id)) {
+      if (typeof page.raw_json !== 'string') throw new Error('invalid_page');
+      points.push(...parseDailySummary(page.raw_json, kind).days);
+    }
+    const grouped = groupByDay(points);
+    for (const day of needed) {
+      const state = grouped.get(day);
+      const agreed = state?.status === 'conflict' ? agreedValues(kind, state.candidates) : null;
+      claimed.set(day, state === undefined ? { status: 'absent' } : state.status === 'conflict' && agreed ? { status: 'agreed', values: agreed, candidates: state.candidates } : state);
+    }
   }
   return claimed;
 }
@@ -94,6 +120,7 @@ export function projectGoogleDays(db: DatabaseSync, from: string, to: string, no
   const weights = savedMeasurements(db, 'weight', days), bodyFats = savedMeasurements(db, 'body-fat', days);
   const active = savedDailyValues(db, 'active-energy-burned', from, to);
   const windows = savedWindows(db, 'total-calories-10m', 'total-calories', days);
+  const summaries = dailySummaryTypes.map((type) => [type, savedDailySummaries(db, type, from, to)] as const);
   const band = new Map(readBandShareRange(db, from, to).map((day) => [day.date, day]));
   const snapshots: DaySnapshotInput[] = [];
   for (const day of days) {
@@ -134,6 +161,7 @@ export function projectGoogleDays(db: DatabaseSync, from: string, to: string, no
       return { evidence: { candidates, day: progressOf(read) } satisfies BodyDayEvidence, records: read.records.length + read.invalid.length, replicas: merged.replicas };
     };
     const weight = body(weightRead, '0.001'), bodyFat = body(bodyFatRead, '0.01');
+    const summaryItems = summaries.flatMap(([type, reads]) => { const read = reads.get(day.date); return read ? [{ type, ...read }] : []; });
     snapshots.push({ ...projectGoogleDay({
       date: day.date, weight: weight.evidence, bodyFat: bodyFat.evidence,
       body: { rule: 'google-body-v1', weightRecords: weight.records, weightReplicas: weight.replicas, bodyFatRecords: bodyFat.records, bodyFatReplicas: bodyFat.replicas },
@@ -141,7 +169,7 @@ export function projectGoogleDays(db: DatabaseSync, from: string, to: string, no
       totalEnergy: evidence('total', totalRead), activeEnergy: evidence('active', activeRead),
       activity: { rule: 'google-activity-v1', stepsMatchWindows: stepsMatch, distanceMatchWindows: distanceMatch },
       energy: { rule: 'google-energy-v1', model, heartRateWindows: heart, dayWindows: share.totalWindows, activeWithHeartRateKcal: share.activeEnergy?.bandKcal ?? null, activeWithoutHeartRateKcal: share.activeEnergy?.otherKcal ?? null },
-    }), zone });
+    }), zone, ...(summaryItems.length ? { summaries: { rule: 'google-daily-summaries-v2' as const, items: summaryItems } } : {}) });
   }
   return snapshots;
 }
@@ -172,7 +200,7 @@ export function projectDays(db: DatabaseSync, from: string, to: string, nowMs: n
 }
 
 /** What a day's snapshot says (everything except its revision and the notes derived from issues). */
-const content = (day: DaySnapshotInput) => JSON.stringify({ metrics: day.metrics, issues: day.issues, energy: day.energy, activity: day.activity, body: day.body, csv: day.csv, zone: day.zone ?? defaultDayZone });
+const content = (day: DaySnapshotInput) => JSON.stringify({ metrics: day.metrics, issues: day.issues, energy: day.energy, activity: day.activity, body: day.body, summaries: day.summaries, csv: day.csv, zone: day.zone ?? defaultDayZone });
 
 /**
  * Publish a new revision only for days whose projection changed; values, issues and evidence move together. A day

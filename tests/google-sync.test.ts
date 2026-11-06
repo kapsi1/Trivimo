@@ -6,13 +6,14 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { initializeTakeoutStore } from '../packages/adapters/takeout/import.ts';
-import { migrateCalorieJobs, migrateCanonicalDays, migrateDailyRollups, migrateGooglePages, migrateReadPolicy, migrateSourceLists, migrateCsvImports, migrateCsvNotes, migratePageWindows, migrateDayZone, migrateSourceAccounts, migrateUserNotes, migrateWindowJobs } from '../packages/storage/canonical-days.ts';
+import { migrateCalorieJobs, migrateCanonicalDays, migrateDailyRollups, migrateGooglePages, migrateReadPolicy, migrateSourceLists, migrateCsvImports, migrateCsvNotes, migratePageWindows, migrateDailySummaries, migrateDayZone, migrateSourceAccounts, migrateUserNotes, migrateWindowJobs } from '../packages/storage/canonical-days.ts';
 import { createDemoDatabase } from '../packages/storage/days.ts';
 import { createGoogleReadJob, commitGooglePage } from '../packages/storage/google-pages.ts';
 import { warsawDay } from './helpers/warsaw-day.ts';
 import { GoogleAuth } from '../apps/server/google-auth.ts';
 import { clearIdentityCache } from '../apps/server/google-read-service.ts';
-import { coverageCalendar, coveredDays, GoogleSyncService, planBackfill, planSync, syncKinds } from '../apps/server/google-sync.ts';
+import { dailySummaryTypes } from '../packages/adapters/google-health/daily-summary.ts';
+import { allSyncKinds, coverageCalendar, coveredDays, GoogleSyncService, planBackfill, planSummarySync, planSync, syncKinds } from '../apps/server/google-sync.ts';
 
 function store() {
   const db = createDemoDatabase();
@@ -62,13 +63,31 @@ test('plan odświeżania: odczytany zakres nie jest powtarzany, dziś wraca po u
   } finally { db.close(); }
 });
 
+test('plan dobowych podsumowań: jeden zakres na typ, ponowny odczyt dopiero po 3 h, luka wydłuża zakres do 90 dób', async () => {
+  const { dir, db, ready } = migrated();
+  try {
+    await ready();
+    const now = Date.now(), account = createHash('sha256').update('synthetic-account').digest('hex');
+    const first = planSummarySync(db, '2026-03-10', now);
+    assert.deepEqual(first.map((read) => [read.kind, read.first, read.last, read.begin, read.end]), dailySummaryTypes.map((kind) => [kind, '2026-03-07', '2026-03-10', '2026-03-07', '2026-03-11']));
+    for (const read of first) commitGooglePage(db, createGoogleReadJob(db, account, read.kind, read.begin, read.end), null, '{}');
+    assert.equal(planSummarySync(db, '2026-03-10', now + 3600000).length, 0);
+    assert.equal(planSummarySync(db, '2026-03-10', now + 4 * 3600000).length, dailySummaryTypes.length);
+    // next day: range moves, the covered day (today of the earlier read) is inside the three-day window
+    assert.deepEqual(planSummarySync(db, '2026-03-11', now + 3600000).map((read) => read.first), dailySummaryTypes.map(() => '2026-03-08'));
+    // after a long pause the range starts at the last covered day, bounded to 90 days
+    assert.deepEqual(planSummarySync(db, '2026-03-20', now).map((read) => read.first), dailySummaryTypes.map(() => '2026-03-10'));
+    assert.deepEqual(planSummarySync(db, '2026-09-01', now).map((read) => read.first), dailySummaryTypes.map(() => '2026-06-04'));
+  } finally { db.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
 function migrated() {
   const dir = mkdtempSync(join(tmpdir(), 'trivimo-sync-')); const path = join(dir, 'db.sqlite'); const db = new DatabaseSync(path);
   return { dir, path, db, ready: async () => {
     initializeTakeoutStore(db);
     await migrateCanonicalDays(db, join(dir, 'v1.sqlite')); await migrateUserNotes(db, join(dir, 'v2.sqlite'));
     await migrateSourceAccounts(db, join(dir, 'v3.sqlite'), true); await migrateGooglePages(db, join(dir, 'v4.sqlite'));
-    await migrateDailyRollups(db, join(dir, 'v5.sqlite')); await migrateCalorieJobs(db, join(dir, 'v6.sqlite')); await migrateWindowJobs(db, join(dir, 'v7.sqlite')); await migrateReadPolicy(db, join(dir, 'v8.sqlite')); await migrateSourceLists(db, join(dir, 'v9.sqlite')); await migrateCsvImports(db, join(dir, 'v10.sqlite')); await migrateCsvNotes(db, join(dir, 'v11.sqlite')); await migratePageWindows(db, join(dir, 'v12.sqlite')); await migrateDayZone(db, join(dir, 'v13.sqlite'));
+    await migrateDailyRollups(db, join(dir, 'v5.sqlite')); await migrateCalorieJobs(db, join(dir, 'v6.sqlite')); await migrateWindowJobs(db, join(dir, 'v7.sqlite')); await migrateReadPolicy(db, join(dir, 'v8.sqlite')); await migrateSourceLists(db, join(dir, 'v9.sqlite')); await migrateCsvImports(db, join(dir, 'v10.sqlite')); await migrateCsvNotes(db, join(dir, 'v11.sqlite')); await migratePageWindows(db, join(dir, 'v12.sqlite')); await migrateDayZone(db, join(dir, 'v13.sqlite')); await migrateDailySummaries(db, join(dir, 'v14.sqlite'));
   } };
 }
 const scopes = 'https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly';
@@ -90,9 +109,9 @@ test('serwis odświeżania: wznawia niedokończone zadanie, wykonuje plan i zatr
     const executed: string[] = [];
     const service = new GoogleSyncService(env.path, await authorized(), { intervalMinutes: 60, now: () => Date.parse('2026-03-10T12:00:00Z'), send, execute: async (_db, read) => { executed.push(`${read.kind}:${read.last}`); } });
     const outcome = await service.runOnce();
-    assert.equal(outcome.result, 'ok'); assert.equal(outcome.reads, 1 + syncKinds.length * 2);
+    assert.equal(outcome.result, 'ok'); assert.equal(outcome.reads, 1 + syncKinds.length * 2 + dailySummaryTypes.length);
     assert.equal(env.db.prepare('SELECT state FROM google_read_jobs WHERE id = ?').get(running)?.state, 'complete');
-    assert.equal(executed.length, syncKinds.length * 2);
+    assert.equal(executed.length, syncKinds.length * 2 + dailySummaryTypes.length);
     assert.ok(sent.some((address) => address.endsWith('/identity')));
     assert.equal(service.status().unfinishedJobs, 0);
 
@@ -120,9 +139,9 @@ test('serwis odświeżania: 429 ponawia tę samą stronę z odstępem, a trwałe
     let clock = Date.parse('2026-03-10T12:00:00Z');
     const service = new GoogleSyncService(env.path, await authorized(), { intervalMinutes: 60, now: () => clock, send, sleep: async (ms) => { sleeps.push(ms); }, random: () => 0 });
     const outcome = await service.runOnce();
-    assert.deepEqual([outcome.result, outcome.reads, sleeps], ['ok', syncKinds.length * 2, [3000, 3000]]);
-    assert.equal(reads, syncKinds.length * 2 + 2);
-    assert.equal(env.db.prepare('SELECT COUNT(*) AS n FROM google_read_pages').get()?.n, syncKinds.length * 2);
+    assert.deepEqual([outcome.result, outcome.reads, sleeps], ['ok', syncKinds.length * 2 + dailySummaryTypes.length, [3000, 3000]]);
+    assert.equal(reads, syncKinds.length * 2 + 2 + dailySummaryTypes.length);
+    assert.equal(env.db.prepare('SELECT COUNT(*) AS n FROM google_read_pages').get()?.n, syncKinds.length * 2 + dailySummaryTypes.length);
     assert.equal(env.db.prepare("SELECT COUNT(*) AS n FROM google_read_jobs WHERE state != 'complete'").get()?.n, 0);
 
     limited = Infinity; reads = 0; sleeps.length = 0; clock = Date.parse('2026-03-11T12:00:00Z');
@@ -204,7 +223,7 @@ test('backfill: czyta wszystkie luki, wznawia bez powtórzeń, zatrzymuje się p
     const options = { intervalMinutes: null, now: () => clock, send, sleep: async (ms: number) => { clock += ms; }, random: () => 0 };
     const service = new GoogleSyncService(env.path, await authorized(), options);
     assert.equal(service.backfillStatus().state, 'idle');
-    assert.deepEqual(service.backfillStatus().kinds.map((item) => item.covered), syncKinds.map(() => 0));
+    assert.deepEqual(service.backfillStatus().kinds.map((item) => item.covered), allSyncKinds.map(() => 0));
 
     // stop after the first chunk: what was read stays, the rest waits for a later start
     const stopping = new GoogleSyncService(env.path, await authorized(), { ...options, execute: async (db, read) => {
@@ -219,9 +238,9 @@ test('backfill: czyta wszystkie luki, wznawia bez powtórzeń, zatrzymuje się p
     service.startBackfill(); await service.backfillDone;
     const status = service.backfillStatus();
     assert.equal(status.state, 'done');
-    assert.deepEqual(status.kinds.map((item) => [item.covered, item.total]), syncKinds.map(() => [19, 19]));
-    // 17 chunks in all (1 per steps, distance and active, 2 for total-calories, 2 per window kind, 1 per measurement), one read before the stop; plus five refused requests
-    assert.deepEqual([status.readsThisRun, rollups], [16, 16 + 5]);
+    assert.deepEqual(status.kinds.map((item) => [item.covered, item.total]), allSyncKinds.map(() => [19, 19]));
+    // 23 chunks in all (1 per steps, distance and active, 2 for total-calories, 2 per window kind, 1 per measurement, 1 per daily summary), one read before the stop; plus five refused requests
+    assert.deepEqual([status.readsThisRun, rollups], [22, 22 + 5]);
     assert.equal(env.db.prepare("SELECT COUNT(*) AS n FROM google_read_jobs WHERE state != 'complete'").get()?.n, 0);
 
     rollups = 0;
@@ -243,7 +262,7 @@ test('serwis odświeżania: krótkie 503 jest ponawiane, trwałe 503 kończy prz
     let clock = Date.parse('2026-03-10T12:00:00Z');
     const service = new GoogleSyncService(env.path, await authorized(), { intervalMinutes: 60, now: () => clock, send, sleep: async (ms) => { sleeps.push(ms); clock += ms; }, random: () => 0 });
     const outcome = await service.runOnce();
-    assert.deepEqual([outcome.result, outcome.reads, sleeps.length], ['ok', syncKinds.length * 2, 3]);
+    assert.deepEqual([outcome.result, outcome.reads, sleeps.length], ['ok', syncKinds.length * 2 + dailySummaryTypes.length, 3]);
     assert.equal(env.db.prepare("SELECT COUNT(*) AS n FROM google_read_jobs WHERE state != 'complete'").get()?.n, 0);
 
     unavailable = Infinity; clock = Date.parse('2026-03-11T12:00:00Z');

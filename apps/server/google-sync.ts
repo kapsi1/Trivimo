@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { setImmediate as nextTurn, setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { currentStoreVersion } from '../../packages/storage/canonical-days.ts';
-import { maxRollupDays } from '../../packages/adapters/google-health/daily-rollup.ts';
+import { maxRollupDays, type DailyRollupType } from '../../packages/adapters/google-health/daily-rollup.ts';
 import { defaultRetryPolicy, RateLimitedError, withRateLimitRetry, type RetryPolicy } from '../../packages/adapters/google-health/rate-limit.ts';
 import { sourceDay } from '../../packages/domain/source-day.ts';
 import { dayBounds, firstSupportedDay } from '../../packages/domain/day-zone.ts';
@@ -12,11 +12,15 @@ import type { GoogleJobKind } from '../../packages/storage/google-pages.ts';
 import { publishDayRangeYielding } from '../../packages/storage/google-day-snapshots.ts';
 import { applyReadPolicy, registerAutomaticJob } from '../../packages/storage/google-read-policy.ts';
 import type { GoogleAuth } from './google-auth.ts';
+import { dailySummaryTypes, maxDailySummaryDays, type DailySummaryType } from '../../packages/adapters/google-health/daily-summary.ts';
 import { readGoogleJobPage, startGoogleReadJob } from './google-read-service.ts';
 
 /** Kinds refreshed automatically: the six M1 metrics' raw material plus the ten-minute wear evidence. */
 export const syncKinds = ['steps', 'distance', 'total-calories', 'active-energy-burned', 'heart-rate-10m', 'active-energy-10m', 'total-calories-10m', 'steps-10m', 'distance-10m', 'weight', 'body-fat'] as const;
-export type SyncKind = (typeof syncKinds)[number];
+/** Daily summaries (list reads of whole civil days): refreshed after the core kinds, read by the backfill and reconciled, kept out of the energy path. */
+export const summaryKinds = dailySummaryTypes;
+export const allSyncKinds = [...syncKinds, ...summaryKinds] as const;
+export type SyncKind = (typeof allSyncKinds)[number];
 export interface SyncRead { kind: SyncKind; first: string; last: string; begin: string; end: string }
 export interface SyncOutcome { at: string; result: 'ok' | 'authorization_required' | 'scope_missing' | 'migration_required' | 'error'; code?: string; reads: number; /** Reads of days older than the refresh window made in this run (included in `reads`). */ reconciled?: number; retryAt?: string; energy?: { published: number; unchanged: number } | 'failed' }
 
@@ -24,6 +28,7 @@ export interface SyncOutcome { at: string; result: 'ok' | 'authorization_require
 const slowKinds: ReadonlySet<SyncKind> = new Set(['weight', 'body-fat']);
 const slowRefreshMs = 60 * 60000;
 const maxCatchUpDays = 13; // keeps a ten-minute-window range within 14 days even across a 25-hour day
+const isSummary = (kind: string): kind is DailySummaryType => (dailySummaryTypes as readonly string[]).includes(kind);
 const windowed = (kind: SyncKind) => kind.endsWith('-10m');
 /** Window and measurement (weight, body fat) jobs hold the UTC bounds of days in the day zone; the others hold civil dates. */
 const instantRange = (kind: SyncKind) => windowed(kind) || kind === 'weight' || kind === 'body-fat';
@@ -65,6 +70,29 @@ export function planSync(db: DatabaseSync, today: string, nowMs: number, refresh
   return plan;
 }
 
+/** Daily summaries change once a day (after sleep); the current range is read again at most this often. */
+const summaryRefreshMs = 3 * 60 * 60000;
+/**
+ * Reads of the daily summaries: one range per type, from three days back (or the last covered day after a gap, at most
+ * `maxDailySummaryDays`) through today. Today's value may still be provisional, so the same range is read again after
+ * `summaryRefreshMs`. Older days come from the backfill and the reconciliation, like every other kind.
+ */
+export function planSummarySync(db: DatabaseSync, today: string, nowMs: number): SyncRead[] {
+  const plan: SyncRead[] = [];
+  for (const kind of dailySummaryTypes) {
+    const row = db.prepare("SELECT range_end FROM google_read_jobs WHERE kind = ? AND state = 'complete' ORDER BY range_end DESC LIMIT 1").get(kind);
+    const covered = row && typeof row.range_end === 'string' ? addDays(row.range_end, -1) : null;
+    let first = addDays(today, -3);
+    if (covered !== null && covered < first) first = covered;
+    const earliest = addDays(today, -(maxDailySummaryDays - 1));
+    if (first < earliest) first = earliest;
+    const end = addDays(today, 1);
+    const previous = db.prepare("SELECT created_at FROM google_read_jobs WHERE kind = ? AND range_start = ? AND range_end = ? AND state = 'complete' ORDER BY created_at DESC LIMIT 1").get(kind, first, end);
+    if (!previous || nowMs - Date.parse(String(previous.created_at)) >= summaryRefreshMs) plan.push({ kind, first, last: today, begin: first, end });
+  }
+  return plan;
+}
+
 /**
  * Default start of the history read automatically (plan M1). Earlier days (from `firstSupportedDay`) are read only
  * when the user starts the backfill from an earlier date (decision 2026-11-04); the automatic gap check stays at 2026.
@@ -72,7 +100,7 @@ export function planSync(db: DatabaseSync, today: string, nowMs: number, refresh
 export const backfillFrom = '2026-01-01';
 // source lists hold every record (about 200 bytes each), so a week keeps a page well under the 1 MB response limit
 // measurements are a few records a day, so a month fits in one page; the read service allows ranges up to 31 days
-const chunkDays = (kind: SyncKind) => windowed(kind) ? maxCatchUpDays : kind.endsWith('-sources') ? 7 : kind === 'weight' || kind === 'body-fat' ? 30 : maxRollupDays(kind as Exclude<SyncKind, `${string}-10m` | `${string}-sources` | 'weight' | 'body-fat'>);
+const chunkDays = (kind: SyncKind) => isSummary(kind) ? maxDailySummaryDays : windowed(kind) ? maxCatchUpDays : kind.endsWith('-sources') ? 7 : kind === 'weight' || kind === 'body-fat' ? 30 : maxRollupDays(kind as DailyRollupType);
 const dayEnd = (day: string, zone: string) => Date.parse(dayBounds(day, zone).end);
 
 /**
@@ -116,11 +144,11 @@ export function verifiedDays(db: DatabaseSync, kind: SyncKind, from: string, thr
  * refresh window whose every day was verified before, and whose verification has expired (`force` skips the expiry, for a
  * manual run). Least recently verified first, at most `budget` reads.
  */
-export function planReconcile(db: DatabaseSync, today: string, nowMs: number, from: string, budget: number, force = false): SyncRead[] {
+export function planReconcile(db: DatabaseSync, today: string, nowMs: number, from: string, budget: number, force = false, kinds: readonly SyncKind[] = syncKinds): SyncRead[] {
   const through = addDays(today, -4), zone = readDayZone(db);
   if (from > through || budget <= 0) return [];
   const due: { read: SyncRead; verifiedAt: number; order: number }[] = [];
-  for (const [order, kind] of syncKinds.entries()) {
+  for (const [order, kind] of kinds.entries()) {
     const size = chunkDays(kind), verified = verifiedDays(db, kind, from, through);
     for (let start = addDays(backfillFrom, Math.floor(daysBetween(backfillFrom, from) / size) * size); start <= through; start = addDays(start, size)) {
       const first = start < from ? from : start, end = addDays(start, size - 1), last = end > through ? through : end;
@@ -188,9 +216,9 @@ export function coveredDays(db: DatabaseSync, kind: SyncKind, from: string, thro
 /** Source of `coveredDays` results; the service passes a cached one (the sets are read, never changed). */
 export type CoveredDays = (db: DatabaseSync, kind: SyncKind, from: string, through: string) => ReadonlySet<string>;
 
-/** Per day of [from, through] how many of `syncKinds` a complete read covered after the day ended (calendar of history coverage). */
+/** Per day of [from, through] how many of `allSyncKinds` a complete read covered after the day ended (calendar of history coverage). */
 export function coverageCalendar(db: DatabaseSync, from: string, through: string, covered: CoveredDays = coveredDays): { date: string; covered: number }[] {
-  const sets = syncKinds.map((kind) => covered(db, kind, from, through));
+  const sets = allSyncKinds.map((kind) => covered(db, kind, from, through));
   const days: { date: string; covered: number }[] = [];
   for (let day = from; day <= through; day = addDays(day, 1)) days.push({ date: day, covered: sets.filter((set) => set.has(day)).length });
   return days;
@@ -198,12 +226,12 @@ export function coverageCalendar(db: DatabaseSync, from: string, through: string
 
 /**
  * Uncovered days of [from, through], grouped per kind into consecutive chunks within the producer limit, newest
- * period first (all kinds of a period before an older one, `syncKinds` order within it). A run stopped part-way
+ * period first (all kinds of a period before an older one, `allSyncKinds` order within it). A run stopped part-way
  * then leaves recent days with every kind read, so their snapshots are qualified, instead of all days half read.
  */
 export function planBackfill(db: DatabaseSync, from: string, through: string, coveredBy: CoveredDays = coveredDays): SyncRead[] {
   const plan: SyncRead[] = [], zone = readDayZone(db);
-  for (const kind of syncKinds) {
+  for (const kind of allSyncKinds) {
     const covered = coveredBy(db, kind, from, through);
     let first: string | null = null; let size = 0;
     const flush = (last: string) => { if (first) plan.push({ kind, first, last, ...boundsFor(kind, first, last, zone) }); first = null; size = 0; };
@@ -236,7 +264,7 @@ type Execute = (db: DatabaseSync, read: SyncRead) => Promise<void>;
  */
 export const backfillRetryDelaysMs = [15000, 30000, 60000, 120000, 300000];
 const transientFailure = (code: string | undefined) => !!code && (/^google_(identity_)?http_5\d\d$/.test(code) || code === 'google_read_failed');
-const safeCodes = /^(authorization_required|scope_missing|account_changed|job_conflict|range_too_large|invalid_range|unexpected_window|duplicate_day|duplicate_window|cursor_cycle|response_too_large|token_refresh_failed|(google_|google_identity_)http_\d{3})$/;
+const safeCodes = /^(authorization_required|scope_missing|account_changed|job_conflict|range_too_large|invalid_range|unexpected_window|missing_field|empty_point|duplicate_day|duplicate_window|cursor_cycle|response_too_large|token_refresh_failed|(google_|google_identity_)http_\d{3})$/;
 
 export class GoogleSyncService {
   private running = false;
@@ -342,7 +370,14 @@ export class GoogleSyncService {
       const today = this.today(db);
       for (const read of planSync(db, today, this.now(), interval / 2)) { await this.execute(db, read); reads++; }
       for (const read of planReconcile(db, today, this.now(), this.projectionFrom(db), options.reconcile === 'force' ? reconcileReadsManual : reconcileReadsPerRun, options.reconcile === 'force')) { await this.execute(db, read); reads++; reconciled++; }
+      // summary reads come after everything the energy path needs; a failure is held until the snapshots are published, so it never blocks them
+      let deferred: unknown;
+      try {
+        for (const read of planSummarySync(db, today, this.now())) { await this.execute(db, read); reads++; }
+        for (const read of planReconcile(db, today, this.now(), this.projectionFrom(db), options.reconcile === 'force' ? reconcileReadsManual : reconcileReadsPerRun, options.reconcile === 'force', summaryKinds)) { await this.execute(db, read); reads++; reconciled++; }
+      } catch (error) { deferred = error; }
       const energy = await this.projectEnergy(db);
+      if (deferred !== undefined) throw deferred;
       const outcome = finish('ok'); outcome.energy = energy;
       return outcome;
     } catch (error) {
@@ -373,7 +408,7 @@ export class GoogleSyncService {
   /** Finish pages of jobs left running (by an interrupted run, backfill or restart); returns how many were completed. */
   private async resumeRunning(db: DatabaseSync): Promise<number> {
     let reads = 0;
-    const kinds = syncKinds.map((kind) => `'${kind}'`).join(',');
+    const kinds = allSyncKinds.map((kind) => `'${kind}'`).join(',');
     for (const job of db.prepare(`SELECT id FROM google_read_jobs WHERE state = 'running' AND kind IN (${kinds}) ORDER BY created_at`).all()) {
       for (let page = 0; page < 50; page++) { if ((await this.retry(() => readGoogleJobPage(db, this.auth, String(job.id), this.options.send))).complete) { applyReadPolicy(db, String(job.id), this.now()); break; } }
       reads++;
@@ -469,10 +504,10 @@ export class GoogleSyncService {
       try {
         through = this.backfill?.through ?? addDays(this.today(db), -1);
         total = Math.max(0, Math.round((Date.parse(`${through}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000) + 1);
-        const fingerprints = this.fingerprints(db), key = `${from}|${through}|${syncKinds.map((kind) => fingerprints.get(kind) ?? 'none').join(',')}`;
+        const fingerprints = this.fingerprints(db), key = `${from}|${through}|${allSyncKinds.map((kind) => fingerprints.get(kind) ?? 'none').join(',')}`;
         if (this.progressCache?.key !== key) {
           const covered = this.cachedCoverage(fingerprints);
-          this.progressCache = { key, kinds: syncKinds.map((kind) => ({ kind, covered: covered(db, kind, from, through).size, total })), remainingReads: planBackfill(db, from, through, covered).length };
+          this.progressCache = { key, kinds: allSyncKinds.map((kind) => ({ kind, covered: covered(db, kind, from, through).size, total })), remainingReads: planBackfill(db, from, through, covered).length };
         }
         kinds = this.progressCache.kinds.map((item) => ({ ...item })); remainingReads = this.progressCache.remainingReads;
       } finally { db.close(); }
@@ -488,7 +523,7 @@ export class GoogleSyncService {
       try {
         const yesterday = addDays(this.today(db), -1);
         const through = `${String(year).padStart(4, '0')}-12-31` < yesterday ? `${String(year).padStart(4, '0')}-12-31` : yesterday;
-        return { from, through, kinds: syncKinds.length, days: through < from ? [] : coverageCalendar(db, from, through, this.cachedCoverage(this.fingerprints(db))) }; } finally { db.close(); }
+        return { from, through, kinds: allSyncKinds.length, days: through < from ? [] : coverageCalendar(db, from, through, this.cachedCoverage(this.fingerprints(db))) }; } finally { db.close(); }
     } catch { return null; }
   }
   status() {
@@ -498,8 +533,8 @@ export class GoogleSyncService {
       const db = this.open();
       try {
         const latest = db.prepare("SELECT MAX(created_at) AS at FROM google_read_jobs WHERE kind = ? AND state = 'complete'");
-        kinds = syncKinds.map((kind) => ({ kind, lastReadAt: typeof latest.get(kind)?.at === 'string' ? String(latest.get(kind)?.at) : null, coveredThrough: coveredThrough(db, kind) }));
-        running = Number(db.prepare(`SELECT COUNT(*) AS n FROM google_read_jobs WHERE state = 'running' AND kind IN (${syncKinds.map((kind) => `'${kind}'`).join(',')})`).get()?.n);
+        kinds = allSyncKinds.map((kind) => ({ kind, lastReadAt: typeof latest.get(kind)?.at === 'string' ? String(latest.get(kind)?.at) : null, coveredThrough: coveredThrough(db, kind) }));
+        running = Number(db.prepare(`SELECT COUNT(*) AS n FROM google_read_jobs WHERE state = 'running' AND kind IN (${allSyncKinds.map((kind) => `'${kind}'`).join(',')})`).get()?.n);
       } finally { db.close(); }
     } catch { /* the store is unavailable or needs migration; the last outcome says so */ }
     return { automatic: this.options.intervalMinutes, running: this.running, unfinishedJobs: running, pausedUntil: this.pausedUntil === null ? null : new Date(this.pausedUntil).toISOString(), last: this.last, kinds, backfill: this.backfillStatus() };

@@ -264,8 +264,45 @@ export async function migrateDayZone(db: DatabaseSync, backupPath: string): Prom
   });
 }
 
+/**
+ * Version 15: six daily summary kinds (`daily-*`, read by `list`) join the allowed job kinds. SQLite cannot alter a CHECK,
+ * so the job tables are rebuilt with their rows, pages, metadata and foreign keys; counts are compared before and after.
+ */
+export async function migrateDailySummaries(db: DatabaseSync, backupPath: string): Promise<void> {
+  const kinds = ['weight', 'body-fat', 'steps', 'distance', 'total-calories', 'active-energy-burned', 'heart-rate-10m', 'active-energy-10m', 'total-calories-10m', 'steps-10m', 'distance-10m', 'steps-sources', 'active-energy-sources',
+    'daily-resting-heart-rate', 'daily-heart-rate-variability', 'daily-oxygen-saturation', 'daily-respiratory-rate', 'daily-sleep-temperature-derivations', 'daily-vo2-max'];
+  const count = () => db.prepare('SELECT (SELECT COUNT(*) FROM google_read_jobs) AS jobs, (SELECT COUNT(*) FROM google_read_pages) AS pages, (SELECT COUNT(*) FROM google_read_job_meta) AS meta').get();
+  let before: ReturnType<typeof count>;
+  await migrateWithBackup(db, backupPath, 14, `CREATE TABLE google_read_jobs_v15 (
+      id TEXT PRIMARY KEY, account_digest TEXT NOT NULL CHECK(length(account_digest) = 64), kind TEXT NOT NULL CHECK(kind IN (${kinds.map((kind) => `'${kind}'`).join(',')})),
+      range_start TEXT NOT NULL, range_end TEXT NOT NULL, cursor TEXT, state TEXT NOT NULL CHECK(state IN ('running','complete')),
+      created_at TEXT NOT NULL
+    ) STRICT;
+    CREATE TABLE google_read_pages_v15 (
+      job_id TEXT NOT NULL REFERENCES google_read_jobs_v15(id), page_number INTEGER NOT NULL CHECK(page_number > 0),
+      request_cursor TEXT, next_cursor TEXT, raw_json TEXT NOT NULL, digest TEXT NOT NULL, received_at TEXT NOT NULL,
+      PRIMARY KEY(job_id, page_number)
+    ) STRICT;
+    CREATE TABLE google_read_job_meta_v15 (
+      job_id TEXT PRIMARY KEY REFERENCES google_read_jobs_v15(id), origin TEXT NOT NULL CHECK(origin IN ('manual','automatic')),
+      content_digest TEXT, confirmed_at TEXT, confirmations INTEGER NOT NULL DEFAULT 0 CHECK(confirmations >= 0)
+    ) STRICT;
+    INSERT INTO google_read_jobs_v15 SELECT id, account_digest, kind, range_start, range_end, cursor, state, created_at FROM google_read_jobs;
+    INSERT INTO google_read_pages_v15 SELECT job_id, page_number, request_cursor, next_cursor, raw_json, digest, received_at FROM google_read_pages;
+    INSERT INTO google_read_job_meta_v15 SELECT job_id, origin, content_digest, confirmed_at, confirmations FROM google_read_job_meta;
+    DROP TABLE google_read_job_meta; DROP TABLE google_read_pages; DROP TABLE google_read_jobs;
+    ALTER TABLE google_read_jobs_v15 RENAME TO google_read_jobs;
+    ALTER TABLE google_read_pages_v15 RENAME TO google_read_pages;
+    ALTER TABLE google_read_job_meta_v15 RENAME TO google_read_job_meta;
+    CREATE INDEX google_read_pages_digest ON google_read_pages(digest);
+    PRAGMA user_version = 15;`, () => {
+    const after = count();
+    if (!after || JSON.stringify(after) !== JSON.stringify(before) || db.prepare('PRAGMA foreign_key_check').all().length > 0) throw new Error('Niespójna migracja zadań Google');
+  }, () => { before = count(); });
+}
+
 /** Store version the server, services and CLI expect. */
-export const currentStoreVersion = 14;
+export const currentStoreVersion = 15;
 /** Whether a store version has the given feature version (and is not newer than this code understands). */
 export const storeHas = (version: unknown, since: number): boolean => typeof version === 'number' && version >= since && version <= currentStoreVersion;
 

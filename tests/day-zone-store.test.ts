@@ -11,7 +11,7 @@ import { coveredDays, planSync } from '../apps/server/google-sync.ts';
 import { initializeTakeoutStore } from '../packages/adapters/takeout/import.ts';
 import { dayBounds } from '../packages/domain/day-zone.ts';
 import {
-  currentStoreVersion, migrateCalorieJobs, migrateCanonicalDays, migrateCsvImports, migrateCsvNotes, migrateDailyRollups, migrateDayZone, migrateGooglePages,
+  currentStoreVersion, migrateCalorieJobs, migrateCanonicalDays, migrateCsvImports, migrateCsvNotes, migrateDailyRollups, migrateDailySummaries, migrateDayZone, migrateGooglePages,
   migratePageWindows, migrateReadPolicy, migrateSourceAccounts, migrateSourceLists, migrateUserNotes, migrateWindowJobs,
 } from '../packages/storage/canonical-days.ts';
 import { dayZoneState, readDayZone, saveDayZone } from '../packages/storage/day-zone.ts';
@@ -48,7 +48,7 @@ test('migracja 14 zapisuje strefę Warszawy jako wersję początkową; sklep bez
   try {
     assert.equal(readDayZone(db), 'Europe/Warsaw'); // version 13: no setting yet
     await migrateDayZone(db, join(dir, 'v13.sqlite'));
-    assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, currentStoreVersion);
+    assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 14);
     const state = dayZoneState(db);
     assert.deepEqual([state.zone, state.revision, state.rule, state.staleDays, state.history.map((item) => [item.revision, item.zone, item.reason])], ['Europe/Warsaw', 1, 'day-zone-v1', 0, [[1, 'Europe/Warsaw', 'initial']]]);
     verifyTakeout(path);
@@ -64,7 +64,7 @@ test('migracja 14 zapisuje strefę Warszawy jako wersję początkową; sklep bez
 test('zmiana strefy przelicza doby z zapisanych oryginałów jako nowe wersje, bez zera i bez utraty historii', async () => {
   const { dir, path, db, dispose } = await store();
   try {
-    await migrateDayZone(db, join(dir, 'v13.sqlite'));
+    await migrateDayZone(db, join(dir, 'v13.sqlite')); await migrateDailySummaries(db, join(dir, 'v14.sqlite'));
     const now = Date.parse('2026-06-12T08:00:00Z'), date = '2026-06-10';
     // the day as Warsaw cuts it: the producer's daily value equals the sum of the day's windows
     read(db, 'steps', date, next(date), [dailySteps(date, 100)]);
@@ -108,7 +108,7 @@ function DayZoneRead(db: DatabaseSync, date: string) {
 test('stare snapshoty bez strefy są dobami warszawskimi i czekają na przeliczenie po zmianie strefy', async () => {
   const { dir, path, db, dispose } = await store();
   try {
-    await migrateDayZone(db, join(dir, 'v13.sqlite'));
+    await migrateDayZone(db, join(dir, 'v13.sqlite')); await migrateDailySummaries(db, join(dir, 'v14.sqlite'));
     // a snapshot published before version 14 has no zone field
     const legacy = { date: '2026-05-01', metrics: Object.fromEntries(['weight', 'body_fat', 'steps', 'distance', 'total_energy', 'active_energy'].map((key) => [key, { status: 'missing', value: null }])), issues: [], revision: 1, notes: [] };
     db.prepare('INSERT INTO daily_snapshots VALUES (?, 1, ?)').run('2026-05-01', JSON.stringify(legacy));
@@ -128,7 +128,7 @@ test('stare snapshoty bez strefy są dobami warszawskimi i czekają na przelicze
 test('serwis nie zmienia strefy podczas odświeżania ani na nieznaną strefę', async () => {
   const { dir, path, db, dispose } = await store();
   try {
-    await migrateDayZone(db, join(dir, 'v13.sqlite'));
+    await migrateDayZone(db, join(dir, 'v13.sqlite')); await migrateDailySummaries(db, join(dir, 'v14.sqlite'));
     await assert.rejects(new DayZoneService(path, () => true).change('UTC'), /sync_running/);
     await assert.rejects(new DayZoneService(path).change('Mars/Base'), /invalid_zone/);
     await assert.rejects(new DayZoneService(path).change('+02:00'), /invalid_zone/);
@@ -141,7 +141,7 @@ test('serwis nie zmienia strefy podczas odświeżania ani na nieznaną strefę',
 test('planowanie odczytów używa granic doby ze strefy sklepu, a pokrycie nie zależy od podziału na porcje (także przy dobie 23 h)', async () => {
   const { dir, db, dispose } = await store();
   try {
-    await migrateDayZone(db, join(dir, 'v13.sqlite'));
+    await migrateDayZone(db, join(dir, 'v13.sqlite')); await migrateDailySummaries(db, join(dir, 'v14.sqlite'));
     saveDayZone(db, 'Asia/Kolkata', '2026-11-06T10:00:00.000Z');
     const plan = planSync(db, '2026-06-10', Date.parse('2026-06-10T09:00:00Z'), 600000);
     const windowed = plan.find((read) => read.kind === 'steps-10m' && read.last === '2026-06-09')!, civilDays = plan.find((read) => read.kind === 'steps' && read.last === '2026-06-09')!;
@@ -167,7 +167,7 @@ test('planowanie odczytów używa granic doby ze strefy sklepu, a pokrycie nie z
 
 test('REST: odczyt i zmiana strefy wymagają sesji, nagłówka żądania i poprawnej strefy', async () => {
   const { dir, path, db, dispose } = await store();
-  await migrateDayZone(db, join(dir, 'v13.sqlite'));
+  await migrateDayZone(db, join(dir, 'v13.sqlite')); await migrateDailySummaries(db, join(dir, 'v14.sqlite'));
   const server = createApp(new DatabaseSync(':memory:'), db, undefined, [], undefined, undefined, undefined, undefined, new DayZoneService(path, () => false, () => Date.parse('2026-06-12T08:00:00Z')));
   try {
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));

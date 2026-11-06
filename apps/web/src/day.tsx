@@ -8,6 +8,7 @@ import { Placeholder } from './placeholders.tsx';
 import { Segmented, ZoomDialog, zoomSize } from './zoom.tsx';
 import { z } from 'zod';
 import { Loading } from './logo.tsx';
+import { DaySummaries } from './summaries.tsx';
 
 
 export type DayTab = 'przebieg' | 'godzinowe' | 'jedzenie' | 'treningi';
@@ -57,7 +58,7 @@ export function DayView({ date, tab, onTab, sync, onDirty }: { date: string; tab
   if (day.data.state === 'not_ready') return <>{head}<p>Wyniki dzienne nie są jeszcze przygotowane. Oryginalne dane znajdziesz w „Źródła danych”.</p>{zoomed}</>;
 
   let body;
-  if (tab === 'przebieg') body = <DayFlow date={date} rows={rows} hours={hours} snapshot={snapshot} legacy={legacy} seriesRead={!!total.data} loading={loading} forecast={fc} onZoom={setZoom} notesAvailable={day.data.notesAvailable} userNote={day.data.userNote} onDirty={onDirty} />;
+  if (tab === 'przebieg') body = <><DayFlow date={date} rows={rows} hours={hours} snapshot={snapshot} legacy={legacy} seriesRead={!!total.data} loading={loading} forecast={fc} onZoom={setZoom} notesAvailable={day.data.notesAvailable} userNote={day.data.userNote} onDirty={onDirty} /><DaySummaries snapshot={snapshot} /></>;
   else if (tab === 'godzinowe') body = <DayHoursTable hours={hours} />;
   else if (tab === 'jedzenie') body = <Placeholder title="Dziennik jedzenia dnia" stage="M3" text="Tu pojawią się posiłki tego dnia, ich suma i pokrycie składników, a obok bilans z wydatkiem energii. Szczegóły zaprojektujemy razem z etapem M3." list={['Lista posiłków chronologicznie', 'Suma kcal i makr z oznaczeniem wpisów niepełnych', 'Bilans tylko dla dni z porównywalnym wydatkiem']} />;
   else body = <Placeholder title="Treningi dnia" stage="M2" text="Sesje z czasem, tętnem, strefami i mapą trasy pojawią się w etapie M2. Kolumna „Treningi” w tabeli będzie ich zwięzłą projekcją." list={['Lista sesji dnia, np. „2 × spacer, 1 × rower”', 'Czas w strefach tętna i AZM osobno', 'Mapa trasy z TCX']} />;

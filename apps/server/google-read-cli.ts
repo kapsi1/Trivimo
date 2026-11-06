@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { currentStoreVersion } from '../../packages/storage/canonical-days.ts';
 import { dailyRollupTypes } from '../../packages/adapters/google-health/daily-rollup.ts';
+import { dailySummaryTypes } from '../../packages/adapters/google-health/daily-summary.ts';
 import { dayBounds } from '../../packages/domain/day-zone.ts';
 import { readDayZone } from '../../packages/storage/day-zone.ts';
 import { windowJobKinds, type WindowJobKind } from '../../packages/storage/google-pages.ts';
@@ -16,7 +17,7 @@ import { DpapiTokenStore } from './token-store.ts';
 /** Reads one civil-day aggregate range through the same code path as the panel; prints only counts and error codes. */
 async function main() {
   const [kind, first, last, flag] = process.argv.slice(2);
-  const parsedKind = z.enum([...dailyRollupTypes, ...(Object.keys(windowJobKinds) as WindowJobKind[])]).safeParse(kind);
+  const parsedKind = z.enum([...dailyRollupTypes, ...dailySummaryTypes, ...(Object.keys(windowJobKinds) as WindowJobKind[])]).safeParse(kind);
   if (!parsedKind.success || !z.iso.date().safeParse(first).success || !z.iso.date().safeParse(last).success) throw new Error('usage');
   const clientFile = process.env.TRIVIMO_GOOGLE_CLIENT_FILE; const sourcePath = takeoutDatabasePath();
   if (!clientFile || !sourcePath) throw new Error('missing_configuration');
@@ -40,7 +41,7 @@ async function main() {
 main().catch((error: unknown) => {
   // Only codes and schema paths are printed, never response values, tokens or identifiers.
   const safe = error instanceof z.ZodError ? error.issues.slice(0, 3).map((issue) => `${issue.path.join('.')}:${issue.code}`).join(',')
-    : error instanceof Error && /^(usage|missing_configuration|migration_required|authorization_required|scope_missing|account_changed|job_conflict|range_too_large|invalid_range|unexpected_window|duplicate_day|cursor_cycle|response_too_large|token_refresh_failed|(google_|google_identity_)http_\d{3})$/.test(error.message) ? error.message : 'google_read_failed';
+    : error instanceof Error && /^(usage|missing_configuration|migration_required|authorization_required|scope_missing|account_changed|job_conflict|range_too_large|invalid_range|unexpected_window|missing_field|empty_point|duplicate_day|cursor_cycle|response_too_large|token_refresh_failed|(google_|google_identity_)http_\d{3})$/.test(error.message) ? error.message : 'google_read_failed';
   console.error(`error: ${safe}`);
   process.exitCode = 1;
 });

@@ -3,19 +3,21 @@ import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { dailyRollupTypes, maxRollupDays, parseDailyRollup, type DailyRollupType } from '../adapters/google-health/daily-rollup.ts';
 import { maxWindowRangeDays, parseWindowRollup, windowSeconds } from '../adapters/google-health/window-rollup.ts';
+import { dailySummaryTypes, isDailySummaryType, maxDailySummaryDays, parseDailySummary, type DailySummaryType } from '../adapters/google-health/daily-summary.ts';
 import { derivePageWindows } from './google-page-windows.ts';
 import { isSourceListKind, maxSourceListDays, parseSourceList, sourceListTypes, type SourceListKind } from '../adapters/google-health/source-list.ts';
 
 export const windowJobKinds = { 'heart-rate-10m': 'heart-rate', 'active-energy-10m': 'active-energy-burned', 'total-calories-10m': 'total-calories', 'steps-10m': 'steps', 'distance-10m': 'distance' } as const;
 export type WindowJobKind = keyof typeof windowJobKinds;
 export const isWindowKind = (kind: string): kind is WindowJobKind => kind in windowJobKinds;
-export type GoogleJobKind = 'weight' | 'body-fat' | DailyRollupType | WindowJobKind | SourceListKind;
-export const googleJobKinds = ['weight', 'body-fat', ...dailyRollupTypes, ...(Object.keys(windowJobKinds) as WindowJobKind[]), ...(Object.keys(sourceListTypes) as SourceListKind[])] as const;
+export type GoogleJobKind = 'weight' | 'body-fat' | DailyRollupType | DailySummaryType | WindowJobKind | SourceListKind;
+export const googleJobKinds = ['weight', 'body-fat', ...dailyRollupTypes, ...dailySummaryTypes, ...(Object.keys(windowJobKinds) as WindowJobKind[]), ...(Object.keys(sourceListTypes) as SourceListKind[])] as const;
 const kinds = z.enum(googleJobKinds);
 const isDaily = (kind: string): kind is DailyRollupType => (dailyRollupTypes as readonly string[]).includes(kind);
 /** Body and window jobs hold UTC instants; daily aggregate and source-list jobs hold half-open civil dates. */
 function validRange(kind: string, start: string, end: string): boolean {
   if (isSourceListKind(kind)) { if (!z.iso.date().safeParse(start).success || !z.iso.date().safeParse(end).success) return false; const days = (Date.parse(end) - Date.parse(start)) / 86400000; return days >= 1 && days <= maxSourceListDays; }
+  if (isDailySummaryType(kind)) { if (!z.iso.date().safeParse(start).success || !z.iso.date().safeParse(end).success) return false; const days = (Date.parse(end) - Date.parse(start)) / 86400000; return days >= 1 && days <= maxDailySummaryDays; }
   if (isDaily(kind)) { if (!z.iso.date().safeParse(start).success || !z.iso.date().safeParse(end).success) return false; const days = (Date.parse(end) - Date.parse(start)) / 86400000; return days >= 1 && days <= maxRollupDays(kind); }
   if (!z.iso.datetime().safeParse(start).success || !z.iso.datetime().safeParse(end).success || Date.parse(start) >= Date.parse(end)) return false;
   if (isWindowKind(kind)) return (Date.parse(end) - Date.parse(start)) <= maxWindowRangeDays * 86400000 && (Date.parse(start) / 1000) % windowSeconds === 0 && (Date.parse(end) / 1000) % windowSeconds === 0;
@@ -40,6 +42,7 @@ export function commitGooglePage(db: DatabaseSync, jobId: string, expectedCursor
     const job = db.prepare('SELECT kind, cursor, state FROM google_read_jobs WHERE id = ?').get(jobId);
     if (!job || job.state !== 'running' || job.cursor !== expectedCursor) throw new Error('job_conflict');
     if (typeof job.kind === 'string' && isDaily(job.kind)) parseDailyRollup(rawJson, job.kind);
+    if (typeof job.kind === 'string' && isDailySummaryType(job.kind)) parseDailySummary(rawJson, job.kind);
     if (typeof job.kind === 'string' && isWindowKind(job.kind)) parseWindowRollup(rawJson, windowJobKinds[job.kind]);
     if (typeof job.kind === 'string' && isSourceListKind(job.kind)) parseSourceList(rawJson, job.kind);
     if (nextCursor && (nextCursor === expectedCursor || db.prepare('SELECT 1 FROM google_read_pages WHERE job_id = ? AND request_cursor = ?').get(jobId, nextCursor))) throw new Error('cursor_cycle');

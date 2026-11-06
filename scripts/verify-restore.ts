@@ -4,9 +4,8 @@ import { constants, copyFileSync, createReadStream, mkdtempSync, realpathSync, r
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { sourceDay } from '../packages/domain/source-day.ts';
+import { todayIn } from '../packages/storage/day-zone.ts';
 import { readBandShareRange } from '../packages/storage/google-band-share-day.ts';
-import { readDaySourcesRange } from '../packages/storage/google-day-sources.ts';
 import { compareGoogleDays } from '../packages/storage/google-day-snapshots.ts';
 import { verifyTakeout } from '../packages/storage/verify-takeout.ts';
 import { takeoutDatabasePath } from '../packages/storage/location.ts';
@@ -42,14 +41,15 @@ async function main() {
     stage = 'przebudowa projekcji';
     const db = new DatabaseSync(restoredPath, { readOnly: true });
     try {
-      if (db.prepare('PRAGMA user_version').get()?.user_version === 11) {
+      // the projection check applies to every store that has saved pages (it was wrongly limited to version 11)
+      if (Number(db.prepare('PRAGMA user_version').get()?.user_version) >= 11) {
         // the moment of the copy is the newest saved page; days are judged as they were then
         const newest = db.prepare('SELECT MAX(received_at) AS at FROM google_read_pages').get()?.at;
         if (typeof newest === 'string') {
-          const nowMs = Date.parse(newest) + 1, to = sourceDay(new Date(nowMs).toISOString());
+          const nowMs = Date.parse(newest) + 1, to = todayIn(db, nowMs);
           const yearBefore = new Date(Date.parse(`${to}T00:00:00Z`) - 365 * 86400000).toISOString().slice(0, 10);
           const from = yearBefore > '2026-01-01' ? yearBefore : '2026-01-01';
-          readBandShareRange(db, from, to); readDaySourcesRange(db, from, to);
+          readBandShareRange(db, from, to);
           const result = compareGoogleDays(db, from, to, nowMs);
           // prints dates and counts only, never values
           console.log(`Projekcja z oryginałów ${from} – ${to}: zgodnych dób ${result.matched}, różnych ${result.differing.length}${result.differing.length ? ` (${result.differing.slice(0, 10).join(', ')})` : ''}, bez opublikowanego wyniku ${result.unpublished.length}.`);

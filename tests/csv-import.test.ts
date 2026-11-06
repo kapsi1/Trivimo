@@ -11,7 +11,7 @@ import { initializeTakeoutStore } from '../packages/adapters/takeout/import.ts';
 import type { CsvMapping } from '../packages/contracts/csv-import.ts';
 import { warsawDay } from './helpers/warsaw-day.ts';
 import { toText } from '../packages/domain/rational.ts';
-import { migrateCalorieJobs, migrateCanonicalDays, migrateCsvImports, migrateCsvNotes, migratePageWindows, migrateDayZone, migrateDailyRollups, migrateGooglePages, migrateReadPolicy, migrateSourceAccounts, migrateSourceLists, migrateUserNotes, migrateWindowJobs, readCanonicalDay } from '../packages/storage/canonical-days.ts';
+import { migrateCalorieJobs, migrateCanonicalDays, migrateCsvImports, migrateCsvNotes, migratePageWindows, migrateDailySummaries, migrateDayZone, migrateDailyRollups, migrateGooglePages, migrateReadPolicy, migrateSourceAccounts, migrateSourceLists, migrateUserNotes, migrateWindowJobs, readCanonicalDay } from '../packages/storage/canonical-days.ts';
 import { csvDayOrigin, csvDayValues, decideCsvImport, saveCsvImport } from '../packages/storage/csv-imports.ts';
 import { readUserNote, saveUserNote } from '../packages/storage/user-notes.ts';
 import { compareGoogleDays, publishGoogleDays } from '../packages/storage/google-day-snapshots.ts';
@@ -63,7 +63,7 @@ async function store() {
   await migrateCanonicalDays(db, join(dir, 'v1.sqlite')); await migrateUserNotes(db, join(dir, 'v2.sqlite'));
   await migrateSourceAccounts(db, join(dir, 'v3.sqlite'), true); await migrateGooglePages(db, join(dir, 'v4.sqlite'));
   await migrateDailyRollups(db, join(dir, 'v5.sqlite')); await migrateCalorieJobs(db, join(dir, 'v6.sqlite')); await migrateWindowJobs(db, join(dir, 'v7.sqlite'));
-  await migrateReadPolicy(db, join(dir, 'v8.sqlite')); await migrateSourceLists(db, join(dir, 'v9.sqlite')); await migrateCsvImports(db, join(dir, 'v10.sqlite')); await migrateCsvNotes(db, join(dir, 'v11.sqlite')); await migratePageWindows(db, join(dir, 'v12.sqlite')); await migrateDayZone(db, join(dir, 'v13.sqlite'));
+  await migrateReadPolicy(db, join(dir, 'v8.sqlite')); await migrateSourceLists(db, join(dir, 'v9.sqlite')); await migrateCsvImports(db, join(dir, 'v10.sqlite')); await migrateCsvNotes(db, join(dir, 'v11.sqlite')); await migratePageWindows(db, join(dir, 'v12.sqlite')); await migrateDayZone(db, join(dir, 'v13.sqlite')); await migrateDailySummaries(db, join(dir, 'v14.sqlite'));
   return { dir, path, db, dispose: () => { db.close(); rmSync(dir, { recursive: true, force: true }); } };
 }
 const save = (db: DatabaseSync, content: string, mapping: CsvMapping) => saveCsvImport(db, { fileName: 'syntetyczny.csv', content, mapping, parsed: parseMappedCsv(content, mapping, today, 'Europe/Warsaw'), now: '2026-11-04T10:00:00.000Z' });
