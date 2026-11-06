@@ -31,9 +31,10 @@ Wybór dnia strzałkami, polem daty, „Dziś”, z klawiatury ←/→ i `t`. Dl
 ### Tabela dni
 
 - Zakres: Tydzień, Miesiąc, 3 i 6 miesięcy, Rok, 2 lata, 5 lat, Od początku (pierwszy dzień z danymi widocznych kolumn) albo własne „od – do”; pola i lista są zsynchronizowane, wybór zapamiętany w przeglądarce. Dłuższe zakresy są pobierane porcjami po ≤ 366 dni.
-- Grupy kolumn (przełączane, zapamiętane): Ciało, Aktywność, Energia, Kontekst (część dnia z opaską z paskiem udziału, źródła), Opis dnia (uwagi, notatka). Zamrożony nagłówek i kolumna daty; przy sortowaniu po dacie wiersze tygodni ze średnią z dób potwierdzonych i liczbą dób z wartością („5/7”).
+- Grupy kolumn (przełączane, zapamiętane): Ciało, Aktywność, Energia, Kontekst (część dnia z opaską z paskiem udziału, źródła), Opis dnia (uwagi, notatka). Zamrożony nagłówek i kolumna daty; przy sortowaniu po dacie wiersze tygodni „średnie dzienne” (średnia z dób potwierdzonych, bez liczby dób). Dzisiejszy wiersz bez znacznika „w toku” (wartości częściowe są przygaszone). Bez filtra dni z uwagami i bez legendy.
+- Wiersze są wirtualizowane; ukryte wiersze wymiarujące o zerowej wysokości trzymają najszerszą treść każdej kolumny z całego zakresu, więc szerokość tabeli i poziome przewinięcie nie zależą od tego, które wiersze są wyrenderowane.
 - Kliknięcie wiersza lub komórki otwiera dzień. Na telefonie lista kart dni.
-- Eksport CSV jeszcze nie istnieje.
+- Eksport CSV jeszcze nie istnieje (przycisk usunięty z paska; pozycja w planie M1).
 
 ### Trendy
 

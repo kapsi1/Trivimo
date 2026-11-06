@@ -184,6 +184,10 @@ table.days { border-collapse: separate; border-spacing: 0; width: 100%; font-var
 .bandbar i { display: inline-block; width: 44px; height: 6px; border-radius: 3px; background: var(--line); position: relative; overflow: hidden; }
 .bandbar i b { position: absolute; inset: 0 auto 0 0; background: var(--c-band); }
 td.notes-c { text-align: left; color: var(--muted); max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+/* Virtualization sizer: zero-height rows keep every column as wide as its widest value in the whole range. */
+.days tr.sizer { visibility: hidden; }
+.days tr.sizer td { height: 0; padding-top: 0; padding-bottom: 0; border: 0; line-height: 0; }
+.days tr.sizer .sz { height: 0; overflow: hidden; }
 td.food-c { color: var(--faint); text-align: center; background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--c-food) 5%, transparent) 6px 7px); }
 .daycards { display: none; flex-direction: column; gap: 8px; }
 .daycard { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); text-align: left; color: inherit; }

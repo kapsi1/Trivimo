@@ -13,7 +13,7 @@ Obecny interfejs: [projekt UI](../design/ui.md). Zostało:
 
 - [ ] Tabela: wirtualizacja przy dużych zakresach (zakres do „Od początku”, wiele lat; dziś bez wirtualizacji).
 - [ ] Prognoza spalonych kalorii (`prognoza-spoczynek-v0`): reguła wyboru okien wdrożona w najprostszej postaci (wszystkie dzisiejsze okna bez kroków i aktywnych kcal, co najmniej 6). Ocenić na kilku dobach, czy okna nocne lub dłuższe okno odniesienia dają lepszą stawkę; zmiana metody to nowa wersja reguły.
-- [ ] Eksport CSV wybranej projekcji (przycisk nieaktywny), z zabezpieczeniem przed formułami i zachowaniem jednostek/statusów.
+- [ ] Eksport CSV wybranej projekcji (przycisk usunięty z tabeli do czasu wdrożenia), z zabezpieczeniem przed formułami i zachowaniem jednostek/statusów.
 - [ ] Kopia zapasowa z interfejsu (Ustawienia pokazują polecenia CLI) oraz historia importów i dziennik zdarzeń w „Źródłach danych” — wymagają nowych punktów API.
 - [ ] Widok telefonu sprawdzony tylko w emulacji 375 px w przeglądarce aplikacji; na telefonie nie sprawdzano.
 
