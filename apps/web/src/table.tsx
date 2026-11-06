@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { z } from 'zod';
 import { bandRangeSchema, groups, metricOf, quality, rangeSchema, useChunkedJson, type DayRow, type Group, type MetricKey } from './api.ts';
 import { StatusChip } from './details.tsx';
@@ -6,18 +6,62 @@ import { addDays, dow, fmtD, formatRational, isoWeek, maxDate, mondayOf, nf, toN
 import { compareDailyRows } from './sort-days.ts';
 import { Loading } from './logo.tsx';
 
-type Columns = Record<Group | 'food' | 'ctx', boolean>;
+/** Columns of the table after the date, in display order. */
+export type ColumnKey = MetricKey | 'food' | 'band' | 'notes' | 'userNote';
+export type Columns = Record<ColumnKey, boolean>;
+/** Column groups: the header row above the columns and the colour marks of the column menu. */
+const sections: { id: Group | 'food' | 'ctx' | 'desc'; label: string; color: string; keys: ColumnKey[] }[] = [
+  { id: 'body', label: groups.body.label, color: groups.body.color, keys: ['weight', 'body_fat'] },
+  { id: 'activity', label: groups.activity.label, color: groups.activity.color, keys: ['steps', 'distance'] },
+  { id: 'energy', label: groups.energy.label, color: groups.energy.color, keys: ['total_energy', 'active_energy'] },
+  { id: 'food', label: 'Jedzenie · M3', color: groups.food.color, keys: ['food'] },
+  { id: 'ctx', label: 'Kontekst', color: 'var(--c-band)', keys: ['band'] },
+  { id: 'desc', label: 'Opis dnia', color: 'var(--line-strong)', keys: ['notes', 'userNote'] },
+];
+const allColumns = sections.flatMap((section) => section.keys);
+const isMetric = (key: ColumnKey): key is MetricKey => key !== 'food' && key !== 'band' && key !== 'notes' && key !== 'userNote';
+const columnLabels: Record<'food' | 'band' | 'notes' | 'userNote', string> = { food: 'Spożyte kcal', band: 'Opaska', notes: 'Uwagi', userNote: 'Notatka' };
+const columnLabel = (key: ColumnKey) => isMetric(key) ? metricOf(key).label : columnLabels[key];
+/** Saved visibility per column; earlier versions saved whole groups (body, activity, energy, food, ctx), which still apply to their columns. */
+function loadColumns(saved: unknown): Columns {
+  const cols = Object.fromEntries(allColumns.map((key) => [key, true])) as Columns;
+  if (!saved || typeof saved !== 'object') return cols;
+  const values = saved as Record<string, unknown>;
+  const legacy: Record<string, ColumnKey[]> = { ...Object.fromEntries(sections.filter((section) => section.id !== 'desc').map((section) => [section.id, section.keys])) };
+  for (const [old, keys] of Object.entries(legacy)) if (typeof values[old] === 'boolean') for (const key of keys) cols[key] = values[old] as boolean;
+  for (const key of allColumns) if (typeof values[key] === 'boolean') cols[key] = values[key] as boolean;
+  return cols;
+}
 const storeKey = 'trivimo-table';
 /** A preset (days back to today, follows the date) or, with range 0, explicit bounds chosen in the date fields. */
 interface TablePrefs { range: number; from: string; to: string; cols: Columns }
 const isDate = (value: unknown): value is string => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value));
 function loadPrefs(): TablePrefs {
-  const fallback: TablePrefs = { range: 30, from: '', to: '', cols: { body: true, activity: true, energy: true, food: true, ctx: true } };
+  const fallback: TablePrefs = { range: 30, from: '', to: '', cols: loadColumns(null) };
   try {
     const saved = JSON.parse(localStorage.getItem(storeKey) ?? '{}') as Partial<TablePrefs>;
     const custom = Number(saved.range) === 0 && isDate(saved.from) && isDate(saved.to) && saved.from <= saved.to && saved.to <= warsawToday();
-    return { range: custom ? 0 : tableRanges.some(([days]) => days === Number(saved.range)) ? Number(saved.range) : 30, from: custom ? saved.from! : '', to: custom ? saved.to! : '', cols: { ...fallback.cols, ...saved.cols } };
+    return { range: custom ? 0 : tableRanges.some(([days]) => days === Number(saved.range)) ? Number(saved.range) : 30, from: custom ? saved.from! : '', to: custom ? saved.to! : '', cols: loadColumns(saved.cols) };
   } catch { return fallback; }
+}
+/** "Kolumny" dropdown in the header: one checkbox per column, marked with its group colour. */
+export function ColumnsMenu({ cols, onChange }: { cols: Columns; onChange: (next: Partial<Columns>) => void }) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const click = (event: MouseEvent) => { if (!(event.target instanceof Node && wrap.current?.contains(event.target))) setOpen(false); };
+    const key = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false); };
+    document.addEventListener('click', click); document.addEventListener('keydown', key);
+    return () => { document.removeEventListener('click', click); document.removeEventListener('keydown', key); };
+  }, [open]);
+  const count = allColumns.filter((key) => cols[key]).length;
+  return <div className="menuwrap colmenu hide-sm" ref={wrap}>
+    <label className="check">Kolumny <button type="button" className="selectbtn" aria-haspopup="true" aria-expanded={open} onClick={() => setOpen(!open)}>{count === allColumns.length ? 'Wszystkie' : `${count} z ${allColumns.length}`}</button></label>
+    {open && <div className="menu" aria-label="Kolumny tabeli">{sections.map((section) => <div key={section.id} className="colgroup" style={{ '--gc': section.color } as React.CSSProperties}>
+      {section.keys.map((key) => <label key={key} className="colitem"><input type="checkbox" checked={cols[key]} onChange={(event) => onChange({ [key]: event.target.checked })} /><i aria-hidden="true" /><span>{columnLabel(key)}</span><span className="faint">{section.label}</span></label>)}
+    </div>)}</div>}
+  </div>;
 }
 function savePrefs(prefs: TablePrefs) { try { localStorage.setItem(storeKey, JSON.stringify(prefs)); } catch { /* per-browser convenience only */ } }
 export const tableRanges: [number, string][] = [[7, 'Tydzień'], [30, 'Miesiąc'], [90, '3 miesiące'], [180, '6 miesięcy'], [365, 'Rok'], [730, '2 lata'], [1825, '5 lat'], [-1, 'Od początku']];
@@ -69,10 +113,15 @@ function rowNotes(row: DayRow, today: string): string[] {
   if (row.snapshot) return row.snapshot.notes;
   return row.date >= '2026-01-01' && row.date < today ? ['Brak odczytu Google dla tej doby (przerwa w odczytach; uzupełnianie historii ją nadrobi)'] : [];
 }
-/** Metrics behind the visible column groups: the scope of "Od początku" in the table (all metrics when none is shown). */
+const metricColumns = allColumns.filter(isMetric);
+/** Metrics of the visible columns: the scope of "Od początku" in the table (all metrics when none is shown). */
 export function tableMetricKeys(cols: Columns): MetricKey[] {
-  const keys = columnGroups.filter(([group]) => cols[group]).flatMap(([, list]) => list);
-  return keys.length ? keys : columnGroups.flatMap(([, list]) => list);
+  const keys = metricColumns.filter((key) => cols[key]);
+  return keys.length ? keys : metricColumns;
+}
+/** Distinct texts of a column, longest first (at most `limit`): proportional fonts make text length only a hint of width. */
+function distinctTexts(texts: Iterable<string>, limit = 1000): string[] {
+  return [...new Set(texts)].filter(Boolean).sort((a, b) => b.length - a.length).slice(0, limit);
 }
 const metricText = (row: DayRow, key: MetricKey) => { const value = row.snapshot?.metrics[key]; return value?.value ? formatRational(value.value, metricOf(key).decimals) : '—'; };
 const weekLabel = (monday: string) => `Tydz. ${isoWeek(monday)} · ${fmtD(monday)}–${fmtD(addDays(monday, 6))}`;
@@ -81,14 +130,13 @@ const bandText = (share: { heartRate?: { windows: number } | null; totalWindows:
 function longest<T>(items: readonly T[], length: (item: T) => number, count = 3): T[] {
   return items.map((item) => [item, length(item)] as const).sort((a, b) => b[1] - a[1]).slice(0, count).map(([item]) => item);
 }
-const columnGroups: [Group, MetricKey[]][] = [['body', ['weight', 'body_fat']], ['activity', ['steps', 'distance']], ['energy', ['total_energy', 'active_energy']]];
-export function TableView({ from, to, cols, onCols, onOpenDay, onOpenMetric }: { from: string; to: string; cols: Columns; onCols: (cols: Partial<Columns>) => void; onOpenDay: (date: string) => void; onOpenMetric: (date: string, key: MetricKey) => void }) {
+export function TableView({ from, to, cols, onOpenDay, onOpenMetric }: { from: string; to: string; cols: Columns; onOpenDay: (date: string) => void; onOpenMetric: (date: string, key: MetricKey) => void }) {
   const today = warsawToday(), read = maxDate(firstDay, from), readable = to >= firstDay;
   const [sort, setSort] = useState<{ key: 'date' | MetricKey; desc: boolean }>({ key: 'date', desc: true });
   const result = useChunkedJson('/api/day-range', from, to, rangeSchema, (parts): z.infer<typeof rangeSchema> => parts.every((part) => part.state === 'ready') ? { state: 'ready', days: parts.flatMap((part) => part.state === 'ready' ? part.days : []) } : { state: 'not_ready' });
   const band = useChunkedJson(readable ? '/api/google/band-share-range' : null, read, to, bandRangeSchema, (parts) => parts.flat());
   const scroller = useRef<HTMLDivElement>(null);
-  const [view, setView] = useState({ top: 0, height: 600 });
+  const [view, setView] = useState({ top: 0, height: 600, width: 0 });
   const [heights, setHeights] = useState({ day: 35, week: 31 });
   const bandBy = useMemo(() => new Map((band.data ?? []).map((item) => [item.date, item])), [band.data]);
   const ready = result.data?.state === 'ready';
@@ -98,7 +146,7 @@ export function TableView({ from, to, cols, onCols, onOpenDay, onOpenMetric }: {
     const sums = new Map<string, Map<MetricKey, { sum: number; n: number }>>();
     for (const row of readyDays ?? []) {
       const monday = mondayOf(row.date), week = sums.get(monday) ?? new Map<MetricKey, { sum: number; n: number }>(); sums.set(monday, week);
-      for (const [, keys] of columnGroups) for (const key of keys) {
+      for (const key of metricColumns) {
         const item = row.snapshot?.metrics[key];
         if (item?.status !== 'valid' || !item.value) continue;
         const acc = week.get(key) ?? { sum: 0, n: 0 }; acc.sum += toNumber(item.value); acc.n++; week.set(key, acc);
@@ -110,12 +158,12 @@ export function TableView({ from, to, cols, onCols, onOpenDay, onOpenMetric }: {
   /**
    * Widest candidates of every column over the whole range, rendered in hidden zero-height rows so the table keeps the
    * width it would have with every row rendered: the horizontal scrollbar and scroll position survive virtualization.
-   * Candidates are picked by text length (per chip kind for metric cells).
+   * Metric cells (tabular digits) take the longest values per chip kind; text columns take every distinct text.
    */
   const sizer = useMemo(() => {
     if (!readyDays) return null;
     const metrics = new Map<MetricKey, DayRow[]>();
-    for (const [, keys] of columnGroups) for (const key of keys) {
+    for (const key of metricColumns) {
       const byKind = new Map<string, DayRow[]>();
       for (const row of readyDays) {
         const value = row.snapshot?.metrics[key], kind = !value || value.status === 'valid' || value.status === 'provisional' || value.status === 'missing' ? '' : value.status;
@@ -125,16 +173,32 @@ export function TableView({ from, to, cols, onCols, onOpenDay, onOpenMetric }: {
     }
     const mondays = [...weekMeans.keys()];
     return {
-      metrics, mondays: longest(mondays, (monday) => weekLabel(monday).length),
-      weekValues: new Map(columnGroups.flatMap(([, keys]) => keys).map((key) => [key, longest(mondays, (monday) => weekMean(monday, key).length)])),
-      notes: longest(readyDays, (row) => rowNotes(row, today).join('; ').length), userNotes: longest(readyDays, (row) => row.userNote?.content.length ?? 0),
+      metrics, weekLabels: distinctTexts(mondays.map(weekLabel)),
+      weekValues: new Map(metricColumns.map((key) => [key, longest(mondays, (monday) => weekMean(monday, key).length)])),
+      notes: distinctTexts(readyDays.map((row) => rowNotes(row, today).join('; '))), userNotes: distinctTexts(readyDays.map((row) => row.userNote?.content ?? '')),
       band: longest(readyDays.filter((row) => bandBy.get(row.date)?.heartRate), (row) => bandText(bandBy.get(row.date)!).length, 1),
     };
   }, [readyDays, weekMeans, bandBy, today]);
+  /**
+   * Column widths measured once with the sizer rows in place and then fixed (rounded up) for this data and column set:
+   * auto table layout still moves columns by fractions of a pixel depending on which rows are rendered. Measured again
+   * when the visible width changes (a narrow table is stretched to it).
+   */
+  const layoutKey = `${sort.key === 'date'}|${allColumns.filter((key) => cols[key]).join(',')}|${view.width}`;
+  const [locked, setLocked] = useState<{ sizer: unknown; key: string; widths: number[] } | null>(null);
+  const lockedWidths = locked && sizer && locked.sizer === sizer && locked.key === layoutKey ? locked.widths : null;
+  useLayoutEffect(() => {
+    if (lockedWidths || !sizer || !readyDays?.length) return;
+    const element = scroller.current, heads = element?.querySelectorAll<HTMLElement>('thead tr.c th');
+    if (!element || !heads?.length) return;
+    // A table wider than the view rounds up (never narrower than its content); one stretched to the view rounds down (no needless scrollbar).
+    const overflows = element.scrollWidth > element.clientWidth;
+    setLocked({ sizer, key: layoutKey, widths: [...heads].map((th) => { const width = th.getBoundingClientRect().width; return overflows ? Math.ceil(width) + 1 : Math.floor(width); }) });
+  });
   useLayoutEffect(() => {
     const element = scroller.current;
     if (!element) return;
-    const sync = () => setView({ top: element.scrollTop, height: element.clientHeight });
+    const sync = () => setView({ top: element.scrollTop, height: element.clientHeight, width: element.clientWidth });
     sync();
     element.addEventListener('scroll', sync, { passive: true });
     const observer = new ResizeObserver(sync); observer.observe(element);
@@ -151,9 +215,9 @@ export function TableView({ from, to, cols, onCols, onOpenDay, onOpenMetric }: {
   const all = result.data.days;
   const rows = [...all].sort((a, b) => compareDailyRows(a, b, sort.key, sort.desc));
   const byWeek = sort.key === 'date';
-  const shown = columnGroups.filter(([group]) => cols[group]);
-  const metricCount = shown.reduce((sum, [, keys]) => sum + keys.length, 0);
-  const colCount = 1 + metricCount + (cols.food ? 1 : 0) + (cols.ctx ? 1 : 0) + 2;
+  const shownSections = sections.map((section) => ({ ...section, keys: section.keys.filter((key) => cols[key]) })).filter((section) => section.keys.length);
+  const shown = shownSections.flatMap((section) => section.keys), shownMetrics = shown.filter(isMetric);
+  const metricCount = shownMetrics.length, colCount = 1 + shown.length, restCount = colCount - 1 - metricCount;
   const sortOn = (key: 'date' | MetricKey) => setSort((current) => current.key === key ? { key, desc: !current.desc } : { key, desc: true });
   const sortButton = (key: 'date' | MetricKey, label: React.ReactNode, aria: string) => <button type="button" onClick={() => sortOn(key)} aria-label={`Sortuj: ${aria}`}>{label}{sort.key === key ? sort.desc ? ' ↓' : ' ↑' : ''}</button>;
   const ariaSort = (key: 'date' | MetricKey) => sort.key === key ? sort.desc ? 'descending' as const : 'ascending' as const : undefined;
@@ -169,8 +233,8 @@ export function TableView({ from, to, cols, onCols, onOpenDay, onOpenMetric }: {
   }
   function weekRow(monday: string) {
     return <tr className="week" data-kind="week" key={`w${monday}`}><td className="date">{weekLabel(monday)}</td>
-        {shown.flatMap(([, keys]) => keys.map((key) => <td key={key} className="num" title="średnia dzienna">{weekMean(monday, key)}</td>))}
-        <td colSpan={colCount - 1 - metricCount} className="l">średnie dzienne</td></tr>;
+        {shownMetrics.map((key) => <td key={key} className="num" title="średnia dzienna">{weekMean(monday, key)}</td>)}
+        {restCount > 0 && <td colSpan={restCount} className="l">średnie dzienne</td>}</tr>;
   }
   const dateCell = (row: DayRow) => <button type="button" className="datebtn" aria-label={`Otwórz dzień ${row.date}`} onClick={() => onOpenDay(row.date)}><span className="wd">{WDS[dow(row.date)]}</span>{row.date}</button>;
   const metricCell = (row: DayRow, key: MetricKey) => { const metric = metricOf(key), value = row.snapshot?.metrics[key];
@@ -178,26 +242,31 @@ export function TableView({ from, to, cols, onCols, onOpenDay, onOpenMetric }: {
   const bandCell = (row: DayRow) => { const share = bandBy.get(row.date);
     return share?.heartRate ? <span className="bandbar" title={`${share.heartRate.windows} z ${share.totalWindows} okien 10-minutowych z tętnem`}>{bandText(share)}<i><b style={{ width: `${share.heartRate.windows / share.totalWindows * 100}%` }} /></i></span> : <span className="v-none">—</span>; };
   function dayRow(row: DayRow) {
-    const notes = rowNotes(row, today), weekend = dow(row.date) === 0 || dow(row.date) === 6;
-    return <tr key={row.date} data-kind="day" className={`rowlink ${weekend ? 'we' : ''}`} onClick={() => onOpenDay(row.date)}>
+    const notes = rowNotes(row, today);
+    return <tr key={row.date} data-kind="day" className="rowlink" onClick={() => onOpenDay(row.date)}>
       <td className="date">{dateCell(row)}</td>
-      {shown.flatMap(([, keys]) => keys.map((key) => <td key={key}>{metricCell(row, key)}</td>))}
-      {cols.food && <td className="food-c" aria-label="M3">·</td>}
-      {cols.ctx && <td>{bandCell(row)}</td>}
-      <td className="notes-c" title={notes.join('; ')}>{notes.join('; ')}</td><td className="notes-c" title={row.userNote?.content ?? ''}>{row.userNote?.content ?? ''}</td>
+      {shown.map((key) => {
+        if (isMetric(key)) return <td key={key}>{metricCell(row, key)}</td>;
+        if (key === 'food') return <td key={key} className="food-c" aria-label="M3">·</td>;
+        if (key === 'band') return <td key={key}>{bandCell(row)}</td>;
+        const text = key === 'notes' ? notes.join('; ') : row.userNote?.content ?? '';
+        return <td key={key} className="notes-c" title={text}>{text}</td>;
+      })}
     </tr>;
   }
   /** Hidden zero-height rows holding the widest content of each column (see `sizer`), styled like the rows they stand for. */
   const stack = (items: React.ReactNode[]) => <div className="sz">{items.map((item, index) => <div key={index}>{item}</div>)}</div>;
   const sizerRows = sizer && rows.length ? [
     <tr aria-hidden="true" className="sizer" key="sizer-day"><td className="date">{stack([dateCell(rows[0])])}</td>
-      {shown.flatMap(([, keys]) => keys.map((key) => <td key={key}>{stack(sizer.metrics.get(key)!.map((row) => metricCell(row, key)))}</td>))}
-      {cols.food && <td className="food-c">{stack(['·'])}</td>}
-      {cols.ctx && <td>{stack(sizer.band.map(bandCell))}</td>}
-      <td className="notes-c">{stack(sizer.notes.map((row) => rowNotes(row, today).join('; ')))}</td><td className="notes-c">{stack(sizer.userNotes.map((row) => row.userNote?.content ?? ''))}</td></tr>,
-    ...byWeek ? [<tr aria-hidden="true" className="week sizer" key="sizer-week"><td className="date">{stack(sizer.mondays.map(weekLabel))}</td>
-      {shown.flatMap(([, keys]) => keys.map((key) => <td key={key} className="num">{stack(sizer.weekValues.get(key)!.map((monday) => weekMean(monday, key)))}</td>))}
-      <td colSpan={colCount - 1 - metricCount} className="l">{stack(['średnie dzienne'])}</td></tr>] : [],
+      {shown.map((key) => {
+        if (isMetric(key)) return <td key={key}>{stack(sizer.metrics.get(key)!.map((row) => metricCell(row, key)))}</td>;
+        if (key === 'food') return <td key={key} className="food-c">{stack(['·'])}</td>;
+        if (key === 'band') return <td key={key}>{stack(sizer.band.map(bandCell))}</td>;
+        return <td key={key} className="notes-c">{stack(key === 'notes' ? sizer.notes : sizer.userNotes)}</td>;
+      })}</tr>,
+    ...byWeek ? [<tr aria-hidden="true" className="week sizer" key="sizer-week"><td className="date">{stack(sizer.weekLabels)}</td>
+      {shownMetrics.map((key) => <td key={key} className="num">{stack(sizer.weekValues.get(key)!.map((monday) => weekMean(monday, key)))}</td>)}
+      {restCount > 0 && <td colSpan={restCount} className="l">{stack(['średnie dzienne'])}</td>}</tr>] : [],
   ] : [];
   const offsets: number[] = []; let total = 0;
   for (const entry of entries) { offsets.push(total); total += entry.week ? heights.week : heights.day; }
@@ -212,18 +281,20 @@ export function TableView({ from, to, cols, onCols, onOpenDay, onOpenMetric }: {
   if (topSpace > 0) body.unshift(<tr aria-hidden="true" key="top-space" style={{ height: topSpace }}><td colSpan={colCount} style={{ height: topSpace, padding: 0, border: 0 }} /></tr>);
   body.unshift(...sizerRows);
   if (bottomSpace > 0) body.push(<tr aria-hidden="true" key="bottom-space" style={{ height: bottomSpace }}><td colSpan={colCount} style={{ height: bottomSpace, padding: 0, border: 0 }} /></tr>);
-  const toggle = (key: keyof Columns, label: string) => <label className="check" key={key}><input type="checkbox" checked={cols[key]} onChange={(event) => onCols({ [key]: event.target.checked })} /> {label}</label>;
   const cardMetrics: MetricKey[] = ['total_energy', 'steps', 'weight', 'active_energy', 'distance', 'body_fat'];
+  const widthAt = (index: number): React.CSSProperties | undefined => lockedWidths?.[index] ? { width: lockedWidths[index], minWidth: lockedWidths[index] } : undefined;
+  const headCell = (key: ColumnKey, index: number) => {
+    const style = widthAt(index + 1);
+    if (isMetric(key)) { const metric = metricOf(key); return <th key={key} scope="col" style={style} aria-sort={ariaSort(key)}>{sortButton(key, <>{metric.short}{metric.unit && <span className="faint"> {metric.unit}</span>}</>, metric.label)}</th>; }
+    if (key === 'food') return <th key={key} scope="col" style={style} className="faint">Spożyte kcal</th>;
+    if (key === 'band') return <th key={key} scope="col" style={style} title="Część doby warszawskiej, w której urządzenie mierzyło tętno (okna 10-minutowe). Dowód pomiaru, nie noszenia przez całe okno.">Opaska</th>;
+    return <th key={key} scope="col" style={style} className="l">{columnLabels[key]}</th>;
+  };
   return <>
-    <div className="toolbar hide-sm">{toggle('body', 'Ciało')}{toggle('activity', 'Aktywność')}{toggle('energy', 'Energia')}{toggle('food', 'Jedzenie')}{toggle('ctx', 'Kontekst')}</div>
     {!all.some((row) => row.snapshot) && <div role="status" className="empty"><p>W tym zakresie nie ma jeszcze obliczonych wyników dziennych. Uzupełnianie historii w „Źródła danych” odczyta brakujące doby.</p></div>}
     <div className="twrap" ref={scroller}><table className="days"><thead>
-      <tr className="g"><th className="date" />{shown.map(([group, keys]) => <th key={group} colSpan={keys.length} style={{ '--gc': groups[group].color } as React.CSSProperties}><span>{groups[group].label}</span></th>)}{cols.food && <th style={{ '--gc': 'var(--c-food)' } as React.CSSProperties}><span>Jedzenie · M3</span></th>}{cols.ctx && <th><span>Kontekst</span></th>}<th colSpan={2}><span>Opis dnia</span></th></tr>
-      <tr className="c"><th className="date l" scope="col" aria-sort={ariaSort('date')}>{sortButton('date', 'Data', 'Data')}</th>
-        {shown.flatMap(([, keys]) => keys.map((key) => { const metric = metricOf(key); return <th key={key} scope="col" aria-sort={ariaSort(key)}>{sortButton(key, <>{metric.short}{metric.unit && <span className="faint"> {metric.unit}</span>}</>, metric.label)}</th>; }))}
-        {cols.food && <th scope="col" className="faint">Spożyte kcal</th>}
-        {cols.ctx && <><th scope="col" title="Część doby warszawskiej, w której urządzenie mierzyło tętno (okna 10-minutowe). Dowód pomiaru, nie noszenia przez całe okno.">Opaska</th></>}
-        <th scope="col" className="l">Uwagi</th><th scope="col" className="l">Notatka</th></tr>
+      <tr className="g"><th className="date" />{shownSections.map((section) => <th key={section.id} colSpan={section.keys.length} style={{ '--gc': section.color } as React.CSSProperties}><span>{section.label}</span></th>)}</tr>
+      <tr className="c"><th className="date l" scope="col" style={widthAt(0)} aria-sort={ariaSort('date')}>{sortButton('date', 'Data', 'Data')}</th>{shown.map(headCell)}</tr>
     </thead><tbody>{rows.length ? body : <tr><td className="l" colSpan={colCount}>Brak dni w tym zakresie.</td></tr>}</tbody></table></div>
     <div className="daycards">{rows.slice(0, 90).map((row) => { const share = bandBy.get(row.date)?.heartRate, total = bandBy.get(row.date)?.totalWindows ?? 144, notes = rowNotes(row, today);
       return <button type="button" key={row.date} className="daycard" onClick={() => onOpenDay(row.date)}><span className="dc-head"><span>{WDS[dow(row.date)]} {row.date}{row.date === today ? ' · w toku' : ''}</span><span>{share ? `opaska ${nf(share.windows / total * 100)} %` : ''}</span></span>

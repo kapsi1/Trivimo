@@ -172,10 +172,10 @@ table.days { border-collapse: separate; border-spacing: 0; width: 100%; font-var
 .days thead th.date { z-index: 4; }
 .days td.date { font-family: var(--font-data); font-size: 12.5px; }
 .days td.date .wd { display: inline-block; width: 22px; color: var(--faint); }
-.days tr.we td.date .wd { color: var(--muted); }
 .days tbody tr:hover td { background: var(--raised); }
 .days tr.week td { background: var(--bg); color: var(--muted); font-size: 12px; height: 30px; }
 .days tr.week td.date { background: var(--bg); font-family: var(--font-ui); }
+.days tbody tr.week:hover td { background: var(--raised); }
 .cellbtn { border: 0; background: none; padding: 3px 6px; margin: 0 -6px; border-radius: 4px; color: inherit; font: inherit; display: inline-flex; gap: 6px; align-items: center; }
 .cellbtn:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .v-none { color: var(--faint); }
@@ -184,6 +184,24 @@ table.days { border-collapse: separate; border-spacing: 0; width: 100%; font-var
 .bandbar i { display: inline-block; width: 44px; height: 6px; border-radius: 3px; background: var(--line); position: relative; overflow: hidden; }
 .bandbar i b { position: absolute; inset: 0 auto 0 0; background: var(--c-band); }
 td.notes-c { text-align: left; color: var(--muted); max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+/* Column menu in the header: a select-like button and one checkbox per column with its group colour. */
+.selectbtn { display: inline-flex; align-items: center; gap: 8px; background: var(--raised); border: 1px solid var(--line-strong); border-radius: 6px; padding: 5px 8px; color: var(--fg); }
+.selectbtn::after { content: ''; width: 6px; height: 6px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: translateY(-2px) rotate(45deg); }
+.selectbtn:hover { border-color: var(--muted); }
+.colmenu .menu { right: auto; left: 0; min-width: 230px; gap: 0; }
+.colgroup + .colgroup { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 4px; }
+.colitem { display: grid; grid-template-columns: auto 3px 1fr auto; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+.colitem:hover { background: var(--raised); }
+.colitem i { align-self: stretch; border-radius: 2px; background: var(--gc); }
+.colitem .faint { font-size: 11.5px; }
+/* With the column menu the table header is wider: "Dodaj" keeps only its icon so the controls stay on one line. */
+@media (max-width: 1280px) { .topbar:has(.colmenu) .btn.primary .hide-sm { display: none; } }
+/* The day table fills the height below the header; the page itself does not scroll. */
+@media (min-width: 641px) {
+  .main:has(> .content > .twrap) { height: 100vh; height: 100dvh; }
+  .content:has(> .twrap) { flex: 1; min-height: 0; padding-bottom: 22px; }
+  .content > .twrap { flex: 0 1 auto; min-height: 0; max-height: none; }
+}
 /* Virtualization sizer: zero-height rows keep every column as wide as its widest value in the whole range. */
 .days tr.sizer { visibility: hidden; }
 .days tr.sizer td { height: 0; padding-top: 0; padding-bottom: 0; border: 0; line-height: 0; }

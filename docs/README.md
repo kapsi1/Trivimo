@@ -1,6 +1,6 @@
 # Indeks dokumentacji
 
-Stan (2026-11-06): M1 w końcowej fazie; pozostałe punkty w [planie MVP](plan/01-foundation-mvp.md).
+Stan (2026-11-06): kryteria odbioru M1 spełnione na danych syntetycznych; zostaje ocena prognozy kalorii ([plan MVP](plan/01-foundation-mvp.md)). Eksport CSV, kopia z UI i telefon: [etap Q](plan/09-quality-operations.md).
 
 | Potrzeba | Dokument |
 | --- | --- |

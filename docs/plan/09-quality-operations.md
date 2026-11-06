@@ -34,6 +34,14 @@ Wymagania przekrojowe od P0. Dobierać testy do ryzyka i wpływu; nie tworzyć t
 - [ ] Status operacyjny: ostatni sukces i zakres per adapter, kolejki, budżety i błędy możliwe do naprawienia. Eksport danych użytkownika w udokumentowanym formacie; osobne czyszczenie cache, raw, historii i konta z podglądem zależności.
 - [ ] Zmierzyć wielkość raw/serii/załączników, czas importu 2026 i render dużej tabeli na środowisku docelowym. Wydajność poprawiać według pomiaru: indeksy, batch, decymacja do wykresu; nie usuwać oryginałów po cichu.
 
+## Interfejs: eksport, kopia i telefon (przeniesione z M1)
+
+Przeniesione z [planu MVP](01-foundation-mvp.md) 2026-11-06 (decyzja użytkownika); nie blokują M1.
+
+- [ ] Eksport CSV wybranej projekcji (przycisk usunięto z tabeli do czasu wdrożenia): zabezpieczenie przed formułami (CSV/formula injection), zachowanie jednostek i statusów (brak, zero, nieporównywalne, konflikt), nazwa pliku bez danych prywatnych, wersja reguł w nagłówku.
+- [ ] Kopia zapasowa z interfejsu (Ustawienia pokazują dziś polecenia CLI) oraz historia importów i dziennik zdarzeń w „Źródłach danych”. Wymagają nowych punktów API: kopia przez wspierany mechanizm SQLite backup do wskazanego katalogu poza repozytorium (jak `backup:takeout`), z weryfikacją po zapisie; dziennik tylko z kodów i liczb, bez wartości i identyfikatorów.
+- [ ] Widok telefonu sprawdzony na rzeczywistym telefonie (dziś tylko emulacja 375 px w przeglądarce aplikacji). Test automatyczny ani emulacja nie potwierdzają telefonu.
+
 ## Strefy czasowe
 
 - [ ] Strefy czasowe: dziś doba, tydzień i zmiana czasu są liczone wyłącznie w `Europe/Warsaw`. Dodać strefę jako ustawienie użytkownika (domyślnie Warszawa), a granice doby, okna 10-minutowe, „dziś”, prognozę i etykiety godzin liczyć w wybranej strefie. Zmiana znaczenia doby wymaga wersji reguły i migracji (zasada z `data-contracts.md`): wyniki dobowe zapisane dla poprzedniej strefy nie mogą się po cichu przesunąć, a przeliczenie ma być jawną operacją z zachowaniem oryginałów i historii. Do rozstrzygnięcia: jedna strefa globalna, czy strefa przypisana do doby (podróże: doba zapisana tam, gdzie była mierzona; Google zapisuje czas cywilny pomiaru). Testy: strefy bez i z DST oraz o innych przesunięciach (np. UTC, Nowy Jork, Kolkata o +5:30), doba 23/25 godzin w obu półkulach, granica doby przy zmianie strefy w trakcie podróży, niezależność wyniku od porcji importu.

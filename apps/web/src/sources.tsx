@@ -17,7 +17,7 @@ const googleStatusSchema = z.discriminatedUnion('configured', [
 export function syncText(status: SyncStatus | undefined): string {
   const outcome = status?.last;
   if (!outcome) return 'Jeszcze nie uruchomiono w tej sesji serwera.';
-  if (outcome.result === 'ok') return `Ostatnie odświeżenie: ${whenOf(outcome.at)} (${outcome.reads} odczytów).`;
+  if (outcome.result === 'ok') return `Ostatnie odświeżenie: ${whenOf(outcome.at)} (${outcome.reads} odczytów${outcome.reconciled ? `, w tym ${outcome.reconciled} starszych dób` : ''}).`;
   if (outcome.result === 'authorization_required' || outcome.result === 'scope_missing') return 'Odświeżenie wymaga ponownej autoryzacji z wymaganymi zakresami.';
   if (outcome.result === 'migration_required') return 'Magazyn wymaga migracji z kopią zapasową.';
   if (outcome.code === 'rate_limited' || /http_429$/.test(outcome.code ?? '')) return `Google ogranicza liczbę zapytań (429); zapisane dane pozostały bez zmian, odczyty wstrzymane do ${outcome.retryAt ? whenOf(outcome.retryAt) : '—'}.`;
@@ -46,9 +46,9 @@ function Connections({ sync, onSyncChanged, onImports }: { sync: SyncStatus | un
       window.location.assign(url.href);
     } catch { setError('Nie udało się rozpocząć autoryzacji.'); setBusy(''); }
   }
-  async function refresh() {
+  async function refresh(reconcile = false) {
     setBusy('sync'); setError('');
-    try { const response = await post('/api/google/sync', {}); if (!response.ok) throw new Error('sync'); } catch { setError('Nie udało się uruchomić odświeżenia.'); } finally { setBusy(''); onSyncChanged(); }
+    try { const response = await post('/api/google/sync', reconcile ? { reconcile: true } : {}); if (!response.ok) throw new Error('sync'); } catch { setError('Nie udało się uruchomić odświeżenia.'); } finally { setBusy(''); onSyncChanged(); }
   }
   const google = status.data;
   const ok = google?.configured && google.connected;
@@ -62,9 +62,11 @@ function Connections({ sync, onSyncChanged, onImports }: { sync: SyncStatus | un
           <dt>Stan</dt><dd role="status">{syncText(sync)}{sync && sync.unfinishedJobs > 0 ? ` Niedokończone zadania: ${sync.unfinishedJobs}.` : ''}</dd>
           <dt>Harmonogram</dt><dd>{sync?.automatic ? `co ${sync.automatic} min, gdy serwer działa` : 'tylko ręcznie (zmienna TRIVIMO_GOOGLE_SYNC_MINUTES)'}</dd>
           <dt>Odświeża</dt><dd>dziś i 3 ostatnie zakończone doby (po przerwie do 13)</dd>
+          <dt>Starsze doby</dt><dd>sprawdzane ponownie okresowo (do 2 odczytów na przebieg): późne korekty producenta zastępują zapisany oryginał, ślad zmiany zostaje</dd>
           <dt>Token</dt><dd>na dysku, zaszyfrowany kontem Windows; przeglądarka go nie widzi</dd></dl>
         {error && <p role="alert">{error}</p>}
         <div className="actions">{google.connected && <button type="button" className="btn" disabled={!!busy || sync?.running} onClick={() => void refresh()}><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.7-4.3L3 9M3 4v5h5M4 13a8 8 0 0 0 14.7 4.3L21 15M21 20v-5h-5" /></svg>{busy === 'sync' || sync?.running ? 'Odświeżanie…' : 'Odśwież teraz'}</button>}
+          {google.connected && <button type="button" className="btn ghost" disabled={!!busy || sync?.running} title="Ponownie odczytuje do 12 paczek starszych dób, od najdawniej sprawdzanych" onClick={() => void refresh(true)}>Sprawdź starsze doby</button>}
           <button type="button" className={`btn ${google.connected ? 'ghost' : 'primary'}`} disabled={!!busy} onClick={() => void connect()}>{busy === 'auth' ? 'Przekierowanie…' : google.connected ? 'Autoryzuj ponownie' : 'Autoryzuj konto Google'}</button></div>
         <p className="sub" style={{ margin: 0 }}>Zakresy obejmują tylko odczyt aktywności i pomiarów; nie ma zapisu do Google.</p>
       </>}</section>

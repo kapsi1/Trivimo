@@ -1,26 +1,18 @@
 # P0 / M1 — fundament i pierwsze sześć metryk
 
-Cel: użyteczna tabela i wykresy dla 2026 i nowych dni z własnej bazy, bez map, dziennika, AI i zapisów zewnętrznych. Wykonane: [P0](../completed/01-p0-probes.md), [M1](../completed/02-m1.md). Poniżej tylko to, co zostało.
+Cel: użyteczna tabela i wykresy dla 2026 i nowych dni z własnej bazy, bez map, dziennika, AI i zapisów zewnętrznych. Wykonane: [P0](../completed/01-p0-probes.md), [M1](../completed/02-m1.md) (w tym kryteria odbioru na danych syntetycznych, 2026-11-06). Poniżej tylko to, co zostało. Eksport CSV, kopia i historia importów w interfejsie oraz sprawdzenie widoku na telefonie przeniesiono 2026-11-06 do [etapu Q](09-quality-operations.md#interfejs-eksport-kopia-i-telefon-przeniesione-z-m1).
 
-## M1: magazyn i przepływ
+## M1: prognoza spalonych kalorii
 
-- [ ] Rekonsyliacja starszych dni: późne korekty producenta poza oknem trzech ostatnich zakończonych dób (okresowy albo ręczny ponowny odczyt, bez obietnicy kompletności krótkiego okna).
-- [ ] Praca w tle sprawdzona po kilku godzinach działania serwera i po restarcie komputera; zachowanie polityki odczytów na prawdziwych danych po wielu przebiegach. Nie obiecywać działania przeglądarki w tle.
-
-## M1: UI
-
-Obecny interfejs: [projekt UI](../design/ui.md). Zostało:
-
-- [ ] Tabela: wirtualizacja przy dużych zakresach (zakres do „Od początku”, wiele lat; dziś bez wirtualizacji).
-- [ ] Prognoza spalonych kalorii (`prognoza-spoczynek-v0`): reguła wyboru okien wdrożona w najprostszej postaci (wszystkie dzisiejsze okna bez kroków i aktywnych kcal, co najmniej 6). Ocenić na kilku dobach, czy okna nocne lub dłuższe okno odniesienia dają lepszą stawkę; zmiana metody to nowa wersja reguły.
-- [ ] Eksport CSV wybranej projekcji (przycisk usunięty z tabeli do czasu wdrożenia), z zabezpieczeniem przed formułami i zachowaniem jednostek/statusów.
-- [ ] Kopia zapasowa z interfejsu (Ustawienia pokazują polecenia CLI) oraz historia importów i dziennik zdarzeń w „Źródłach danych” — wymagają nowych punktów API.
-- [ ] Widok telefonu sprawdzony tylko w emulacji 375 px w przeglądarce aplikacji; na telefonie nie sprawdzano.
-
-## Kryteria odbioru
-
-- [ ] Powtórny import i odświeżenie nie zmieniają liczby oryginalnych pomiarów ani nie podwajają sum. API i Takeout nie dublują tej samej historii (dziś zapewnione regułami i polityką odczytów, bez testu całego przepływu).
-- [ ] Syntetyczne testy obejmują BMR-only, modele telefon/opaska, brak metadanych, dzień bez opaski, częściowy dzień, zero, różne jednostki, wiele ważeń, DST, błąd/paginację i restart (brakują m.in. DST dla wszystkich metryk, wielostronicowych list i restartu w trakcie odczytu).
-- [ ] Wynik jest niezależny od porcji pojedynczy dzień/tydzień/miesiąc; sprawdzony także początek zakresu i ostatni interwał doby. Nie portować obejścia błędu agregacji Connect bez potwierdzenia potrzeby.
+- [ ] `prognoza-spoczynek-v0` jest wdrożona w najprostszej postaci: stawka z dzisiejszych okien bez kroków i bez aktywnych kcal (co najmniej 6) razy pozostałe okna doby. Obserwacja użytkownika (2026-11-06, wykres dnia): kalorie „spalone poza aktywnymi” (total − aktywne) w godzinach czuwania bez dużego wysiłku są nieco wyższe niż we śnie. Stawka z okien spoczynkowych tego nie uwzględnia. Zmiana metody to nowa wersja reguły; **do decyzji nic nie zmieniamy w kodzie**. Plan poprawy:
+  1. **Potwierdzić obserwację na danych** (odczyt zapisanych okien, kilka–kilkadziesiąt zakończonych dób z kompletnymi oknami 144/138/150): mediana (total − aktywne) na okno osobno dla nocy (np. 00–06) i czuwania oraz udział okien „bez kroków i bez aktywnych” w czuwaniu. Wartości zostają w raporcie poza repozytorium; w docs tylko wniosek.
+  2. **Zrobić test wsteczny** (skrypt poza repozytorium): dla każdej doby punkty odcięcia 06, 09, 12, 15, 18 i 21 (czas lokalny), prognoza z danych sprzed odcięcia, porównanie z faktyczną sumą doby (suma okien tej doby; wartość producenta tylko jako kontrola). Miary: błąd bezwzględny i obciążenie na godzinę odcięcia. Punkt odniesienia: v0. Nie wnioskować z jednej doby.
+  3. **Kandydat A — profil dobowy:** stawka „poza aktywnymi” = mediana (total − aktywne) w oknach o tej samej porze doby z ostatnich 14 zakończonych dób z kompletnymi oknami; pozostała część doby to suma profilu, nie jedna stawka. Skalowanie do dziś: iloraz sumy dzisiejszych (total − aktywne) i sumy profilu dla tych samych okien, ograniczony do 0,9–1,1.
+  4. **Kandydat B — aktywność osobno:** oczekiwane dalsze aktywne kcal = mediana aktywnych kcal tych samych pór z tych samych dób, pokazywana jako górna granica zakresu (dolna: bez dalszej aktywności = A). Zachowuje uczciwość „co najmniej”, a zaznacza typowy dodatek.
+  5. **Kandydat C — dwie stawki:** sen i czuwanie podzielone godziną doby (bez profilu), jako najprostsza poprawka do porównania z A.
+  6. **Wybór:** najprostszy kandydat, który w teście wstecznym zmniejsza obciążenie co najmniej o połowę i nie pogarsza błędu na żadnym punkcie odcięcia. Nowa reguła (`prognoza-profil-v1`) ma własną etykietę w UI; v0 zostaje w testach. Prognoza nie jest zapisywana, więc migracja i przeliczanie historii nie są potrzebne.
+  7. **Brak i degradacja:** mniej niż 7 kompletnych dób profilu albo brak okien wejściowych → powrót do v0 z jego etykietą albo brak prognozy; nieodczytane wejście nigdy nie jest zerem aktywności. Doby 23/25-godzinne: profil po godzinie lokalnej, okno po oknie z granic doby. Po wdrożeniu stref czasowych ([etap Q](09-quality-operations.md#strefy-czasowe)) profil liczony w strefie doby.
+  8. **Testy:** syntetyczne profile z dwiema stawkami, DST 23/25 h, mało historii (powrót do v0), jawne zero a brak odczytu, niezależność od porcji odczytu, zachowanie etykiety wersji.
+  9. **Do rozstrzygnięcia po teście:** czy pokazywać zakres (A–B), czy jedną liczbę; czy profil per dzień tygodnia (dopiero po ≥ 8 tygodniach historii).
 
 **TODO po M1:** audyt poprzednich lat, z osobną oceną modeli i zakresu eksportów, przed rozszerzeniem migracji. Nie wymuszać dzisiejszej definicji na nieznanej starszej historii.

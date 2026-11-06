@@ -17,7 +17,7 @@ import { readGoogleJobPage, startGoogleReadJob } from './google-read-service.ts'
 export const syncKinds = ['steps', 'distance', 'total-calories', 'active-energy-burned', 'heart-rate-10m', 'active-energy-10m', 'total-calories-10m', 'steps-10m', 'distance-10m', 'weight', 'body-fat'] as const;
 export type SyncKind = (typeof syncKinds)[number];
 export interface SyncRead { kind: SyncKind; first: string; last: string; begin: string; end: string }
-export interface SyncOutcome { at: string; result: 'ok' | 'authorization_required' | 'scope_missing' | 'migration_required' | 'error'; code?: string; reads: number; retryAt?: string; energy?: { published: number; unchanged: number } | 'failed' }
+export interface SyncOutcome { at: string; result: 'ok' | 'authorization_required' | 'scope_missing' | 'migration_required' | 'error'; code?: string; reads: number; /** Reads of days older than the refresh window made in this run (included in `reads`). */ reconciled?: number; retryAt?: string; energy?: { published: number; unchanged: number } | 'failed' }
 
 /** Measurements that change a few times a day at most: read at most once an hour instead of every run. */
 const slowKinds: ReadonlySet<SyncKind> = new Set(['weight', 'body-fat']);
@@ -72,6 +72,64 @@ export const backfillFrom = '2026-01-01';
 // measurements are a few records a day, so a month fits in one page; the read service allows ranges up to 31 days
 const chunkDays = (kind: SyncKind) => windowed(kind) ? maxCatchUpDays : kind.endsWith('-sources') ? 7 : kind === 'weight' || kind === 'body-fat' ? 30 : maxRollupDays(kind as Exclude<SyncKind, `${string}-10m` | `${string}-sources` | 'weight' | 'body-fat'>);
 const dayEnd = (day: string) => Date.parse(warsawDay(day).end);
+
+/**
+ * Reconciliation of older days (plan M1): the producer may correct a day long after the three-day refresh window (a band
+ * that syncs late, a recomputed total). Days from the start of the refresh projection up to the fourth completed day back
+ * are re-read in the chunks of the backfill, the least recently verified first; the read policy keeps the newer original
+ * and marks an identical one "confirmed unchanged". A short window is never presented as complete: a chunk is only
+ * as fresh as its least recently verified day.
+ */
+export const reconcileReadsPerRun = 2;
+export const reconcileReadsManual = 12;
+const dayMs = 86400000;
+/** How long a chunk whose last day is `ageDays` old stays verified: recent days change more often than old ones. */
+export function reconcileInterval(ageDays: number): number { return (ageDays <= 30 ? 2 : ageDays <= 90 ? 7 : 30) * dayMs; }
+const daysBetween = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / dayMs);
+
+/**
+ * When each day of [from, through] was last verified by a complete read of this kind covering it: the newest of the read's
+ * creation and its "confirmed unchanged" time, counted only when that moment is after the day ended. Days never verified
+ * (gaps, days read only while in progress) are absent; they belong to the backfill.
+ */
+export function verifiedDays(db: DatabaseSync, kind: SyncKind, from: string, through: string): Map<string, number> {
+  const verified = new Map<string, number>();
+  const jobs = db.prepare("SELECT j.range_start, j.range_end, j.created_at, m.confirmed_at FROM google_read_jobs j LEFT JOIN google_read_job_meta m ON m.job_id = j.id WHERE j.kind = ? AND j.state = 'complete'");
+  for (const job of jobs.iterate(kind)) {
+    const begin = String(job.range_start), end = String(job.range_end);
+    const at = Math.max(Date.parse(String(job.created_at)), typeof job.confirmed_at === 'string' ? Date.parse(job.confirmed_at) : 0);
+    let day = instantRange(kind) ? sourceDay(begin) : begin;
+    if (day < from) day = from;
+    for (; day <= through; day = addDays(day, 1)) {
+      const bounds = boundsFor(kind, day, day);
+      if (instantRange(kind) ? Date.parse(bounds.end) > Date.parse(end) : bounds.end > end) break;
+      if ((instantRange(kind) ? Date.parse(bounds.begin) >= Date.parse(begin) : bounds.begin >= begin) && at >= dayEnd(day) && at > (verified.get(day) ?? 0)) verified.set(day, at);
+    }
+  }
+  return verified;
+}
+
+/**
+ * Reads that re-check older days: chunks (aligned to the backfill's chunk size from `backfillFrom`) of days older than the
+ * refresh window whose every day was verified before, and whose verification has expired (`force` skips the expiry, for a
+ * manual run). Least recently verified first, at most `budget` reads.
+ */
+export function planReconcile(db: DatabaseSync, today: string, nowMs: number, from: string, budget: number, force = false): SyncRead[] {
+  const through = addDays(today, -4);
+  if (from > through || budget <= 0) return [];
+  const due: { read: SyncRead; verifiedAt: number; order: number }[] = [];
+  for (const [order, kind] of syncKinds.entries()) {
+    const size = chunkDays(kind), verified = verifiedDays(db, kind, from, through);
+    for (let start = addDays(backfillFrom, Math.floor(daysBetween(backfillFrom, from) / size) * size); start <= through; start = addDays(start, size)) {
+      const first = start < from ? from : start, end = addDays(start, size - 1), last = end > through ? through : end;
+      let oldest = Infinity;
+      for (let day = first; day <= last && oldest > 0; day = addDays(day, 1)) oldest = Math.min(oldest, verified.get(day) ?? 0);
+      if (oldest === 0) continue;
+      if (force || nowMs - oldest >= reconcileInterval(daysBetween(last, today))) due.push({ read: { kind, first, last, ...boundsFor(kind, first, last) }, verifiedAt: oldest, order });
+    }
+  }
+  return due.sort((a, b) => a.verifiedAt - b.verifiedAt || a.order - b.order).slice(0, budget).map(({ read }) => read);
+}
 
 /**
  * Inputs of the projection as id → "version, range start, range end": complete jobs, and CSV imports with their latest
@@ -264,10 +322,10 @@ export class GoogleSyncService {
    * One run: resume jobs left running, then the planned reads. Only 429 is repeated, per request and with backoff;
    * any other error, or 429 that persists, stops the run. After a persisting 429 runs wait until the producer's delay.
    */
-  async runOnce(): Promise<SyncOutcome> {
+  async runOnce(options: { reconcile?: 'force' } = {}): Promise<SyncOutcome> {
     if (this.running) return this.last ?? { at: new Date(this.now()).toISOString(), result: 'error', code: 'already_running', reads: 0 };
-    this.running = true; let reads = 0;
-    const finish = (result: SyncOutcome['result'], code?: string, retryAt?: number): SyncOutcome => (this.last = { at: new Date(this.now()).toISOString(), result, ...(code ? { code } : {}), reads, ...(retryAt !== undefined ? { retryAt: new Date(retryAt).toISOString() } : {}) });
+    this.running = true; let reads = 0, reconciled = 0;
+    const finish = (result: SyncOutcome['result'], code?: string, retryAt?: number): SyncOutcome => (this.last = { at: new Date(this.now()).toISOString(), result, ...(code ? { code } : {}), reads, ...(reconciled ? { reconciled } : {}), ...(retryAt !== undefined ? { retryAt: new Date(retryAt).toISOString() } : {}) });
     let db: DatabaseSync | undefined;
     try {
       if (this.pausedUntil !== null && this.now() < this.pausedUntil) return finish('error', 'rate_limited', this.pausedUntil);
@@ -275,7 +333,9 @@ export class GoogleSyncService {
       db = this.open();
       reads += await this.resumeRunning(db);
       const interval = (this.options.intervalMinutes ?? 60) * 60000;
-      for (const read of planSync(db, sourceDay(new Date(this.now()).toISOString()), this.now(), interval / 2)) { await this.execute(db, read); reads++; }
+      const today = sourceDay(new Date(this.now()).toISOString());
+      for (const read of planSync(db, today, this.now(), interval / 2)) { await this.execute(db, read); reads++; }
+      for (const read of planReconcile(db, today, this.now(), this.projectionFrom(), options.reconcile === 'force' ? reconcileReadsManual : reconcileReadsPerRun, options.reconcile === 'force')) { await this.execute(db, read); reads++; reconciled++; }
       const energy = await this.projectEnergy(db);
       const outcome = finish('ok'); outcome.energy = energy;
       return outcome;

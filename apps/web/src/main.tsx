@@ -9,7 +9,7 @@ import { BackfillNotice } from './notice.tsx';
 import { FoodView, WorkoutsView, type FoodTab } from './placeholders.tsx';
 import { SettingsView } from './settings.tsx';
 import { SourcesView, type SourcesTab } from './sources.tsx';
-import { TableRange, TableView, tableBounds, tableMetricKeys, useTablePrefs } from './table.tsx';
+import { ColumnsMenu, TableRange, TableView, tableBounds, tableMetricKeys, useTablePrefs } from './table.tsx';
 import { aggregations, TrendsView } from './trends-view.tsx';
 import { DateControl, Segmented } from './zoom.tsx';
 import './fonts.css';
@@ -127,12 +127,12 @@ function Shell() {
 
   let context: ReactNode = null;
   if (route.view === 'dzien') context = <DateControl date={date} onDate={setDay} />;
-  if (route.view === 'tabela') context = <TableRange prefs={prefs} earliest={tableEarliest} onChange={setPrefs} />;
+  if (route.view === 'tabela') context = <><ColumnsMenu cols={prefs.cols} onChange={(cols) => setPrefs({ cols: { ...prefs.cols, ...cols } })} /><TableRange prefs={prefs} earliest={tableEarliest} onChange={setPrefs} /></>;
   if (route.view === 'trendy') context = <><TableRange prefs={trendPrefs} earliest={trendEarliest} onChange={setTrendPrefs} /><Segmented className="hide-sm" label="Agregacja" items={aggregations} value={trendAgg} onChange={setTrendAgg} /></>;
 
   let content: ReactNode;
   if (route.view === 'dzien') content = <DayView date={date} tab={dayTab} onTab={(tab) => setDay(date, tab)} sync={syncData} onDirty={(value) => { dirty.current = value; }} />;
-  else if (route.view === 'tabela') content = <TableView {...tableBounds(prefs, tableEarliest)} cols={prefs.cols} onCols={(cols) => setPrefs({ cols: { ...prefs.cols, ...cols } })} onOpenDay={(next) => openDay(next)} onOpenMetric={(next) => openDay(next)} />;
+  else if (route.view === 'tabela') content = <TableView {...tableBounds(prefs, tableEarliest)} cols={prefs.cols} onOpenDay={(next) => openDay(next)} onOpenMetric={(next) => openDay(next)} />;
   else if (route.view === 'trendy') content = <TrendsView earliest={earliestAll} prefs={trendPrefs} agg={trendAgg} />;
   else if (route.view === 'treningi') content = <WorkoutsView />;
   else if (route.view === 'jedzenie') content = <FoodView tab={foodTab} onTab={(tab) => go(tabHash('jedzenie', tab, foodTabs))} />;
@@ -150,7 +150,7 @@ function Shell() {
     </aside>
     <div className="main">
       <header className="topbar"><h1>{route.view === 'dzien' ? fmtDL(date) : titles[route.view]}</h1>{route.view === 'dzien' && date === warsawToday() && <span className="live">w toku{lastOk ? ` · stan na ${timeOf(lastOk)}` : ''}</span>}{context}
-        <div className="menuwrap"><button type="button" className="btn primary" aria-haspopup="menu" aria-expanded={addOpen} onClick={() => setAddOpen(!addOpen)}>{I.plus}<span className="hide-sm">Dodaj</span></button>
+        <div className="menuwrap"><button type="button" className="btn primary" aria-label="Dodaj" title="Dodaj" aria-haspopup="menu" aria-expanded={addOpen} onClick={() => setAddOpen(!addOpen)}>{I.plus}<span className="hide-sm">Dodaj</span></button>
           {addOpen && <div className="menu" role="menu"><button type="button" role="menuitem" onClick={() => { setAddOpen(false); setDay(route.view === 'dzien' ? date : warsawToday(), 'przebieg'); setTimeout(() => document.getElementById('usernote')?.focus(), 150); }}>Notatka do dnia</button>
             <button type="button" role="menuitem" disabled>Posiłek</button><button type="button" role="menuitem" disabled>Pomiar wagi</button></div>}</div></header>
       <main className="content">{content}</main>

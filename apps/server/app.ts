@@ -134,7 +134,11 @@ export function createApp(db: DatabaseSync, sourceDb?: DatabaseSync | (() => Dat
     if (request.method === 'POST' && url.pathname === '/api/google/sync') {
       if (!origin || !allowedOrigins.includes(origin) || request.headers['x-trivimo-request'] !== '1' || request.headers['content-type'] !== 'application/json') { response.writeHead(403, { 'Cache-Control': 'no-store' }).end(); return; }
       if (!googleSync) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return; }
-      void googleSync.runOnce().then((outcome) => response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify(outcome)));
+      void readJson(request).then((body) => {
+        const parsed = z.object({ reconcile: z.literal(true).optional() }).strict().safeParse(body);
+        if (!parsed.success) { response.writeHead(400, { 'Cache-Control': 'no-store' }).end(); return; }
+        return googleSync.runOnce(parsed.data.reconcile ? { reconcile: 'force' } : {}).then((outcome) => { response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify(outcome)); });
+      }, () => response.writeHead(400, { 'Cache-Control': 'no-store' }).end());
       return;
     }
     if (request.method === 'POST' && url.pathname === '/api/google/backfill') {

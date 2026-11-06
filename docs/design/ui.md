@@ -31,10 +31,10 @@ Wybór dnia strzałkami, polem daty, „Dziś”, z klawiatury ←/→ i `t`. Dl
 ### Tabela dni
 
 - Zakres: Tydzień, Miesiąc, 3 i 6 miesięcy, Rok, 2 lata, 5 lat, Od początku (pierwszy dzień z danymi widocznych kolumn) albo własne „od – do”; pola i lista są zsynchronizowane, wybór zapamiętany w przeglądarce. Dłuższe zakresy są pobierane porcjami po ≤ 366 dni.
-- Grupy kolumn (przełączane, zapamiętane): Ciało, Aktywność, Energia, Kontekst (część dnia z opaską z paskiem udziału, źródła), Opis dnia (uwagi, notatka). Zamrożony nagłówek i kolumna daty; przy sortowaniu po dacie wiersze tygodni „średnie dzienne” (średnia z dób potwierdzonych, bez liczby dób). Dzisiejszy wiersz bez znacznika „w toku” (wartości częściowe są przygaszone). Bez filtra dni z uwagami i bez legendy.
-- Wiersze są wirtualizowane; ukryte wiersze wymiarujące o zerowej wysokości trzymają najszerszą treść każdej kolumny z całego zakresu, więc szerokość tabeli i poziome przewinięcie nie zależą od tego, które wiersze są wyrenderowane.
+- Menu „Kolumny” w nagłówku (po lewej od zakresu): osobny checkbox dla każdej kolumny, oznaczony kolorem grupy (Ciało, Aktywność, Energia, Jedzenie, Kontekst — opaska, Opis dnia — uwagi, notatka); wybór zapamiętany w przeglądarce (dawny zapis grup przechodzi na ich kolumny). Wiersz grup nad kolumnami pokazuje tylko grupy z widocznymi kolumnami. Tabela wypełnia wysokość pod nagłówkiem. Zamrożony nagłówek i kolumna daty; przy sortowaniu po dacie wiersze tygodni „średnie dzienne” (średnia z dób potwierdzonych, bez liczby dób). Dzisiejszy wiersz bez znacznika „w toku” (wartości częściowe są przygaszone). Bez filtra dni z uwagami i bez legendy.
+- Wiersze są wirtualizowane; ukryte wiersze wymiarujące o zerowej wysokości trzymają najszerszą treść każdej kolumny z całego zakresu, więc szerokość tabeli i poziome przewinięcie nie zależą od tego, które wiersze są wyrenderowane. Po pierwszym renderze szerokości kolumn są mierzone i ustalane (zaokrąglone), aż zmienią się dane, widoczne kolumny, sortowanie po dacie albo szerokość widoku.
 - Kliknięcie wiersza lub komórki otwiera dzień. Na telefonie lista kart dni.
-- Eksport CSV jeszcze nie istnieje (przycisk usunięty z paska; pozycja w planie M1).
+- Eksport CSV jeszcze nie istnieje (przycisk usunięty z paska; pozycja w [etapie Q](../plan/09-quality-operations.md#interfejs-eksport-kopia-i-telefon-przeniesione-z-m1)).
 
 ### Trendy
 
