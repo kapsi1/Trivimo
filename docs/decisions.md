@@ -42,6 +42,8 @@ Pełny katalog API zastępuje dawne ograniczenia Health Sync do wybranych pól. 
 
 **2026-11-05 — wydajność (magazyn v13).** Sparsowane okna 10-minutowe zapisywane jako warstwa pochodna obok oryginałów, projekcja po odświeżeniu przyrostowa. Przepisanie backendu na inny język odrzucono: koszt był w architekturze, nie w języku.
 
+**2026-11-06 — plan M2.** (1) Zadania użycia aplikacji na telefonie mają osobny [plan 10](plan/10-mobile.md). (2) Stan kafelków i pozostałe opcje widoku zapisujemy w bazie, wspólnie dla desktopu i telefonu ([plan 04](plan/04-ui-workouts.md#preferencje-widoku-w-bazie)); przeglądarka jest tylko pamięcią podręczną. Synchronizacja z telefonem wymaga dostępu do tego samego serwera (decyzje otwarte poniżej). (3) Nie pokazujemy panelu metadanych wartości (źródła, model, definicja, identyfikatory); dalsze metadane w widokach użytkownik rozstrzyga przypadek po przypadku; lista treningów bez filtra źródła; pochodzenie i diagnostyka są w „Źródłach danych”. Zwinięcie lewej nawigacji zostaje lokalne dla urządzenia. (4) Strefy czasowe przeniesiono z etapu Q do M2.
+
 ## Ustalenia techniczne
 
 Stos: TypeScript, React/Vite, Node z wbudowanym SQLite, lokalny serwer REST na 127.0.0.1 ([środowisko](development.md)). Próba parserów Kotlin nie uzasadniła mostu JVM ([P0](completed/01-p0-probes.md)). MCP będzie adapterem tych samych komend. Dzień kanoniczny: Europe/Warsaw, z zachowaniem czasu źródła i osobnych podsumowań cywilnych producenta.
@@ -50,7 +52,7 @@ Stos: TypeScript, React/Vite, Node z wbudowanym SQLite, lokalny serwer REST na 1
 
 | Decyzja | Kiedy | Co rozstrzygnąć |
 | --- | --- | --- |
-| Strefa czasowa doby | Przed obsługą stref ([plan Q](plan/09-quality-operations.md#strefy-czasowe)) | Jedna strefa globalna czy strefa przypisana do doby (podróże); migracja i wersja reguł |
+| Strefa czasowa doby | Początek M2, przed sesjami treningowymi ([plan 02](plan/02-health-api.md#strefy-czasowe)) | Jedna strefa globalna czy strefa przypisana do doby (podróże); migracja i wersja reguł |
 | Próg „dnia z noszeniem” | Gdy potrzebny w UI/analizie | Dziś tylko udział doby z opaską, bez progu |
 | Nazwa i identyfikatory produktu | Przed publikacją | Wybiera użytkownik; wstępne wyszukiwanie nie potwierdza praw do marki/domeny |
 | Wariant local-first PWA (bez serwera) | Przed dostępem mobilnym, razem z wyborem hosta | SQLite-WASM (OPFS) w przeglądarce, ewentualny bezstanowy proxy tylko do wymiany tokenów OAuth. Do sprawdzenia w dokumentach Google: OAuth bez sekretu, refresh token, CORS Health API. Koszty: brak synchronizacji w tle, ryzyko wyczyszczenia OPFS, brak REST/MCP, klucz AI nie w przeglądarce. Do tego czasu przypadki użycia nie zakładają HTTP; bez sterownika WASM |

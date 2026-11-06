@@ -5,8 +5,8 @@ Semantyka: [kontrakty](../data-contracts.md). Wykonane: [docs/completed](../comp
 | Etap | Wynik i zależności | Plan |
 | --- | --- | --- |
 | P0 | Stos, szkielet, migracje/testy, próby możliwości — **wykonane** | [P0](../completed/01-p0-probes.md) |
-| M1 | Lokalne MVP: 6 metryk z API i Takeout, tabela/wykresy/uwagi, historia 2026 — **wykonane 2026-11-06** (eksport CSV, kopia z UI, historia importów i telefon przeniesione do Q) | [01](01-foundation-mvp.md), [02](02-health-api.md), [03](03-import-migration.md) |
-| M2 | Treningi, HR, strefy, mapy, dashboardy; pełny katalog API iteracyjnie | [02](02-health-api.md), [04](04-ui-workouts.md) |
+| M1 | Lokalne MVP: 6 metryk z API i Takeout, tabela/wykresy/uwagi, historia 2026 — **wykonane 2026-11-06** (eksport CSV, kopia z UI i historia importów przeniesione do Q, telefon do planu T, strefy czasowe do M2) | [01](01-foundation-mvp.md), [02](02-health-api.md), [03](03-import-migration.md) |
+| M2 | Strefy czasowe, preferencje widoku w bazie, treningi, HR, strefy HR, mapy, dashboardy; pełny katalog API iteracyjnie | [02](02-health-api.md), [04](04-ui-workouts.md) |
 | M3 | Dziennik posiłków, produkty/receptury, import obecnych danych i OFF | [05](05-nutrition.md), [06](06-food-sources.md) |
 | M4 | Planer i import FatSecret; zależy od wpisów/produktów, nie od AI | [05](05-nutrition.md), [06](06-food-sources.md) |
 | M5 | Wpisy przez ChatGPT na telefonie albo mobilne web UI, tekst/głos/zdjęcia | [07](07-ai-chatgpt.md) |
@@ -14,6 +14,7 @@ Semantyka: [kontrakty](../data-contracts.md). Wykonane: [docs/completed](../comp
 | M7 | Zapis wybranych typów do Health i opcjonalnie Connect | [08](08-sync-android.md) |
 | M8 | Opcjonalny komponent Android, jeśli uzasadniony | [08](08-sync-android.md) |
 | Q | Prywatność, testy, kopie i operacje — przekrojowo | [09](09-quality-operations.md) |
+| T | Telefon: dostęp do wspólnej bazy, widoki mobilne, odbiór na urządzeniu — przekrojowo | [10](10-mobile.md) |
 
 Etapy nie są harmonogramem. Pełny katalog API nie warunkuje tabeli, Android nie warunkuje importu. M5 może wyprzedzić M4; próbę ChatGPT mobilnego można zrobić wcześniej na syntetycznej komendzie.
 
@@ -21,7 +22,7 @@ Etapy nie są harmonogramem. Pełny katalog API nie warunkuje tabeli, Android ni
 
 Działa i jest sprawdzone (syntetycznie i na koncie użytkownika): autoryzacja Google z trwałym tokenem, magazyn v13, sześć metryk zakwalifikowanych z danych Google od 2026-01-01 (i na żądanie wcześniej), odświeżanie automatyczne z polityką odczytów, uzupełnianie historii, import Takeout (katalog i ZIP) i CSV, interfejs według [projektu UI](../design/ui.md), kopia i odtworzenie. Szczegóły: [M1 — wykonane](../completed/02-m1.md), [raport testów](../test-results.md).
 
-W M1 nic nie zostało; prognoza kalorii wdrożona jako `prognoza-bez-wysilku-v2` ([wykonane](../completed/02-m1.md#prognoza-spalonych-kalorii--wykonane-2026-11-06)). Kryteria odbioru (powtórny import, niezależność od porcji, DST, paginacja, restart) są spełnione na danych syntetycznych, rekonsyliacja starszych dób i wirtualizacja tabeli działają. Eksport CSV, kopia z UI, historia importów i widok na telefonie są w [etapie Q](09-quality-operations.md#interfejs-eksport-kopia-i-telefon-przeniesione-z-m1), strefy czasowe też.
+W M1 nic nie zostało; prognoza kalorii wdrożona jako `prognoza-bez-wysilku-v2` ([wykonane](../completed/02-m1.md#prognoza-spalonych-kalorii--wykonane-2026-11-06)). Kryteria odbioru (powtórny import, niezależność od porcji, DST, paginacja, restart) są spełnione na danych syntetycznych, rekonsyliacja starszych dób i wirtualizacja tabeli działają. Eksport CSV, kopia z UI i historia importów są w [etapie Q](09-quality-operations.md#interfejs-eksport-i-kopia-z-ui-przeniesione-z-m1), widok na telefonie w [planie 10](10-mobile.md), a strefy czasowe w [M2](02-health-api.md#strefy-czasowe).
 
 Nierozstrzygnięte: rola źródła „Phone Health Connect” ([obserwacje](../completed/03-data-findings.md)); starsze odczyty bez znacznika „automatyczny” nie są porządkowane przez politykę odczytów. Praca w tle po wielu godzinach i restarcie oraz polityka po wielu przebiegach: ocena użytkownika 2026-11-06 „wygląda ok”, bez raportu pomiarów.
 
@@ -31,6 +32,7 @@ Nierozstrzygnięte: rola źródła „Phone Health Connect” ([obserwacje](../c
 - [ ] Każdy kolejny typ: karta definicji, jednostki, czas, pochodzenie, operacje, brak/zero, testy syntetyczne i ograniczony rzeczywisty odczyt. „Wszystkie dane API” wymaga raportu pokrycia całego katalogu.
 - [ ] M5: realny wpis z telefonu, potwierdzenie, korekta, ponowienie bez duplikatu, zachowanie przy niedostępnym hoście.
 - [ ] M7: dowód per typ/operacja, timeout i restart, brak pętli, jawnie niewspierane cele; bez masowego czyszczenia Connect.
+- [ ] Po M6 (powtórzenie po M7): przegląd danych pobieranych lub zapisywanych, a nieużywanych w aplikacji ([Q](09-quality-operations.md#przegląd-nieużywanych-danych-po-m6)).
 
 ## Dane rzeczywiste w pracy deweloperskiej
 

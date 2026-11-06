@@ -1,6 +1,6 @@
 # Indeks dokumentacji
 
-Stan (2026-11-06): M1 wykonane (kryteria odbioru na danych syntetycznych, rekonsyliacja, wirtualizacja tabeli, prognoza `prognoza-bez-wysilku-v2`). Eksport CSV, kopia z UI i telefon: [etap Q](plan/09-quality-operations.md).
+Stan (2026-11-06): M1 wykonane (kryteria odbioru na danych syntetycznych, rekonsyliacja, wirtualizacja tabeli, prognoza `prognoza-bez-wysilku-v2`). Eksport CSV i kopia z UI: [etap Q](plan/09-quality-operations.md); telefon: [plan 10](plan/10-mobile.md); strefy czasowe: M2.
 
 | Potrzeba | Dokument |
 | --- | --- |
@@ -19,6 +19,7 @@ Stan (2026-11-06): M1 wykonane (kryteria odbioru na danych syntetycznych, rekons
 | ChatGPT, AI, MCP | [AI i wprowadzanie](plan/07-ai-chatgpt.md) |
 | Zapis do Health/Connect, Android | [Synchronizacja](plan/08-sync-android.md) |
 | Bezpieczeństwo, testy, kopie | [Jakość i operacje](plan/09-quality-operations.md) |
+| Telefon, wspólny stan widoku | [Telefon](plan/10-mobile.md) |
 | Dokumenty producentów i materiały Health Sync | [Źródła](references.md) |
 | Pomysły do oceny | [Pomysły](ideas.md) |
 

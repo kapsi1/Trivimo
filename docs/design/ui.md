@@ -4,7 +4,9 @@ Stan wdrożenia w `apps/web` na 2026-11-06. Projekt powstał 2026-11-04 (prototy
 
 ## Założenia
 
-- Jeden użytkownik, desktop w przeglądarce, ciemny motyw; telefon: podstawowy odczyt, w przyszłości szybkie wpisy jedzenia.
+- Jeden użytkownik, desktop w przeglądarce, ciemny motyw; telefon: podstawowy odczyt, w przyszłości szybkie wpisy jedzenia (zadania: [plan 10](../plan/10-mobile.md)).
+- Preferencje widoku (kafelki, kolumny, zakres) docelowo w bazie, wspólne dla desktopu i telefonu (decyzja 2026-11-06, [plan 04](../plan/04-ui-workouts.md#preferencje-widoku-w-bazie)); dziś kolumny i zakres są zapamiętywane w przeglądarce. Zwinięcie lewej nawigacji zostaje lokalne dla urządzenia.
+- Nie pokazujemy panelu metadanych wartości (źródła, model, definicja, identyfikatory); pochodzenie i diagnostyka są w „Źródłach danych”, a stan i uwagi w formie, jak dotąd. Nowe metadane w widokach rozstrzygamy osobno, przypadek po przypadku.
 - Główna praca to przegląd dnia i porównanie dni. Diagnostyka odczytów jest w „Źródłach danych”, nie w głównych widokach.
 - Stan wartości widać w formie, nie tylko w tekście (sekcja [Język wizualny](#język-wizualny)).
 
@@ -34,7 +36,7 @@ Wybór dnia strzałkami, polem daty, „Dziś”, z klawiatury ←/→ i `t`. Dl
 - Menu „Kolumny” w nagłówku (po lewej od zakresu): osobny checkbox dla każdej kolumny, oznaczony kolorem grupy (Ciało, Aktywność, Energia, Jedzenie, Kontekst — opaska, Opis dnia — uwagi, notatka); wybór zapamiętany w przeglądarce (dawny zapis grup przechodzi na ich kolumny). Wiersz grup nad kolumnami pokazuje tylko grupy z widocznymi kolumnami. Tabela wypełnia obszar pod nagłówkiem bez marginesów (od krawędzi do krawędzi, bez zaokrągleń; na telefonie bez zmian). Pusty pasek przewijania strony jest tu przezroczysty (miejsce zostaje, układ nie przeskakuje między widokami); paski w całej aplikacji są cienkie, w kolorach motywu. Zamrożony nagłówek i kolumna daty; przy sortowaniu po dacie wiersze tygodni „średnie dzienne” (średnia z dób potwierdzonych, bez liczby dób). Dzisiejszy wiersz bez znacznika „w toku” (wartości częściowe są przygaszone). Bez filtra dni z uwagami i bez legendy.
 - Wiersze są wirtualizowane; ukryte wiersze wymiarujące o zerowej wysokości trzymają najszerszą treść każdej kolumny z całego zakresu, więc szerokość tabeli i poziome przewinięcie nie zależą od tego, które wiersze są wyrenderowane. Po pierwszym renderze szerokości kolumn są mierzone i ustalane (zaokrąglone), aż zmienią się dane, widoczne kolumny, sortowanie po dacie albo szerokość widoku.
 - Kliknięcie wiersza lub komórki otwiera dzień. Na telefonie lista kart dni.
-- Eksport CSV jeszcze nie istnieje (przycisk usunięty z paska; pozycja w [etapie Q](../plan/09-quality-operations.md#interfejs-eksport-kopia-i-telefon-przeniesione-z-m1)).
+- Eksport CSV jeszcze nie istnieje (przycisk usunięty z paska; pozycja w [etapie Q](../plan/09-quality-operations.md#interfejs-eksport-i-kopia-z-ui-przeniesione-z-m1)).
 
 ### Trendy
 

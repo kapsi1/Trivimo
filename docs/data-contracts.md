@@ -21,7 +21,7 @@ Brak HR nie dowodzi braku opaski, a jedna próbka nie dowodzi noszenia przez ca�
 
 ## Czas, jednostki i agregacja
 
-- Przechowuj czas UTC, oryginalny offset/strefę, datę cywilną źródła i regułę przypisania dnia. Dzień aplikacji: Europe/Warsaw (jedyna obsługiwana strefa, zob. [plan Q](plan/09-quality-operations.md#strefy-czasowe)), przedział `[start, end)`, bez założenia 86 400 s. Strefa nie zmienia się niejawnie podczas podróży.
+- Przechowuj czas UTC, oryginalny offset/strefę, datę cywilną źródła i regułę przypisania dnia. Dzień aplikacji: Europe/Warsaw (jedyna obsługiwana strefa, zob. [plan M2](plan/02-health-api.md#strefy-czasowe)), przedział `[start, end)`, bez założenia 86 400 s. Strefa nie zmienia się niejawnie podczas podróży.
 - Doba cywilna producenta nie musi równać się warszawskiemu przedziałowi UTC. Gdy nie da się tego potwierdzić, wynik jest nieporównywalny z uwagą, a nie podmieniany.
 - Jednostki wewnętrzne jawne; zachowaj dokładną liczbę i jednostkę źródła, zaokrąglaj tylko w prezentacji. kJ/kcal, procent/ułamek, mg/g, milli-breaths/min wymagają testów.
 - Reconciliation dostawcy ≠ suma surowych rekordów. Ten sam dzień daje ten sam wynik niezależnie od porcji zapytania.

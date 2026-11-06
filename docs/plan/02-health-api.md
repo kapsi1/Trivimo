@@ -36,9 +36,17 @@ Po dodaniu typu uzupełniaj raport pokrycia. Typ bez danych konta: ścieżka syn
 - [ ] Okresowa rekonsyliacja starszych dób ([plan MVP](01-foundation-mvp.md)); ocena webhooków (autentyczność, odzyskiwanie po utracie zdarzeń) — dla lokalnego serwera polling może wystarczyć.
 - [ ] Ponawianie innych 5xx niż 503 — tylko jeśli wystąpią.
 
+## Strefy czasowe
+
+Przeniesione z [etapu Q](09-quality-operations.md) do M2 (decyzja użytkownika 2026-11-06). Wykonać na początku M2, przed sesjami treningowymi z [planu 04](04-ui-workouts.md): granice doby, sesje przez północ i DST zależą od strefy.
+
+- [ ] Strefy czasowe: dziś doba, tydzień i zmiana czasu są liczone wyłącznie w `Europe/Warsaw`. Dodać strefę jako ustawienie użytkownika (domyślnie Warszawa), a granice doby, okna 10-minutowe, „dziś”, prognozę i etykiety godzin liczyć w wybranej strefie. Zmiana znaczenia doby wymaga wersji reguły i migracji (zasada z `data-contracts.md`): wyniki dobowe zapisane dla poprzedniej strefy nie mogą się po cichu przesunąć, a przeliczenie ma być jawną operacją z zachowaniem oryginałów i historii. Do rozstrzygnięcia: jedna strefa globalna, czy strefa przypisana do doby (podróże: doba zapisana tam, gdzie była mierzona; Google zapisuje czas cywilny pomiaru). Testy: strefy bez i z DST oraz o innych przesunięciach (np. UTC, Nowy Jork, Kolkata o +5:30), doba 23/25 godzin w obu półkulach, granica doby przy zmianie strefy w trakcie podróży, niezależność wyniku od porcji importu.
+- [ ] Teksty o strefie w interfejsie i dokumentacji: zastąpić sformułowania „doba warszawska”, „dzień warszawski”, „doby warszawskiej”, „w Warszawie”, „Data w Warszawie” i „Europe/Warsaw” (interfejs: Źródła danych, Tabela dni, Import CSV, Ustawienia; dokumentacja: `data-contracts.md`, `decisions.md`, `architecture.md`, `development.md`, `test-results.md`) neutralnym określeniem „doba” razem ze strefą wybraną w ustawieniach (np. „doba w strefie Europe/Warsaw” tylko tam, gdzie strefa jest istotna). Wykonać razem z obsługą stref: przed nią tekst „doba” bez strefy byłby mylący dla jedynej obsługiwanej strefy. Strefa jest ustawieniem zapisanym w bazie (wspólnym dla desktopu i telefonu, zob. [preferencje](04-ui-workouts.md#preferencje-widoku-w-bazie)). Wpisy historyczne w `test-results.md` i `decisions.md` zachować z datą; poprawiać tylko opisy obowiązujących reguł i teksty widoczne dla użytkownika.
+
 ## Weryfikacja agregatów i semantyki
 
 - [ ] Doba cywilna producenta vs zakres Warszawy przy DST i podróży, pojedynczy dzień vs porcje, list/reconcile/rollup, źródła i zaokrąglenia — dla każdej nowej metryki.
 - [ ] Rozbieżności producenta (np. kalorie sesji w przewodniku vs REST, wersje BMR) dokumentować, nie rozstrzygać zgadywaniem.
 - [ ] Nocne podsumowania i chwilowe próbki kwalifikować osobno; granice ufności SpO₂ ≠ min/max.
 - [ ] „Pełna prezentacja API” dopiero po raporcie całego aktualnego katalogu z listą niewspieranych operacji, beta i funkcji bez endpointu.
+- Przegląd danych pobieranych, a nieużywanych w aplikacji nie należy do M2: jest w [etapie Q](09-quality-operations.md#przegląd-nieużywanych-danych-po-m6), gdy znani są wszyscy konsumenci danych.

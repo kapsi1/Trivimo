@@ -23,7 +23,7 @@ Po stabilnym M1; pierwsza użyteczna wersja M3 działa ręcznie bez LLM i bez Fa
 - [ ] Planowane dni/posiłki, produkty/receptury, ilości i szacowane sumy; kopiowanie i przesuwanie. Plan jest osobny od dziennika i nie trafia do Health/Connect jako spożyty.
 - [ ] „Zjadłem” tworzy wpis dziennika ze snapshotem i relacją do planu. Powtórzenie tej komendy nie tworzy duplikatu; korekta ilości po zjedzeniu nie edytuje historycznie całego planu.
 - [ ] Cele kcal/makr opcjonalne i wprowadzane świadomie; lista zakupów może być późniejszą pochodną. AI może proponować plan na podstawie jawnych preferencji, ale nie zapisuje go automatycznie jako zjedzony.
-- [ ] Responsywny formularz dziennika stanowi bazę mobilnego wprowadzania nawet wtedy, gdy MCP/ChatGPT jest niedostępny. Nie wymaga natywnego Androida.
+- [ ] Responsywny formularz dziennika stanowi bazę mobilnego wprowadzania nawet wtedy, gdy MCP/ChatGPT jest niedostępny. Nie wymaga natywnego Androida. Dostęp i odbiór na telefonie: [plan 10](10-mobile.md).
 
 ## Odbiór
 
