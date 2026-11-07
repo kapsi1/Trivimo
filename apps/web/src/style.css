@@ -441,13 +441,24 @@ td.src-c { color: var(--muted); max-width: 280px; overflow: hidden; text-overflo
 .tile-body > * { flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
 .tile .kcard .k-cmp { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tile .kcard h3.th { min-width: 0; }
+/* day tiles: titles and values in one colour, whatever the value's state (the state chip and forecast keep theirs) */
+.tile .kcard h3.th, .tile .kcard .k-value, .tile .kcard .k-value.prov, .tile .kcard .k-value.none { color: var(--muted); }
 /* one-row tile: the former body card (padding 16, value 30 px); compact only when a comparison line must fit too */
 .tile.h1 .kcard:not(.notecard, .chartonly) { padding: 16px 15px; }
 .tile.h1 .kcard:not(.notecard, .chartonly):has(> .k-cmp) { padding: 11px 14px; gap: 4px; }
 .tile.h1 .kcard h3.th { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
 .tile.h1 .kcard h3.th i { display: inline-block; margin-right: 8px; vertical-align: 1px; }
 .tile.h1 .kcard:has(> .k-cmp) .k-value { font-size: 27px; }
-.kcard.tall .chartbtn { flex: 1; display: flex; min-height: 0; }
+/* a day value without a comparison line is larger (a chart below may start under the line box: its top strip is empty); a one-row tile trims its padding to fit it */
+.tile .kcard:not(:has(> .k-cmp)) > .k-value { font-size: 40px; }
+.tile .kcard.tall:not(:has(> .k-cmp)) > .k-value { margin-bottom: -10.5px; } /* the chart keeps the height it had with a 30 px value */
+.k-fc.narrow { margin-left: 4px; font-size: 14px; cursor: help; }
+/* 2-step tile: the forecast sits above the unit; both end on the number's baseline */
+.k-value.stack { align-items: last baseline; }
+.k-stack { display: inline-flex; flex-direction: column; align-items: flex-start; line-height: 1.2; }
+.k-stack .k-fc.narrow { margin-left: 0; }
+.tile.h1 .kcard:not(.notecard, .chartonly):not(:has(> .k-cmp, > .chartbtn)) { padding-block: 12px; }
+.kcard.tall .chartbtn { flex: 1; display: flex; min-height: 0; padding-bottom: 12px; } /* fixed gap under the axis (the axis is the SVG's bottom edge) */
 .kcard.tall svg { height: 100%; min-height: 40px; }
 .kcard.chartonly .chartbtn { flex: 1; display: flex; min-height: 0; }
 .kcard.chartonly svg { height: 100%; min-height: 30px; }

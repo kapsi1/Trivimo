@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
-import { dayResponseSchema, forecastSchema, groups, heartRateDaySchema, heartRateRangeSchema, metricOf, post, rangeSchema, seriesSchema, useJson, userNoteSchema, type DayRow, type Forecast, type MetricKey, type MetricValue, type Snapshot, type SyncStatus } from './api.ts';
+import { dayResponseSchema, forecastSchema, groups, heartRateDaySchema, heartRateRangeSchema, metricOf, post, rangeSchema, seriesSchema, useJson, userNoteSchema, type DayRow, type Forecast, type MetricKey, type Snapshot, type SyncStatus } from './api.ts';
 import { aggregateSpans, DayMini, EnergyLegend, HourChart, HR_LEGEND, HrDayChart, HrDayMini, type HourKey } from './charts.tsx';
-import { dayHours, dayTotal, forecastHint, hrOf, lastMeasured, meanValid, valueOf, type DayHours } from './derive.ts';
+import { dayHours, dayTotal, forecastHint, hrOf, meanValid, valueOf, type DayHours } from './derive.ts';
 import { StatusChip, hourMetricLabel } from './details.tsx';
-import { addDays, fmtD, formatRational, nf, appToday, whenOf, firstDay } from './format.ts';
+import { addDays, fmtD, formatRational, nf, appToday, firstDay } from './format.ts';
 import { Placeholder } from './placeholders.tsx';
 import { Segmented, ZoomDialog, zoomSize } from './zoom.tsx';
 import { z } from 'zod';
@@ -79,24 +79,28 @@ export function DayView({ date, tab, onTab, sync, onDirty }: { date: string; tab
   return <>{head}{body}{zoomed}</>;
 }
 
-/** Comparison line of a metric: the mean of the 7 days before the shown day, or for body metrics without a value the last measurement (never carried over). */
-function metricCompare(date: string, rows: DayRow[], metricKey: MetricKey, value: MetricValue | undefined): string {
+/** Comparison line of a metric: the mean of the 7 days before the shown day. Body metrics have none in the day view (a day without a measurement shows only "—"). */
+function metricCompare(date: string, rows: DayRow[], metricKey: MetricKey): string {
   const metric = metricOf(metricKey);
-  if (metric.group === 'body' && !value?.value) { const last = lastMeasured(rows, metricKey, addDays(date, -1)); return last ? `ostatni pomiar ${nf(last.value, metric.decimals)} ${metric.unit} · ${fmtD(last.date)}` : 'brak pomiaru w ostatnich 90 dniach'; }
   const avg = meanValid(rows, metricKey, addDays(date, -7), addDays(date, -1));
   const week = `${fmtD(addDays(date, -7))}–${fmtD(addDays(date, -1))}`; // the 7 days before the shown day, without it
   return avg.mean !== null ? `śr. ${week}: ${nf(avg.mean, metric.decimals)} · ${avg.n} z 7 dób` : metric.group === 'body' ? 'brak pomiarów w 7 dniach' : 'brak potwierdzonych dób w 7 dniach';
 }
 
-/** `mini` replaces the 14-day sparkline (the day view puts today's ten-minute chart there; null: no chart); without `onZoom` the card is not clickable. */
-function KpiCard({ date, rows, snapshot, metricKey, forecast, onZoom, mini, quiet, bare, className }: { date: string; rows: DayRow[]; snapshot: Snapshot | null; metricKey: MetricKey; forecast: Forecast; onZoom?: () => void; mini?: ReactNode; quiet?: boolean; bare?: boolean; className?: string }) {
+/** `narrow`: a tile under 4 grid steps wide shows the forecast as "→ X" (full wording in the tooltip): beside the unit (3 steps) or above it ('stack', 2 steps). `mini` replaces the 14-day sparkline (the day view puts today's ten-minute chart there; null: no chart); without `onZoom` the card is not clickable. */
+function KpiCard({ date, rows, snapshot, metricKey, forecast, onZoom, mini, quiet, bare, narrow, className }: { date: string; rows: DayRow[]; snapshot: Snapshot | null; metricKey: MetricKey; forecast: Forecast; onZoom?: () => void; mini?: ReactNode; quiet?: boolean; bare?: boolean; narrow?: boolean | 'stack'; className?: string }) {
   const metric = metricOf(metricKey), value = snapshot?.metrics[metricKey];
-  const cmp = metricCompare(date, rows, metricKey, value);
+  const cmp = metricCompare(date, rows, metricKey);
   const fc = metricKey === 'total_energy' && forecast && value?.value ? { now: valueOf(snapshot, metricKey) ?? 0, total: forecast.forecastKcal } : null;
   return <div className={`kcard ${className ?? ''}`} data-zoom={onZoom ? '' : undefined} onClick={onZoom}>
     <span className="k-label"><h3 className="th"><i style={{ background: groups[metric.group].color }} />{metric.label}</h3><span className="k-right">{!(quiet && value?.status === 'provisional') && <StatusChip value={value} compact />}</span></span>
-    <span className={`k-value ${value?.value ? value.status === 'provisional' ? 'prov' : '' : 'none'}`}>{value?.value ? formatRational(value.value, metric.decimals) : '—'}{value?.value && metric.unit ? <small>{metric.unit}</small> : null}{fc && <span className="k-fc" title={forecast ? forecastHint(forecast) : undefined}>Prognoza: <b>{nf(fc.total)}</b> kcal</span>}</span>
-    {!(bare && value?.value) && <span className="k-cmp" title={cmp}>{cmp}</span>}
+    {(() => {
+      const unit = value?.value && metric.unit ? <small>{metric.unit}</small> : null;
+      const short = fc && forecast && narrow && <span className="k-fc narrow" title={`Prognoza do końca doby: ${nf(fc.total)} kcal. ${forecastHint(forecast)}`}><span aria-hidden="true">→ </span><span className="sr-only">Prognoza: </span><b>{nf(fc.total)}</b></span>;
+      const tail = short && narrow === 'stack' ? <span className="k-stack">{short}{unit}</span> : <>{unit}{short || (fc && forecast && <span className="k-fc" title={forecastHint(forecast)}>Prognoza: <b>{nf(fc.total)}</b> kcal</span>)}</>;
+      return <span className={`k-value ${value?.value ? value.status === 'provisional' ? 'prov' : '' : 'none'}${short && narrow === 'stack' ? ' stack' : ''}`}>{value?.value ? formatRational(value.value, metric.decimals) : '—'}{tail}</span>;
+    })()}
+    {!(bare && (value?.value || metric.group === 'body')) && <span className="k-cmp" title={cmp}>{cmp}</span>}
     {onZoom && mini !== null && <button type="button" className="chartbtn" aria-label={`Powiększ wykres: ${metric.label}`} onClick={(event) => { event.stopPropagation(); onZoom(); }}>{mini}</button>}</div>;
 }
 
@@ -123,7 +127,7 @@ function UserNoteEditor({ date, initial, onDirty }: { date: string; initial: z.i
   }
   return <>
     <span className="k-label"><h3 className="th"><label htmlFor="usernote">Moja notatka</label></h3>
-      <span className="note-state">{error ? <span role="alert" style={{ color: 'var(--bad)' }}>{error}</span> : <span role="status">{dirty ? 'Niezapisane zmiany' : saved ? `Zapisano ${whenOf(saved.createdAt)}` : ''}</span>}<button type="button" className="btn" disabled={!dirty || saving} onClick={() => void save()}>{saving ? 'Zapisywanie…' : 'Zapisz'}</button></span></span>
+      <span className="note-state">{error ? <span role="alert" style={{ color: 'var(--bad)' }}>{error}</span> : <span role="status">{dirty ? 'Niezapisane zmiany' : ''}</span>}<button type="button" className="btn" disabled={!dirty || saving} onClick={() => void save()}>{saving ? 'Zapisywanie…' : 'Zapisz'}</button></span></span>
     <textarea id="usernote" placeholder="Np. trening, choroba, podróż…" value={draft} maxLength={10000} disabled={saving} onChange={(event) => { setDraft(event.target.value); onDirty(event.target.value !== (saved?.content ?? '')); }} />
   </>;
 }
@@ -140,16 +144,15 @@ function DayFlow({ date, rows, hours, snapshot, legacy, seriesRead, loading, for
   const statRow = (id: StatId): StatRow => {
     if (id.startsWith('summary:')) { const row = summaryRowOf(id.slice(8) as SummaryType); return { id, label: row.label, hint: row.hint, ...summaryCells(row, summaryOf(row.type)) }; }
     const key = id.slice(7) as MetricKey, metric = metricOf(key), value = snapshot?.metrics[key];
-    return { id, label: metric.label, value: value?.value ? `${formatRational(value.value, metric.decimals)}${metric.unit ? ` ${metric.unit}` : ''}` : '—', // no 7-day mean in the table; a body metric without a value still names its last measurement (never carried over)
-      detail: metric.group === 'body' && !value?.value ? metricCompare(date, rows, key, value) : '—' };
+    return { id, label: metric.label, value: value?.value ? `${formatRational(value.value, metric.decimals)}${metric.unit ? ` ${metric.unit}` : ''}` : '—', detail: '—' }; // no 7-day mean and no last measurement in the table
   };
-  const render = ({ id, h }: Placed) => {
+  const render = ({ id, w, h }: Placed) => {
     if (id === 'hr') return <HrCard onZoom={() => onZoom({ type: 'hrday' })} chart={<HrDayMini windows={hours.hr} hours={hours.hours.length} />} />;
     if (id === 'note') return <div className="kcard notecard">{notesAvailable ? <UserNoteEditor key={date} date={date} initial={userNote} onDirty={onDirty} /> : <><span className="k-label"><h3 className="th">Moja notatka</h3></span><p className="sub">Notatki wymagają nowszej wersji bazy.</p></>}</div>;
     if (id === 'summaries') return <StatTable rows={layout.table.map(statRow)} editing={editing} onTile={(stat) => change(setPlace(layout, stat as StatId, 'tile'))} onHide={(stat) => change(removeFromTable(layout, stat as StatId))} />;
     if (id.startsWith('summary:')) { const row = summaryRowOf(id.slice(8) as SummaryType); return <SummaryCard row={row} item={summaryOf(row.type)} />; }
     const key = id.slice(7) as MetricKey, hk = hourKeyOf[key], chart = !!hk && h >= 2;
-    return <KpiCard date={date} rows={rows} snapshot={snapshot} metricKey={key} forecast={forecast} quiet bare className={chart ? 'tall' : ''}
+    return <KpiCard date={date} rows={rows} snapshot={snapshot} metricKey={key} forecast={forecast} quiet bare narrow={w < 3 ? 'stack' : w < 4} className={chart ? 'tall' : ''}
       onZoom={hk ? () => onZoom({ type: 'hour', key: hk }) : undefined}
       mini={hk && chart ? <DayMini hours={loading || empty(hk) ? [] : hours.hours} windows={hours.windows} metric={hk} /> : null} />;
   };

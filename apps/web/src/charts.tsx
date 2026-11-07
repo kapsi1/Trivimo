@@ -133,7 +133,7 @@ export function HourChart({ windows, hours, metric, height = 150, width = 640, h
       return <g key={h.start}>
         {stacked && total !== null && rest !== null && <><rect x={x} y={y(rest)} width={w} height={Math.max(0, base - y(rest))} fill="color-mix(in srgb, var(--c-energy) 32%, transparent)" opacity={opacity} />
           {!!h.active && <rect x={x} y={y(total)} width={w} height={Math.max(0, y(rest) - y(total))} fill="var(--c-energy)" opacity={opacity} />}</>}
-        {!stacked && h[metric] !== null && <rect x={x} y={y(h[metric]!)} width={w} height={Math.max(0.5, base - y(h[metric]!))} fill={color} opacity={h.now ? 0.45 : 0.9} />}
+        {!stacked && !!h[metric] && h[metric]! > 0 && <rect x={x} y={y(h[metric]!)} width={w} height={base - y(h[metric]!)} fill={color} opacity={h.now ? 0.45 : 0.9} />}
         {stacked && h.fc !== null ? <rect x={x} y={y((total ?? 0) + h.fc)} width={w} height={Math.max(0, y(total ?? 0) - y((total ?? 0) + h.fc))} fill="color-mix(in srgb, var(--c-energy) 8%, transparent)" stroke="var(--c-energy)" strokeWidth={0.6} strokeDasharray="2 1.5" />
           : h.future ? <rect x={x} y={base - 2} width={w} height={2} fill="var(--line-strong)" /> : null}
       </g>;
@@ -154,16 +154,17 @@ export function DayMini({ hours, metric, windows }: { hours: HourPoint[]; metric
   const values = shown.flatMap((v) => v === null ? [] : [v]);
   const lines = (h: HourPoint, i: number) => [h.range, h.future ? '—' : shown[i] === null ? '—' : `${nf(shown[i]!, decimals)} ${hourUnits[metric]}`, ...((metric === 'total' || metric === 'active') && !h.future && h[metric] !== null ? energyTip(h.hrWindows, 6) : [])];
   const hits = hours.map((h, i) => <rect key={`h${i}`} className="hit" x={4 + i * step} y={0} width={step} height={H} {...tip(lines(h, i))} />);
-  if (!values.length) return <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true"><line x1={0} x2={W} y1={30} y2={30} className="axis" strokeDasharray="2 3" />{hits}</svg>;
-  const max = Math.max(...values), y = (v: number) => 30 - (v / (max || 1)) * 26, color = metric === 'steps' || metric === 'distance' ? 'var(--c-activity)' : 'var(--c-energy)';
-  return <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true">
+  // the axis is the bottom edge of the SVG (non-scaling stroke): the gap below it is set in CSS, so it stays the same for every tile height
+  if (!values.length) return <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true" overflow="visible"><line x1={0} x2={W} y1={H} y2={H} className="axis" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />{hits}</svg>;
+  const max = Math.max(...values), y = (v: number) => H - (v / (max || 1)) * (H - 4), color = metric === 'steps' || metric === 'distance' ? 'var(--c-activity)' : 'var(--c-energy)';
+  return <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true" overflow="visible">
     {hours.map((h, i) => {
-      const v = shown[i]!; if (v === null) return null;
+      const v = shown[i]!; if (v === null || v <= 0) return null; // a zero hour has no bar (no hairline at the axis)
       const x = 4 + i * step + 0.5, w = Math.max(1, step - 1), rest = stacked ? Math.max(0, v - (h.active ?? 0)) : v;
-      return <g key={i} opacity={h.now ? 0.5 : 1}><rect x={x} y={y(rest)} width={w} height={Math.max(0.5, 30 - y(rest))} fill={stacked ? 'color-mix(in srgb, var(--c-energy) 32%, transparent)' : color} />
+      return <g key={i} opacity={h.now ? 0.5 : 1}>{rest > 0 && <rect x={x} y={y(rest)} width={w} height={H - y(rest)} fill={stacked ? 'color-mix(in srgb, var(--c-energy) 32%, transparent)' : color} />}
         {stacked && !!h.active && <rect x={x} y={y(v)} width={w} height={Math.max(0, y(rest) - y(v))} fill="var(--c-energy)" />}</g>;
     })}
-    <line x1={4} x2={W - 4} y1={30} y2={30} className="axis" />{hits}</svg>;
+    <line x1={4} x2={W - 4} y1={H} y2={H} className="axis" vectorEffect="non-scaling-stroke" />{hits}</svg>;
 }
 /** The day's heart rate by hour as a card-sized chart: min–max band and the line of hourly means of the ten-minute window means. */
 export function HrDayMini({ windows, hours }: { windows: HrWindow[]; hours: number }) {
