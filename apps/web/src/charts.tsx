@@ -92,7 +92,7 @@ export function HourChart({ windows, hours, metric, height = 150, width = 640, h
     {ticks.map((t) => <g key={t}><line className="grid" x1={L} x2={PW} y1={y(t)} y2={y(t)} /><text x={L - 6} y={y(t) + 3.5} textAnchor="end">{nf(t, metric === 'distance' ? 1 : 0)}</text></g>)}
     {windows.map((h) => {
       const x = L + h.index * step + gap / 2, w = Math.max(0.8, step - gap), opacity = h.now ? 0.55 : 1;
-      const total = h.total, rest = total === null ? null : total - (h.active ?? 0);
+      const total = h.total, rest = total === null ? null : Math.max(0, total - (h.active ?? 0)); // active above total (the series disagree in this window): no negative bar
       return <g key={h.start}>
         {stacked && total !== null && rest !== null && <><rect x={x} y={y(rest)} width={w} height={Math.max(0, base - y(rest))} fill="color-mix(in srgb, var(--c-energy) 32%, transparent)" opacity={opacity} />
           {!!h.active && <rect x={x} y={y(total)} width={w} height={Math.max(0, y(rest) - y(total))} fill="var(--c-energy)" opacity={opacity} />}</>}
@@ -118,7 +118,7 @@ export function DayMini({ hours, metric }: { hours: HourPoint[]; metric: HourKey
   return <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true">
     {hours.map((h, i) => {
       const v = h[metric]; if (v === null) return null;
-      const x = 4 + i * step + 0.5, w = Math.max(1, step - 1), rest = stacked ? v - (h.active ?? 0) : v;
+      const x = 4 + i * step + 0.5, w = Math.max(1, step - 1), rest = stacked ? Math.max(0, v - (h.active ?? 0)) : v;
       return <g key={i} opacity={h.now ? 0.5 : 1}><rect x={x} y={y(rest)} width={w} height={Math.max(0.5, 30 - y(rest))} fill={stacked ? 'color-mix(in srgb, var(--c-energy) 32%, transparent)' : color} />
         {stacked && !!h.active && <rect x={x} y={y(v)} width={w} height={Math.max(0, y(rest) - y(v))} fill="var(--c-energy)" />}</g>;
     })}

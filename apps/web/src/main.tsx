@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client';
 import { dayZoneSchema, earliestOf, earliestSchema, metrics, post, syncStatusSchema, useJson } from './api.ts';
 import { Tooltip } from './charts.tsx';
-import { DayView, type DayTab } from './day.tsx';
+import { DayView, rememberDayScroll, type DayTab } from './day.tsx';
 import { addDays, fmtDL, timeOf, appToday, whenOf , firstDay, setDayZone } from './format.ts';
 import { Loading, LogoMark } from './logo.tsx';
 import { BackfillNotice } from './notice.tsx';
@@ -96,7 +96,7 @@ function Shell() {
     return () => { window.removeEventListener('hashchange', change); window.removeEventListener('beforeunload', unload); };
   }, []);
   const go = useCallback((hash: string) => { if (location.hash === `#${hash}`) return; location.hash = hash; }, []);
-  const setDay = (next: string, tab: DayTab = route.view === 'dzien' ? dayTab : dayTabs[0]) => { if (next < firstDay || next > appToday()) return; go(dayHash(next, tab)); };
+  const setDay = (next: string, tab: DayTab = route.view === 'dzien' ? dayTab : dayTabs[0]) => { if (next < firstDay || next > appToday()) return; if (route.view === 'dzien' && next !== date) rememberDayScroll(); go(dayHash(next, tab)); };
   const openDay = (next: string, tab: DayTab = dayTabs[0]) => setDay(next, tab);;
 
   useEffect(() => {

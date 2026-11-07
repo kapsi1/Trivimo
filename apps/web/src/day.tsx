@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
 import { dayResponseSchema, forecastSchema, groups, heartRateDaySchema, heartRateRangeSchema, metricOf, metrics, post, rangeSchema, seriesSchema, useJson, userNoteSchema, type DayRow, type Forecast, type MetricKey, type Snapshot, type SyncStatus } from './api.ts';
 import { DayMini, EnergyLegend, HourChart, HR_LEGEND, HrDayChart, HrDayMini, type HourKey } from './charts.tsx';
 import { dayHours, dayTotal, forecastHint, hrOf, lastMeasured, meanValid, valueOf, type DayHours } from './derive.ts';
@@ -16,6 +16,14 @@ type Zoom = { type: 'hour'; key: HourKey } | { type: 'hrday' };
 /** Days of the loaded window: the 90 days of the view plus 60 to move through before the next request. */
 const windowDays = 150;
 const windowEnd = (date: string, today: string) => { const later = addDays(date, 30); return later < today ? later : today; };
+
+/** Page offset to put back once the next day has loaded: while it loads the page is shorter and the browser clamps the scroll. */
+let keepScroll: number | null = null;
+export const rememberDayScroll = () => {
+  keepScroll = window.scrollY;
+  // hold the page height while the next day loads, so the browser has nothing to clamp the offset to
+  document.documentElement.style.minHeight = `${document.documentElement.scrollHeight}px`;
+};
 
 export function DayView({ date, tab, onTab, sync, onDirty }: { date: string; tab: DayTab; onTab: (tab: DayTab) => void; sync: SyncStatus | undefined; onDirty: (dirty: boolean) => void }) {
   const today = appToday(), isToday = date === today, read = date >= firstDay;
@@ -52,6 +60,8 @@ export function DayView({ date, tab, onTab, sync, onDirty }: { date: string; tab
     <div className="tabs" role="tablist" aria-label="Widok dnia">{tabs.map(([key, label, soon]) => <button type="button" role="tab" key={key} className={soon ? 'is-soon' : undefined} aria-selected={tab === key} onClick={() => onTab(key)}>{label}</button>)}</div></>;
   const legacy = snapshot?.energy?.model === 'legacy';
   const loading = (read && total.data === undefined && !total.error) || !day.data;
+  const settled = (!!day.data && !!range.data && !loading) || day.error || range.error;
+  useLayoutEffect(() => { if (!settled || keepScroll === null) return; window.scrollTo(0, keepScroll); keepScroll = null; document.documentElement.style.minHeight = ''; }, [settled, date]);
   const zoomed = zoom && <DayZoom zoom={zoom} setZoom={setZoom} showHr={showHr} onShowHr={setShowHr} snapshot={snapshot} hours={hours} legacy={legacy} seriesRead={!!total.data} loading={loading} forecast={fc} hrToday={hrToday} />;
   if (day.error || range.error) return <>{head}<p role="alert">Nie udało się odczytać wyniku dnia. Sprawdź, czy serwer działa.</p>{zoomed}</>;
   if (!day.data) return <>{head}<Loading />{zoomed}</>;

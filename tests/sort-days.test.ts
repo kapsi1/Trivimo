@@ -15,3 +15,19 @@ test('sortowanie metryk porównuje dokładne wartości, a braki pozostają na ko
   assert.ok(compareDailyRows(row('2026-01-01', '1', '3'), row('2026-01-02', '2', '5'), 'weight', false) < 0);
   assert.ok(compareDailyRows(rows[0]!, rows[1]!, 'date', true) < 0);
 });
+
+type Item = { type: 'daily-resting-heart-rate'; status: 'value' | 'agreed' | 'conflict' | 'absent'; values?: Record<string, string>; candidates?: Record<string, string>[] };
+function summaryRow(date: string, item: Item | null) {
+  const base = row(date, null);
+  return { date, snapshot: { ...base.snapshot, ...(item ? { summaries: { rule: 'google-daily-summaries-v2' as const, items: [item] } } : {}) } as typeof base.snapshot };
+}
+const value = (bpm: string): Item => ({ type: 'daily-resting-heart-rate', status: 'value', values: { beatsPerMinute: bpm } });
+test('sortowanie podsumowań producenta: liczby, a doby z konfliktem, bez wartości i nieodczytane zostają na końcu w obu kierunkach', () => {
+  const rows = [
+    summaryRow('2026-01-05', { type: 'daily-resting-heart-rate', status: 'conflict', candidates: [{ beatsPerMinute: '50' }, { beatsPerMinute: '90' }] }),
+    summaryRow('2026-01-04', { type: 'daily-resting-heart-rate', status: 'absent' }), summaryRow('2026-01-03', value('60')), summaryRow('2026-01-02', value('55')), summaryRow('2026-01-01', null),
+  ];
+  const order = (descending: boolean) => [...rows].sort((a, b) => compareDailyRows(a, b, 'summary:daily-resting-heart-rate', descending)).map((x) => x.date);
+  assert.deepEqual(order(false), ['2026-01-02', '2026-01-03', '2026-01-01', '2026-01-04', '2026-01-05']);
+  assert.deepEqual(order(true), ['2026-01-03', '2026-01-02', '2026-01-01', '2026-01-04', '2026-01-05']);
+});
