@@ -32,11 +32,13 @@ Baza `takeout-raw.sqlite` leży w katalogu danych, obok `google-token.dpapi` i p
 
 Serwer wymaga dokładnej wersji magazynu (dziś 15); inaczej serwer, odświeżanie i import zgłaszają „wymaga migracji”. Przy zatrzymanym serwerze:
 
+W pnpm 12 argumenty podaje się bez `--` (inaczej `--` trafia do skryptu jako pierwszy argument, np. jako nazwa pliku kopii).
+
 ```powershell
-pnpm run migrate:canonical -- 'D:\Trivimo-bak\przed-vNN.sqlite'   # kopia + jeden krok migracji
-pnpm run backup:takeout -- 'D:\chroniony-katalog\kopia.sqlite'     # kopia SQLite backup API, nowa nazwa
-pnpm run verify:takeout [-- '<kopia.sqlite>']                       # integralność, skróty, liczby wierszy
-pnpm run verify:restore -- '<kopia.sqlite>'                          # odtworzenie i przebudowa projekcji
+pnpm run migrate:canonical 'D:\Trivimo-bak\przed-vNN.sqlite'   # kopia + jeden krok migracji
+pnpm run backup:takeout 'D:\chroniony-katalog\kopia.sqlite'     # kopia SQLite backup API, nowa nazwa
+pnpm run verify:takeout ['<kopia.sqlite>']                       # integralność, skróty, liczby wierszy
+pnpm run verify:restore '<kopia.sqlite>'                          # odtworzenie i przebudowa projekcji
 ```
 
 Kopia wymaga ścieżki poza repozytorium, nie nadpisuje pliku i potrzebuje systemu plików z dowiązaniami twardymi. Jest nieszyfrowana i nie obejmuje tokenu Google, `.env` ani klienta OAuth — po odtworzeniu na innym koncie/komputerze trzeba ponownie autoryzować. `verify:restore` kopiuje zamkniętą kopię do pustego katalogu, sprawdza skróty, oryginały, łańcuchy stron Google i snapshoty oraz przebudowuje projekcję dób, która musi równać się opublikowanej; wypisuje tylko liczby i daty. Kolejną migrację dopisuje się w `apps/server/migrate-canonical.ts`.
@@ -62,8 +64,8 @@ Ręczny odczyt zakresu (bez sekretów w kontekście agenta, wypisuje tylko statu
 Z terminala, przy zatrzymanym serwerze, dla rozpakowanego katalogu (bez wyszukiwania archiwów po dysku):
 
 ```powershell
-pnpm run preview:takeout -- 'C:\sciezka\do\eksportu'
-pnpm run import:takeout -- 'C:\sciezka\do\eksportu'
+pnpm run preview:takeout 'C:\sciezka\do\eksportu'
+pnpm run import:takeout 'C:\sciezka\do\eksportu'
 ```
 
 Import zachowuje bajty wszystkich plików Google Health, a dla sześciu typów MVP także pola CSV (surowy widok, bez kwalifikacji). Ma trwały plan ze skrótami i checkpoint per plik; powtórzenie nie duplikuje treści. Wiersz to pozycja w pliku, nie ID pomiaru. Limity CSV: UTF-8, 200 000 wierszy, 256 kolumn, 65 536 znaków na rekord.

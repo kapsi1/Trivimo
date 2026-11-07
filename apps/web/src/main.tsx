@@ -77,8 +77,12 @@ function Shell() {
   const today = appToday();
   const date = validDay(route.day, today);
   // the Dzień tab reopens on the day last shown there (kept while the app is open), not on today
-  const lastDay = useRef(date);
-  if (route.view === 'dzien') lastDay.current = date;
+  const lastDay = useRef<string>(null as unknown as string);
+  if (lastDay.current === null) { try { lastDay.current = localStorage.getItem('trivimo-day') ?? today; } catch { lastDay.current = today; } }
+  if (route.view === 'dzien' && lastDay.current !== date) {
+    lastDay.current = date;
+    try { localStorage.setItem('trivimo-day', date); } catch { /* per-browser convenience only */ }
+  }
   const dayLink = dayHash(validDay(lastDay.current, today), dayTabs[0]);
   const dayTab = pick(dayTabs, route.tab), srcTab = pick(srcTabs, route.tab), foodTab = pick(foodTabs, route.tab);
   const sync = useJson('/api/google/sync-status', syncStatusSchema, syncTick);

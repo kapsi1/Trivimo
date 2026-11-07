@@ -22,7 +22,7 @@ const sections: { id: Group | 'food' | 'ctx' | 'desc'; label: string; color: str
   { id: 'energy', label: groups.energy.label, color: groups.energy.color, keys: ['total_energy', 'active_energy'] },
   { id: 'food', label: 'Jedzenie · M3', color: groups.food.color, keys: ['food'] },
   { id: 'ctx', label: 'Kontekst', color: 'var(--c-band)', keys: ['band'] },
-  { id: 'desc', label: 'Opis dnia', color: 'var(--line-strong)', keys: ['notes', 'userNote'] },
+  { id: 'desc', label: 'Opis dnia', color: 'var(--line-strong)', keys: ['userNote', 'notes'] },
 ];
 const allColumns = sections.flatMap((section) => section.keys);
 const isSummary = (key: ColumnKey): key is SummaryColumn => key.startsWith('summary:');
@@ -54,9 +54,22 @@ function loadPrefs(): TablePrefs {
     return { range: custom ? 0 : tableRanges.some(([days]) => days === Number(saved.range)) ? Number(saved.range) : 30, from: custom ? saved.from! : '', to: custom ? saved.to! : '', cols: loadColumns(saved.cols) };
   } catch { return fallback; }
 }
-/** "Kolumny" dropdown in the header: one checkbox per column, marked with its group colour. */
+/** Folded sections of the column menu: all folded at first, then the user's choice from localStorage (per-browser convenience; kept in a variable too so remounting the menu on a tab switch is cheap). */
+const foldedKey = 'trivimo-table-folded';
+function loadFolded(): ReadonlySet<string> {
+  const all = sections.map((section) => section.id);
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(foldedKey) ?? 'null');
+    if (Array.isArray(saved)) return new Set(all.filter((id) => saved.includes(id)));
+  } catch { /* unreadable storage: start folded */ }
+  return new Set(all);
+}
+function saveFolded(folded: ReadonlySet<string>) { try { localStorage.setItem(foldedKey, JSON.stringify([...folded])); } catch { /* per-browser convenience only */ } }
+let foldedSections: ReadonlySet<string> = loadFolded();
+/** "Kolumny" dropdown in the header: one checkbox per column; each group has one colour bar, a header and can be folded (the header stays). */
 export function ColumnsMenu({ cols, onChange }: { cols: Columns; onChange: (next: Partial<Columns>) => void }) {
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(foldedSections);
   const wrap = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -68,9 +81,20 @@ export function ColumnsMenu({ cols, onChange }: { cols: Columns; onChange: (next
   const count = allColumns.filter((key) => cols[key]).length;
   return <div className="menuwrap colmenu hide-sm" ref={wrap}>
     <label className="check">Kolumny <button type="button" className="selectbtn" aria-haspopup="true" aria-expanded={open} onClick={() => setOpen(!open)}>{count === allColumns.length ? 'Wszystkie' : `${count} z ${allColumns.length}`}</button></label>
-    {open && <div className="menu" aria-label="Kolumny tabeli">{sections.map((section) => <div key={section.id} className="colgroup" style={{ '--gc': section.color } as React.CSSProperties}>
-      {section.keys.map((key) => <label key={key} className="colitem"><input type="checkbox" checked={cols[key]} onChange={(event) => onChange({ [key]: event.target.checked })} /><i aria-hidden="true" /><span>{columnLabel(key)}</span><span className="faint">{section.label}</span></label>)}
-    </div>)}</div>}
+    {open && <div className="menu" aria-label="Kolumny tabeli">{sections.map((section) => {
+      const folded = collapsed.has(section.id);
+      const on = section.keys.filter((key) => cols[key]).length;
+      return <div key={section.id} className="colgroup" style={{ '--gc': section.color } as React.CSSProperties}>
+        <i className="colbar" aria-hidden="true" />
+        <div className="colbody">
+          <div className="colhead">
+            <input type="checkbox" aria-label={`Wszystkie kolumny: ${section.label}`} checked={on === section.keys.length} ref={(element) => { if (element) element.indeterminate = on > 0 && on < section.keys.length; }} onChange={() => onChange(Object.fromEntries(section.keys.map((key) => [key, on < section.keys.length])))} />
+            <button type="button" aria-expanded={!folded} onClick={() => setCollapsed((current) => { const next = new Set(current); if (!next.delete(section.id)) next.add(section.id); foldedSections = next; saveFolded(next); return next; })}><span className="colchev" aria-hidden="true" />{section.label}<span className="faint">{on}/{section.keys.length}</span></button>
+          </div>
+          {!folded && section.keys.map((key) => <label key={key} className="colitem"><input type="checkbox" checked={cols[key]} onChange={(event) => onChange({ [key]: event.target.checked })} /><span>{columnLabel(key)}</span></label>)}
+        </div>
+      </div>;
+    })}</div>}
   </div>;
 }
 function savePrefs(prefs: TablePrefs) { try { localStorage.setItem(storeKey, JSON.stringify(prefs)); } catch { /* per-browser convenience only */ } }
