@@ -10,7 +10,7 @@ import { summaryRowOf, summaryRows, summaryValue, type SummaryItem } from './sum
 
 /**
  * Columns of the table after the date, in display order. `summary:<type>` columns are the producer's daily summaries
- * ("Inne wskaźniki"): shown for reading only, not metrics (no sorting, no weekly mean, not in trends or comparisons).
+ * ("Wskaźniki dobowe"): shown for reading only, not metrics (no sorting, no weekly mean, not in trends or comparisons).
  */
 export type SummaryColumn = `summary:${SummaryItem['type']}`;
 export type ColumnKey = MetricKey | SummaryColumn | 'food' | 'band' | 'notes' | 'userNote';

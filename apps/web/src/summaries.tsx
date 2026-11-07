@@ -40,7 +40,7 @@ export function summaryValue(row: SummaryRow, item: SummaryItem | undefined): st
 export function DaySummaries({ snapshot }: { snapshot: Snapshot | null }) {
   if (!snapshot) return null;
   const byType = new Map((snapshot.summaries?.items ?? []).map((item) => [item.type, item]));
-  return <section className="panel"><h3>Inne wskaźniki</h3>
+  return <section className="panel"><h3>Wskaźniki dobowe</h3>
     <div className="tw"><table className="simple"><thead><tr><th>Wskaźnik</th><th>Wartość</th><th>Szczegóły</th></tr></thead>
       <tbody>{summaryRows.map((row) => {
         const item = byType.get(row.type), text = summaryValue(row, item);

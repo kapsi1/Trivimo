@@ -444,9 +444,13 @@ td.src-c { color: var(--muted); max-width: 280px; overflow: hidden; text-overflo
 .kcard.tall .chartbtn { flex: 1; display: flex; min-height: 0; }
 .kcard.tall svg { height: 100%; min-height: 60px; }
 .kpair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.kcard.chartonly { flex: 1; height: auto; min-height: var(--tile-h); }
+.kcard.chartonly, .kcard.notecard { height: auto; min-height: calc(var(--tile-h) / 2); flex: 1 1 0; }
+.kcard.notecard textarea { flex: 1; min-height: 0; resize: none; padding: 4px 8px; }
+.kcard.chartonly, .kcard.notecard { padding: 10px 14px; }
+.note-state { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; font-weight: 400; min-width: 0; }
+.note-state .btn { padding: 2px 10px; }
 @media (min-width: 1181px) {
-  .kpis.kpis-3 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
+  .kpis.kpis-3 { grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr); }
   .kpair { grid-template-columns: repeat(2, var(--tile-h)); }
   .kcard.sq { width: var(--tile-h); }
 }
