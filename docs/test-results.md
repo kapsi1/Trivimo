@@ -4,9 +4,9 @@ Najnowsze wpisy na górze. Starsze (2026-11-02 – 2026-11-04): [archiwum](compl
 
 ## 2026-11-07 — wskaźniki „Inne wskaźniki” w Trendach
 
-- Zmiana: sześć kart z wykresem liniowym (dzień/tydzień) po karcie tętna; `summaryTrend` i `summaryMean` w `apps/web/src/derive.ts`, zdjęto placeholder „Tętno spoczynkowe (M2)”. Bez zmian kontraktu i magazynu.
-- `pnpm run typecheck`: bez błędów. W przeglądarce (localhost:5173, dane użytkownika): 13 kart, średnie okresu, VO₂max „Brak wartości w tym okresie”, powiększenie karty temperatury działa, brak błędów w konsoli. `pnpm test`: 192 testy zaliczone.
-- Nie sprawdzono: `pnpm run build` po tej zmianie, agregacji Tygodnie i telefonu, doby z konfliktem w tooltipie wykresu, niezależnego przeliczenia średnich; `summaryTrend` nie ma testu automatycznego (moduł importuje komponenty .tsx).
+- Zmiana: sześć kart z wykresem liniowym (dzień/tydzień) po karcie tętna; `summaryTrend` i `summaryMean` w `apps/web/src/derive.ts`, zdjęto placeholder „Tętno spoczynkowe (M2)”. Bez zmian kontraktu i magazynu. Dalej w tej samej sesji: karta tętna bez średniej (nagłówek, linia, kropki, tooltip), grubsze słupki min–maks. z krańcami równymi min. i maks.; etykiety „… podczas snu” zamiast „… w nocy” i „HRV podczas snu” bez „RMSSD”; tooltipy HRV i VO₂max (pole `hint` w `summaries.tsx`; tekst z ogólnej wiedzy, nie z dokumentacji producenta). Dokumentacja (`design/ui.md`, `data-contracts.md`) dopasowana do tego stanu.
+- `pnpm run typecheck`: bez błędów. W przeglądarce (localhost:5173, dane użytkownika): 13 kart, średnie okresu, VO₂max „Brak wartości w tym okresie”, powiększenie karty temperatury działa, brak błędów w konsoli. `pnpm test`: 192 testy zaliczone, `pnpm run build` zakończony powodzeniem (2026-11-07, po wszystkich zmianach powyżej).
+- Nie sprawdzono: agregacji Tygodnie i telefonu, doby z konfliktem w tooltipie wykresu, niezależnego przeliczenia średnich; `summaryTrend` nie ma testu automatycznego (moduł importuje komponenty .tsx).
 
 ## 2026-11-07 — dystans przy niezgodnych oknach (`google-activity-v2`)
 
