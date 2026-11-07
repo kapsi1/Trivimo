@@ -439,7 +439,14 @@ td.src-c { color: var(--muted); max-width: 280px; overflow: hidden; text-overflo
 .tile { position: relative; display: flex; min-width: 0; min-height: 0; border-radius: var(--r); }
 .tile-body { flex: 1; display: flex; min-width: 0; min-height: 0; }
 .tile-body > * { flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
-.tile .kcard .k-cmp { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.k-seg { display: inline-block; max-width: 100%; }
+.tile.h1 .kcard .k-cmp { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* one row: one line, full text in the tooltip */
+.tile.h1 .kcard .k-cmp .k-seg { display: inline; }
+/* chartless value: at the bottom, size set by fitValues (day-tiles.tsx); unit and gap scale with it */
+.tile .kcard:not(.notecard, .chartonly):not(:has(> .chartbtn)) { padding-bottom: 12px; } /* the same gap under the value at every tile size */
+.tile .kcard:not(:has(> .chartbtn)) > .k-value { margin-top: auto; gap: .15em; }
+.tile .kcard:not(:has(> .chartbtn)) > .k-value small { font-size: .33em; }
+.tile:not(.h1) .kcard:not(:has(> .chartbtn)) > .k-value { margin-block: auto; line-height: 1.3; } /* taller tile: centred between title and details */
 .tile .kcard h3.th { min-width: 0; }
 /* day tiles: titles and values in one colour, whatever the value's state (the state chip and forecast keep theirs) */
 .tile .kcard h3.th, .tile .kcard .k-value, .tile .kcard .k-value.prov, .tile .kcard .k-value.none { color: var(--muted); }

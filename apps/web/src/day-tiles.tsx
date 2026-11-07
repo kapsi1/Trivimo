@@ -79,6 +79,9 @@ export function TileBoard({ layout, onLayout, editing, onDone, render }: { layou
     }
   });
 
+  // a value without a chart sits at the tile's bottom and grows as far as height and width allow (CSS keeps unit and gap in em)
+  useLayoutEffect(() => { if (board.current) fitValues(board.current); });
+
   // Esc cancels a gesture in progress
   useEffect(() => {
     if (!gesture) return;
@@ -194,6 +197,29 @@ export function TileBoard({ layout, onLayout, editing, onDone, render }: { layou
     {editing && layout.tiles.length === 0 && <p className="sub">Brak kafelków. Dodaj je przyciskiem „+ Kafelki”.</p>}
     {catalog && <TileCatalog layout={layout} onLayout={onLayout} onClose={() => setCatalog(false)} />}
   </section>;
+}
+
+/** Font size of each chartless value: the space between the title and the details (or the bottom padding) in height, the inner width in width. A taller tile centres the value in that space. */
+function fitValues(root: HTMLElement) {
+  for (const card of root.querySelectorAll<HTMLElement>('.tile .kcard')) {
+    const value = card.querySelector<HTMLElement>(':scope > .k-value');
+    if (!value) continue;
+    if (card.querySelector(':scope > .chartbtn')) { value.style.fontSize = ''; continue; }
+    value.style.fontSize = '40px';
+    const style = getComputedStyle(card), detail = card.querySelector<HTMLElement>(':scope > .k-cmp');
+    const below = parseFloat(style.paddingBottom) + (detail ? parseFloat(style.rowGap) + detail.offsetHeight : 0);
+    const title = card.querySelector<HTMLElement>(':scope > .k-label')!, top = title.getBoundingClientRect().bottom - card.getBoundingClientRect().top + parseFloat(style.rowGap);
+    const range = document.createRange(); range.selectNodeContents(value);
+    const inner = card.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight), at40 = range.getBoundingClientRect().width || 1;
+    // line box per em: 1.05 in a one-row tile (value at the bottom), 1.3 in taller ones (centred, room for the comma and "g")
+    const lineEm = parseFloat(getComputedStyle(value).lineHeight) / 40;
+    const size = Math.min((card.clientHeight - top - below) / lineEm, (40 * inner) / at40);
+    let px = Math.max(20, Math.floor(size));
+    value.style.fontSize = `${px}px`;
+    // baseline alignment with the small unit can make the box taller than its line height: shrink by what does not fit
+    const spill = value.getBoundingClientRect().height - (card.clientHeight - top - below);
+    if (spill > 0) { px = Math.max(20, Math.floor(px - spill / lineEm) - 1); value.style.fontSize = `${px}px`; }
+  }
 }
 
 /** Every tile the app offers, with its place: a tile, a row of the table (stats only) or hidden. */

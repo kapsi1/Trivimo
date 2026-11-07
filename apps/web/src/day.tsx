@@ -8,7 +8,7 @@ import { Placeholder } from './placeholders.tsx';
 import { Segmented, ZoomDialog, zoomSize } from './zoom.tsx';
 import { z } from 'zod';
 import { Loading } from './logo.tsx';
-import { StatTable, SummaryCard, summaryCells, summaryRowOf, type StatRow } from './summaries.tsx';
+import { DotLine, StatTable, SummaryCard, summaryCells, summaryRowOf, type StatRow } from './summaries.tsx';
 import { loadLayout, saveLayout, TileBoard } from './day-tiles.tsx';
 import { removeFromTable, setPlace, type DayLayout, type Placed, type StatId } from './day-layout.ts';
 import type { SummaryType } from './summary-number.ts';
@@ -100,7 +100,7 @@ function KpiCard({ date, rows, snapshot, metricKey, forecast, onZoom, mini, quie
       const tail = short && narrow === 'stack' ? <span className="k-stack">{short}{unit}</span> : <>{unit}{short || (fc && forecast && <span className="k-fc" title={forecastHint(forecast)}>Prognoza: <b>{nf(fc.total)}</b> kcal</span>)}</>;
       return <span className={`k-value ${value?.value ? value.status === 'provisional' ? 'prov' : '' : 'none'}${short && narrow === 'stack' ? ' stack' : ''}`}>{value?.value ? formatRational(value.value, metric.decimals) : '—'}{tail}</span>;
     })()}
-    {!(bare && (value?.value || metric.group === 'body')) && <span className="k-cmp" title={cmp}>{cmp}</span>}
+    {!(bare && (value?.value || metric.group === 'body')) && <span className="k-cmp" title={cmp}><DotLine text={cmp} /></span>}
     {onZoom && mini !== null && <button type="button" className="chartbtn" aria-label={`Powiększ wykres: ${metric.label}`} onClick={(event) => { event.stopPropagation(); onZoom(); }}>{mini}</button>}</div>;
 }
 

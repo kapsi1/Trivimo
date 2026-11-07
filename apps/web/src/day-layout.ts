@@ -26,6 +26,7 @@ export interface Placed extends Tile { x: number; y: number }
 export interface DayLayout { tiles: Tile[]; table: StatId[]; seen: TileId[] }
 export interface TileSpec { id: TileId; size: TileSize; min: TileSize; max: TileSize; place: 'tile' | 'table' | 'hidden' }
 
+const withDetails = new Set<SummaryType>(['daily-heart-rate-variability', 'daily-oxygen-saturation', 'daily-sleep-temperature-derivations', 'daily-vo2-max']);
 const spec = (id: TileId, size: TileSize, min: TileSize, place: TileSpec['place'] = 'tile', max: TileSize = { w: GRID_COLS, h: 6 }): TileSpec => ({ id, size, min, max, place });
 /** Catalog order; also the order of the table rows. A stat added to the app later appears here and lands in its default place once. */
 export const tileSpecs: TileSpec[] = [
@@ -38,7 +39,8 @@ export const tileSpecs: TileSpec[] = [
   spec('hr', { w: 4, h: 2 }, { w: 3, h: 1 }),
   spec('note', { w: 4, h: 1 }, { w: 3, h: 1 }),
   spec('summaries', { w: 12, h: 3 }, { w: 4, h: 2 }, 'tile', { w: GRID_COLS, h: 8 }),
-  ...summaryTypes.map((type) => spec(`summary:${type}`, { w: 2, h: 1 }, { w: 2, h: 1 }, 'table')),
+  // a summary with a details line needs two rows so the details fit whole
+  ...summaryTypes.map((type) => { const size = withDetails.has(type) ? { w: 2, h: 2 } : { w: 2, h: 1 }; return spec(`summary:${type}`, size, size, 'table'); }),
 ];
 const specs = new Map(tileSpecs.map((item) => [item.id, item]));
 export const specOf = (id: TileId) => specs.get(id)!;

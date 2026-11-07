@@ -44,12 +44,18 @@ export function summaryCells(row: SummaryRow, item: SummaryItem | undefined): { 
   return { value: '—', detail: item?.status === 'absent' ? '—' : 'doba jeszcze nieodczytana' };
 }
 
+/** A details line that breaks only between its " · " parts (a part wraps inside only if it is wider than the tile). */
+export function DotLine({ text }: { text: string }) {
+  const parts = text.split(' · ');
+  return <>{parts.map((part, index) => <span key={index} className="k-seg">{part}{index < parts.length - 1 ? ' ·' : ''}{index < parts.length - 1 ? ' ' : ''}</span>)}</>;
+}
+
 /** One producer summary as its own tile of the day. */
 export function SummaryCard({ row, item }: { row: SummaryRow; item: SummaryItem | undefined }) {
   const text = summaryValue(row, item), { detail } = summaryCells(row, item);
   return <div className="kcard"><span className="k-label"><h3 className="th" title={row.hint}><i style={{ background: 'var(--c-body)' }} />{row.label}</h3></span>
     <span className={`k-value ${text === '—' ? 'none' : ''}`}>{text}{text !== '—' && <small>{row.unit}</small>}</span>
-    {detail !== '—' && <span className="k-cmp" title={detail}>{detail}</span>}</div>;
+    {detail !== '—' && <span className="k-cmp" title={detail}><DotLine text={detail} /></span>}</div>;
 }
 
 export interface StatRow { id: string; label: string; hint?: string; value: string; detail: string }
