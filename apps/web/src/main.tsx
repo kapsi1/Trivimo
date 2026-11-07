@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client';
 import { dayZoneSchema, earliestOf, earliestSchema, metrics, post, syncStatusSchema, useJson } from './api.ts';
 import { Tooltip } from './charts.tsx';
+import { dayLength } from './derive.ts';
 import { DayView, rememberDayScroll, type DayTab } from './day.tsx';
 import { addDays, fmtDL, timeOf, appToday, whenOf , firstDay, setDayZone } from './format.ts';
 import { Loading, LogoMark } from './logo.tsx';
@@ -112,7 +113,7 @@ function Shell() {
     const key = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && addOpen) { setAddOpen(false); return; }
       if (route.view !== 'dzien' || event.ctrlKey || event.metaKey || event.altKey) return;
-      if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable]')) return;
+      if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable], [data-own-keys]')) return;
       if (event.key === 'ArrowLeft') setDay(addDays(date, -1));
       else if (event.key === 'ArrowRight') setDay(addDays(date, 1));
       else if (event.key === 't') setDay(appToday());
@@ -158,7 +159,7 @@ function Shell() {
       <div className="side-foot"><button type="button" className="sync" disabled={refreshBusy} title={`${sync.error ? 'Stan niedostępny' : lastOk ? `Odświeżono ${whenOf(lastOk)}` : 'Brak odczytu'}${syncData?.automatic ? ` · automatycznie co ${syncData.automatic} min` : ''} · kliknij, aby odświeżyć teraz`} onClick={() => void refreshNow()}><span className={`dot ${syncBad || refreshFailed ? 'warn' : ''} ${refreshBusy ? 'busy' : ''}`} /><span>{refreshBusy ? 'odświeżanie…' : refreshFailed ? 'nie udało się odświeżyć' : sync.error ? 'stan niedostępny' : lastOk ? `odświeżono ${whenOf(lastOk).replace(/^dziś /, '')}` : 'brak odczytu'}{!refreshBusy && !refreshFailed && syncBad && syncData?.last ? ' · błąd' : ''}</span></button></div>
     </aside>
     <div className="main">
-      <header className="topbar"><h1>{route.view === 'dzien' ? fmtDL(date) : titles[route.view]}</h1>{route.view === 'trendy' && <button type="button" className="btn ghost" aria-pressed={trendLegend} aria-expanded={trendLegend} onClick={() => setTrendLegend(!trendLegend)}>Legenda</button>}{route.view === 'dzien' && date === appToday() && <span className="live">w toku{lastOk ? ` · stan na ${timeOf(lastOk)}` : ''}</span>}{context}
+      <header className="topbar"><h1>{route.view === 'dzien' ? fmtDL(date) : titles[route.view]}</h1>{route.view === 'trendy' && <button type="button" className="btn ghost" aria-pressed={trendLegend} aria-expanded={trendLegend} onClick={() => setTrendLegend(!trendLegend)}>Legenda</button>}{route.view === 'dzien' && (date === appToday() || dayLength(date) !== 24) && <span className="daytags">{date === appToday() && <span className="tag">w toku{lastOk ? ` · stan na ${timeOf(lastOk)}` : ''}</span>}{dayLength(date) !== 24 && <span className="tag">doba {dayLength(date)} h · zmiana czasu</span>}</span>}{context}
         <div className="menuwrap"><button type="button" className="btn primary" aria-label="Dodaj" title="Dodaj" aria-haspopup="menu" aria-expanded={addOpen} onClick={() => setAddOpen(!addOpen)}>{I.plus}<span className="hide-sm">Dodaj</span></button>
           {addOpen && <div className="menu" role="menu"><button type="button" role="menuitem" onClick={() => { setAddOpen(false); setDay(route.view === 'dzien' ? date : appToday(), 'przebieg'); setTimeout(() => document.getElementById('usernote')?.focus(), 150); }}>Notatka do dnia</button>
             <button type="button" role="menuitem" disabled>Posiłek</button><button type="button" role="menuitem" disabled>Pomiar wagi</button></div>}</div></header>

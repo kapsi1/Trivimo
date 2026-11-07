@@ -2,6 +2,13 @@
 
 Najnowsze wpisy na górze. Starsze (2026-11-02 – 2026-11-04): [archiwum](completed/04-test-results-archive.md). Pakiety instaluje pnpm; skrypty `npm run …` w raporcie działają tak samo jak `pnpm run …`.
 
+## 2026-11-07 — edycja kafelków w widoku Dzień
+
+- Zmiana: „Przebieg doby” jako siatka kafelków z trybem edycji (przeciąganie, zmiana rozmiaru w krokach, katalog, przenoszenie statystyk między kafelkami a tabelą „Wskaźniki dobowe”); `apps/web/src/day-layout.ts` (model), `day-tiles.tsx` (tablica i katalog), zmiany w `day.tsx`, `summaries.tsx`, `style.css`, `main.tsx` (strzałki na kafelku w edycji nie zmieniają dnia). Bez zmian kontraktu i magazynu.
+- `pnpm test`: 199 testów zaliczonych (nowe w `tests/day-layout.test.ts`: układ domyślny na 12 kolumnach odtwarza dawne położenia, 4 kolumny bez nakładania i z zachowaną kolejnością, zamiana tego samego rozmiaru — także niesąsiadujących — nie rusza pozostałych, przeniesienie na kafelek innego rozmiaru, granice rozmiaru, statystyka w jednym miejscu, odczyt uszkodzonego/starego zapisu i nowej statystyki). `pnpm run build` (z `tsc`) bez błędów.
+- Przeglądarka (serwer użytkownika, localhost:5173, emulacja 1500×950 i 400×800): domyślne położenia jak przed zmianą (np. masa 196×96, wykresy 405×206); przeciągnięcie myszą Tętno ↔ Aktywne kalorie zamienia je bez ruchu innych; masa na Spalone kalorie przenosi w kolejności; narożnik notatki 4×1 → 6×2 zapisany; katalog: Tętno spoczynkowe jako kafelek (przed tabelą), masa do tabeli; Shift+strzałka zmienia rozmiar, strzałka przenosi bez zmiany dnia; na 400 px 4 kolumny, bez poziomego przewijania, treść kafelków się nie wylewa (tabela przewija się wewnątrz). Po testach przywrócono układ domyślny. Brak nowych błędów w konsoli (starsze wpisy z przejściowego HMR).
+- Nie sprawdzono: prawdziwego dotyku (uchwyt, długie listy) i czytnika ekranu, Safari/Firefox, wyglądu przy 8 kolumnach, płynności animacji na słabszym sprzęcie; zrzuty ekranu z panelu przeglądarki były przycięte, więc wygląd oceniono częściowo pomiarami DOM.
+
 ## 2026-11-07 — wskaźniki „Inne wskaźniki” w Trendach
 
 - Zmiana: sześć kart z wykresem liniowym (dzień/tydzień) po karcie tętna; `summaryTrend` i `summaryMean` w `apps/web/src/derive.ts`, zdjęto placeholder „Tętno spoczynkowe (M2)”. Bez zmian kontraktu i magazynu. Dalej w tej samej sesji: karta tętna bez średniej (nagłówek, linia, kropki, tooltip), grubsze słupki min–maks. z krańcami równymi min. i maks.; etykiety „… podczas snu” zamiast „… w nocy” i „HRV podczas snu” bez „RMSSD”; tooltipy HRV i VO₂max (pole `hint` w `summaries.tsx`; tekst z ogólnej wiedzy, nie z dokumentacji producenta). Dokumentacja (`design/ui.md`, `data-contracts.md`) dopasowana do tego stanu.

@@ -36,16 +36,29 @@ export function summaryValue(row: SummaryRow, item: SummaryItem | undefined): st
   return low === high ? high ?? '—' : `${low}–${high}`;
 }
 
-/** Producer daily summaries from the day's snapshot. Absent is shown as an empty cell and an unread type as unread, never as zero. */
-export function DaySummaries({ snapshot }: { snapshot: Snapshot | null }) {
-  if (!snapshot) return null;
-  const byType = new Map((snapshot.summaries?.items ?? []).map((item) => [item.type, item]));
-  return <section className="panel"><h3>Wskaźniki dobowe</h3>
-    <div className="tw"><table className="simple"><thead><tr><th>Wskaźnik</th><th>Wartość</th><th>Szczegóły</th></tr></thead>
-      <tbody>{summaryRows.map((row) => {
-        const item = byType.get(row.type), text = summaryValue(row, item);
-        if (item?.status === 'value' && item.values) return <tr key={row.type}><td title={row.hint}>{row.label}</td><td className="mono">{text === '—' ? text : `${text} ${row.unit}`}</td><td>{row.detail(item.values) || '—'}</td></tr>;
-        if (item?.status === 'agreed' || item?.status === 'conflict') return <tr key={row.type}><td title={row.hint}>{row.label}</td><td className="mono">{text === '—' ? text : `${text} ${row.unit}`}</td><td>—</td></tr>;
-        return <tr key={row.type}><td title={row.hint}>{row.label}</td><td>—</td><td>{item?.status === 'absent' ? '—' : 'doba jeszcze nieodczytana'}</td></tr>;
-      })}</tbody></table></div></section>;
+/** Cells of a producer summary for the day. Absent is "—" and an unread type says so, never a zero. */
+export function summaryCells(row: SummaryRow, item: SummaryItem | undefined): { value: string; detail: string } {
+  const text = summaryValue(row, item), value = text === '—' ? text : `${text} ${row.unit}`;
+  if (item?.status === 'value' && item.values) return { value, detail: row.detail(item.values) || '—' };
+  if (item?.status === 'agreed' || item?.status === 'conflict') return { value, detail: '—' };
+  return { value: '—', detail: item?.status === 'absent' ? '—' : 'doba jeszcze nieodczytana' };
+}
+
+/** One producer summary as its own tile of the day. */
+export function SummaryCard({ row, item }: { row: SummaryRow; item: SummaryItem | undefined }) {
+  const text = summaryValue(row, item), { detail } = summaryCells(row, item);
+  return <div className="kcard"><span className="k-label"><h3 className="th" title={row.hint}><i style={{ background: 'var(--c-body)' }} />{row.label}</h3></span>
+    <span className={`k-value ${text === '—' ? 'none' : ''}`}>{text}{text !== '—' && <small>{row.unit}</small>}</span>
+    {detail !== '—' && <span className="k-cmp" title={detail}>{detail}</span>}</div>;
+}
+
+export interface StatRow { id: string; label: string; hint?: string; value: string; detail: string }
+/** "Wskaźniki dobowe": the stats placed in the table (producer summaries and any metric moved here); in edit mode each row can become a tile or be hidden. */
+export function StatTable({ rows, editing, onTile, onHide }: { rows: StatRow[]; editing: boolean; onTile: (id: string) => void; onHide: (id: string) => void }) {
+  return <section className="panel stattable"><h3>Wskaźniki dobowe</h3>
+    {rows.length === 0 ? <p className="sub">Tabela jest pusta. Statystykę przeniesiesz tu w trybie edycji układu (przycisk na kafelku albo „+ Kafelki”).</p>
+      : <div className="tw"><table className="simple"><thead><tr><th>Wskaźnik</th><th>Wartość</th><th>Szczegóły</th>{editing && <th aria-label="Akcje" />}</tr></thead>
+        <tbody>{rows.map((row) => <tr key={row.id}><td title={row.hint}>{row.label}</td><td className="mono">{row.value}</td><td>{row.detail}</td>
+          {editing && <td className="rowtools"><button type="button" className="btn" onClick={() => onTile(row.id)} title="Pokaż jako osobny kafelek">Kafelek</button><button type="button" className="iconbtn" onClick={() => onHide(row.id)} aria-label={`Ukryj: ${row.label}`} title="Ukryj"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button></td>}</tr>)}</tbody></table></div>}
+  </section>;
 }

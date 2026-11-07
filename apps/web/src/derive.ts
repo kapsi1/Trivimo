@@ -63,6 +63,9 @@ export function dayTotal(snapshot: Snapshot | null | undefined, key: HourKey, ho
 
 export interface DayHours { hours: HourPoint[]; windows: SlotPoint[]; hr: HrWindow[]; slots: number; dayStart: number }
 const seriesValue = (value: string | null, unit: string) => value === null ? null : unit === 'mm' ? Number(value) / 1e6 : Number(value);
+/** Length of a day in the day zone in hours: 24, or 23 / 25 across a DST change. */
+export function dayLength(date: string): number { const bounds = dayBounds(date, getDayZone()); return Math.round((Date.parse(bounds.end) - Date.parse(bounds.start)) / 3600000); }
+
 /**
  * Hours of a day in the day zone (23 or 25 across DST) from the saved ten-minute series. For the day in progress, hours after the
  * last read are future; the forecast fills them window by window (own derivation, never a producer value).

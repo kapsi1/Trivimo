@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
-import { dayResponseSchema, forecastSchema, groups, heartRateDaySchema, heartRateRangeSchema, metricOf, metrics, post, rangeSchema, seriesSchema, useJson, userNoteSchema, type DayRow, type Forecast, type MetricKey, type Snapshot, type SyncStatus } from './api.ts';
+import { dayResponseSchema, forecastSchema, groups, heartRateDaySchema, heartRateRangeSchema, metricOf, post, rangeSchema, seriesSchema, useJson, userNoteSchema, type DayRow, type Forecast, type MetricKey, type MetricValue, type Snapshot, type SyncStatus } from './api.ts';
 import { aggregateSpans, DayMini, EnergyLegend, HourChart, HR_LEGEND, HrDayChart, HrDayMini, type HourKey } from './charts.tsx';
 import { dayHours, dayTotal, forecastHint, hrOf, lastMeasured, meanValid, valueOf, type DayHours } from './derive.ts';
 import { StatusChip, hourMetricLabel } from './details.tsx';
@@ -8,7 +8,10 @@ import { Placeholder } from './placeholders.tsx';
 import { Segmented, ZoomDialog, zoomSize } from './zoom.tsx';
 import { z } from 'zod';
 import { Loading } from './logo.tsx';
-import { DaySummaries } from './summaries.tsx';
+import { StatTable, SummaryCard, summaryCells, summaryRowOf, type StatRow } from './summaries.tsx';
+import { loadLayout, saveLayout, TileBoard } from './day-tiles.tsx';
+import { removeFromTable, setPlace, type DayLayout, type Placed, type StatId } from './day-layout.ts';
+import type { SummaryType } from './summary-number.ts';
 
 
 export type DayTab = 'przebieg' | 'godzinowe' | 'jedzenie' | 'treningi';
@@ -30,6 +33,7 @@ export function DayView({ date, tab, onTab, sync, onDirty }: { date: string; tab
   const [zoom, setZoom] = useState<Zoom | null>(null);
   const [showHr, setShowHr] = useState(true); // heart-rate line in the zoomed hourly chart; kept between zooms
   const [refresh, setRefresh] = useState(0);
+  const [editing, setEditing] = useState(false); // tile layout edit mode of "Przebieg doby"
   const day = useJson(`/api/day?date=${date}`, dayResponseSchema, refresh);
   // the 90 days up to the shown day come from a wider window that stays while moving day by day (no request, no flicker)
   const [anchor, setAnchor] = useState(() => windowEnd(date, today));
@@ -52,12 +56,11 @@ export function DayView({ date, tab, onTab, sync, onDirty }: { date: string; tab
   const fc = forecast.data ?? null;
   const hours = dayHours(date, { total: total.data, active: active.data, steps: steps.data, distance: distance.data }, heart.data ?? undefined, fc ?? undefined, isToday);
   const hrToday = hrOf((hrRange.data ?? []).find((item) => item.date === date));
-  const len = Math.round(hours.slots / 6);
   const asOf = sync?.last?.result === 'ok' ? sync.last.at : sync?.kinds.map((kind) => kind.lastReadAt).filter((at): at is string => !!at).sort().at(-1);
   const tabs: [DayTab, string, boolean?][] = [['przebieg', 'Przebieg doby'], ['godzinowe', 'Dane godzinowe'], ['jedzenie', 'Jedzenie', true], ['treningi', 'Treningi', true]];
   // the date itself is the page title (topbar); here only what qualifies the day
-  const head = <>{len !== 24 && <div className="daytitle">{len !== 24 && <span className="tag">doba {len} h · zmiana czasu</span>}</div>}
-    <div className="tabs" role="tablist" aria-label="Widok dnia">{tabs.map(([key, label, soon]) => <button type="button" role="tab" key={key} className={soon ? 'is-soon' : undefined} aria-selected={tab === key} onClick={() => onTab(key)}>{label}</button>)}</div></>;
+  const head = <><div className="tabrow"><div className="tabs" role="tablist" aria-label="Widok dnia">{tabs.map(([key, label, soon]) => <button type="button" role="tab" key={key} className={soon ? 'is-soon' : undefined} aria-selected={tab === key} onClick={() => onTab(key)}>{label}</button>)}</div>
+      {tab === 'przebieg' && <button type="button" className="btn ghost tabedit" aria-pressed={editing} onClick={() => setEditing(!editing)} title="Układ, rozmiar i wybór kafelków"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z" /></svg><span className="hide-sm">{editing ? 'Edycja układu' : 'Edytuj układ'}</span></button>}</div></>;
   const legacy = snapshot?.energy?.model === 'legacy';
   const loading = (read && total.data === undefined && !total.error) || !day.data;
   const settled = (!!day.data && !!range.data && !loading) || day.error || range.error;
@@ -68,7 +71,7 @@ export function DayView({ date, tab, onTab, sync, onDirty }: { date: string; tab
   if (day.data.state === 'not_ready') return <>{head}<p>Wyniki dzienne nie są jeszcze przygotowane. Oryginalne dane znajdziesz w „Źródła danych”.</p>{zoomed}</>;
 
   let body;
-  if (tab === 'przebieg') body = <><DayFlow date={date} rows={rows} hours={hours} snapshot={snapshot} legacy={legacy} seriesRead={!!total.data} loading={loading} forecast={fc} onZoom={setZoom} notesAvailable={day.data.notesAvailable} userNote={day.data.userNote} onDirty={onDirty} /><DaySummaries snapshot={snapshot} /></>;
+  if (tab === 'przebieg') body = <><DayFlow date={date} rows={rows} hours={hours} snapshot={snapshot} legacy={legacy} seriesRead={!!total.data} loading={loading} forecast={fc} onZoom={setZoom} notesAvailable={day.data.notesAvailable} userNote={day.data.userNote} onDirty={onDirty} editing={editing} onEditing={setEditing} /></>;
   else if (tab === 'godzinowe') body = <DayHoursTable hours={hours} />;
   else if (tab === 'jedzenie') body = <Placeholder title="Dziennik jedzenia dnia" stage="M3" text="Tu pojawią się posiłki tego dnia, ich suma i pokrycie składników, a obok bilans z wydatkiem energii. Szczegóły zaprojektujemy razem z etapem M3." list={['Lista posiłków chronologicznie', 'Suma kcal i makr z oznaczeniem wpisów niepełnych', 'Bilans tylko dla dni z porównywalnym wydatkiem']} />;
   else body = <Placeholder title="Treningi dnia" stage="M2" text="Sesje z czasem, tętnem, strefami i mapą trasy pojawią się w etapie M2. Kolumna „Treningi” w tabeli będzie ich zwięzłą projekcją." list={['Lista sesji dnia, np. „2 × spacer, 1 × rower”', 'Czas w strefach tętna i AZM osobno', 'Mapa trasy z TCX']} />;
@@ -76,24 +79,29 @@ export function DayView({ date, tab, onTab, sync, onDirty }: { date: string; tab
   return <>{head}{body}{zoomed}</>;
 }
 
+/** Comparison line of a metric: the mean of the 7 days before the shown day, or for body metrics without a value the last measurement (never carried over). */
+function metricCompare(date: string, rows: DayRow[], metricKey: MetricKey, value: MetricValue | undefined): string {
+  const metric = metricOf(metricKey);
+  if (metric.group === 'body' && !value?.value) { const last = lastMeasured(rows, metricKey, addDays(date, -1)); return last ? `ostatni pomiar ${nf(last.value, metric.decimals)} ${metric.unit} · ${fmtD(last.date)}` : 'brak pomiaru w ostatnich 90 dniach'; }
+  const avg = meanValid(rows, metricKey, addDays(date, -7), addDays(date, -1));
+  const week = `${fmtD(addDays(date, -7))}–${fmtD(addDays(date, -1))}`; // the 7 days before the shown day, without it
+  return avg.mean !== null ? `śr. ${week}: ${nf(avg.mean, metric.decimals)} · ${avg.n} z 7 dób` : metric.group === 'body' ? 'brak pomiarów w 7 dniach' : 'brak potwierdzonych dób w 7 dniach';
+}
+
 /** `mini` replaces the 14-day sparkline (the day view puts today's ten-minute chart there; null: no chart); without `onZoom` the card is not clickable. */
 function KpiCard({ date, rows, snapshot, metricKey, forecast, onZoom, mini, quiet, bare, className }: { date: string; rows: DayRow[]; snapshot: Snapshot | null; metricKey: MetricKey; forecast: Forecast; onZoom?: () => void; mini?: ReactNode; quiet?: boolean; bare?: boolean; className?: string }) {
   const metric = metricOf(metricKey), value = snapshot?.metrics[metricKey];
-  const avg = meanValid(rows, metricKey, addDays(date, -7), addDays(date, -1));
-  const week = `${fmtD(addDays(date, -7))}–${fmtD(addDays(date, -1))}`; // the 7 days before the shown day, without it
-  let cmp: string;
-  if (metric.group === 'body' && !value?.value) { const last = lastMeasured(rows, metricKey, addDays(date, -1)); cmp = last ? `ostatni pomiar ${nf(last.value, metric.decimals)} ${metric.unit} · ${fmtD(last.date)}` : 'brak pomiaru w ostatnich 90 dniach'; }
-  else cmp = avg.mean !== null ? `śr. ${week}: ${nf(avg.mean, metric.decimals)} · ${avg.n} z 7 dób` : metric.group === 'body' ? 'brak pomiarów w 7 dniach' : 'brak potwierdzonych dób w 7 dniach';
+  const cmp = metricCompare(date, rows, metricKey, value);
   const fc = metricKey === 'total_energy' && forecast && value?.value ? { now: valueOf(snapshot, metricKey) ?? 0, total: forecast.forecastKcal } : null;
   return <div className={`kcard ${className ?? ''}`} data-zoom={onZoom ? '' : undefined} onClick={onZoom}>
     <span className="k-label"><h3 className="th"><i style={{ background: groups[metric.group].color }} />{metric.label}</h3><span className="k-right">{!(quiet && value?.status === 'provisional') && <StatusChip value={value} compact />}</span></span>
     <span className={`k-value ${value?.value ? value.status === 'provisional' ? 'prov' : '' : 'none'}`}>{value?.value ? formatRational(value.value, metric.decimals) : '—'}{value?.value && metric.unit ? <small>{metric.unit}</small> : null}{fc && <span className="k-fc" title={forecast ? forecastHint(forecast) : undefined}>Prognoza: <b>{nf(fc.total)}</b> kcal</span>}</span>
-    {!(bare && value?.value) && <span className="k-cmp">{cmp}</span>}
+    {!(bare && value?.value) && <span className="k-cmp" title={cmp}>{cmp}</span>}
     {onZoom && mini !== null && <button type="button" className="chartbtn" aria-label={`Powiększ wykres: ${metric.label}`} onClick={(event) => { event.stopPropagation(); onZoom(); }}>{mini}</button>}</div>;
 }
 
 function HrCard({ onZoom, chart }: { onZoom: () => void; chart: ReactNode }) {
-  return <div className="kcard tall chartonly" data-zoom onClick={onZoom}><span className="k-label"><h3 className="th"><i style={{ background: 'var(--c-band)' }} />Tętno</h3></span><button type="button" className="chartbtn" aria-label="Powiększ wykres: Tętno" onClick={(event) => { event.stopPropagation(); onZoom(); }}>{chart}</button></div>;
+  return <div className="kcard chartonly" data-zoom onClick={onZoom}><span className="k-label"><h3 className="th"><i style={{ background: 'var(--c-band)' }} />Tętno</h3></span><button type="button" className="chartbtn" aria-label="Powiększ wykres: Tętno" onClick={(event) => { event.stopPropagation(); onZoom(); }}>{chart}</button></div>;
 }
 
 function UserNoteEditor({ date, initial, onDirty }: { date: string; initial: z.infer<typeof userNoteSchema> | null; onDirty: (dirty: boolean) => void }) {
@@ -122,25 +130,30 @@ function UserNoteEditor({ date, initial, onDirty }: { date: string; initial: z.i
 
 const hourOptions: [HourKey, string][] = [['active', 'Aktywne kcal'], ['total', 'Spalone kcal'], ['steps', 'Kroki'], ['distance', 'Dystans']];
 const hourKeyOf: Partial<Record<MetricKey, HourKey>> = { total_energy: 'total', active_energy: 'active', steps: 'steps', distance: 'distance' };
-/** "Przebieg doby": the cards of the summary, but each chart is today's ten-minute course instead of the last 14 days. */
-function DayFlow({ date, rows, hours, snapshot, legacy, seriesRead, loading, forecast, onZoom, notesAvailable, userNote, onDirty }: { date: string; rows: DayRow[]; hours: DayHours; snapshot: Snapshot | null; legacy: boolean; seriesRead: boolean; loading: boolean; forecast: Forecast; onZoom: (zoom: Zoom) => void; notesAvailable: boolean; userNote: z.infer<typeof userNoteSchema> | null; onDirty: (dirty: boolean) => void }) {
+/** "Przebieg doby": the day's tiles in the user's layout; each chart is today's ten-minute course. A one-row tile shows the value without its chart. */
+function DayFlow({ date, rows, hours, snapshot, legacy, seriesRead, loading, forecast, onZoom, notesAvailable, userNote, onDirty, editing, onEditing }: { date: string; rows: DayRow[]; hours: DayHours; snapshot: Snapshot | null; legacy: boolean; seriesRead: boolean; loading: boolean; forecast: Forecast; onZoom: (zoom: Zoom) => void; notesAvailable: boolean; userNote: z.infer<typeof userNoteSchema> | null; onDirty: (dirty: boolean) => void; editing: boolean; onEditing: (editing: boolean) => void }) {
+  const [layout, setLayout] = useState(loadLayout);
+  const change = (next: DayLayout) => { setLayout(next); saveLayout(next); };
   // no saved read (or the old calorie model with a few long intervals) has no honest ten-minute course: an empty chart, never zeros
   const empty = (key: HourKey) => !seriesRead || (legacy && (key === 'total' || key === 'active'));
-  const card = (key: MetricKey) => {
-    const hk = hourKeyOf[key];
-    return <KpiCard key={key} date={date} rows={rows} snapshot={snapshot} metricKey={key} forecast={forecast} quiet bare className={hk ? 'tall' : 'sq'}
-      onZoom={hk ? () => onZoom({ type: 'hour', key: hk }) : undefined}
-      mini={hk ? <DayMini hours={loading || empty(hk) ? [] : hours.hours} windows={hours.windows} metric={hk} /> : undefined} />;
+  const summaryOf = (type: SummaryType) => snapshot?.summaries?.items.find((item) => item.type === type);
+  const statRow = (id: StatId): StatRow => {
+    if (id.startsWith('summary:')) { const row = summaryRowOf(id.slice(8) as SummaryType); return { id, label: row.label, hint: row.hint, ...summaryCells(row, summaryOf(row.type)) }; }
+    const key = id.slice(7) as MetricKey, metric = metricOf(key), value = snapshot?.metrics[key];
+    return { id, label: metric.label, value: value?.value ? `${formatRational(value.value, metric.decimals)}${metric.unit ? ` ${metric.unit}` : ''}` : '—', // no 7-day mean in the table; a body metric without a value still names its last measurement (never carried over)
+      detail: metric.group === 'body' && !value?.value ? metricCompare(date, rows, key, value) : '—' };
   };
-  return <>
-    <div className="kpis kpis-3">
-      {(['body', 'energy', 'activity'] as const).map((group) => <section key={group} className="kgroup">
-        {group === 'body' ? <div className="kpair">{metrics.filter((metric) => metric.group === group).map((metric) => card(metric.key))}</div> : metrics.filter((metric) => metric.group === group).map((metric) => card(metric.key))}
-        {group === 'body' && <HrCard onZoom={() => onZoom({ type: 'hrday' })} chart={<HrDayMini windows={hours.hr} hours={hours.hours.length} />} />}
-        {group === 'body' && notesAvailable && <div className="kcard tall notecard"><UserNoteEditor key={date} date={date} initial={userNote} onDirty={onDirty} /></div>}
-      </section>)}
-    </div>
-  </>;
+  const render = ({ id, h }: Placed) => {
+    if (id === 'hr') return <HrCard onZoom={() => onZoom({ type: 'hrday' })} chart={<HrDayMini windows={hours.hr} hours={hours.hours.length} />} />;
+    if (id === 'note') return <div className="kcard notecard">{notesAvailable ? <UserNoteEditor key={date} date={date} initial={userNote} onDirty={onDirty} /> : <><span className="k-label"><h3 className="th">Moja notatka</h3></span><p className="sub">Notatki wymagają nowszej wersji bazy.</p></>}</div>;
+    if (id === 'summaries') return <StatTable rows={layout.table.map(statRow)} editing={editing} onTile={(stat) => change(setPlace(layout, stat as StatId, 'tile'))} onHide={(stat) => change(removeFromTable(layout, stat as StatId))} />;
+    if (id.startsWith('summary:')) { const row = summaryRowOf(id.slice(8) as SummaryType); return <SummaryCard row={row} item={summaryOf(row.type)} />; }
+    const key = id.slice(7) as MetricKey, hk = hourKeyOf[key], chart = !!hk && h >= 2;
+    return <KpiCard date={date} rows={rows} snapshot={snapshot} metricKey={key} forecast={forecast} quiet bare className={chart ? 'tall' : ''}
+      onZoom={hk ? () => onZoom({ type: 'hour', key: hk }) : undefined}
+      mini={hk && chart ? <DayMini hours={loading || empty(hk) ? [] : hours.hours} windows={hours.windows} metric={hk} /> : null} />;
+  };
+  return <TileBoard layout={layout} onLayout={change} editing={editing} onDone={() => onEditing(false)} render={render} />;
 }
 
 /** "Dane godzinowe": the hours of the day; values are the ten-minute windows summed per hour, heart rate is the min–max over the hour's windows. */
