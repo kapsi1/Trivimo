@@ -13,7 +13,7 @@ import { Loading } from './logo.tsx';
 const isSummaryType = (key: string): key is SummaryType => key in summaryMainKey;
 export const aggregations: ['day' | 'week', string][] = [['day', 'Dni'], ['week', 'Tygodnie']];
 /** Trends of the six M1 metrics and heart rate, from the same day snapshots as the table, with events on the axis. */
-export function TrendsView({ earliest, prefs, agg }: { earliest: Loaded<Earliest>; prefs: RangePrefs; agg: 'day' | 'week' }) {
+export function TrendsView({ earliest, prefs, agg, legend }: { earliest: Loaded<Earliest>; prefs: RangePrefs; agg: 'day' | 'week'; legend: boolean }) {
   const [zoom, setZoom] = useState<MetricKey | SummaryType | 'hr' | null>(null);
   // "Od początku": on the dashboard the first day of any chart, in a chart's zoom the first day of that chart only; producer
   // summaries have no earliest day of their own, so in their zoom the scope of all charts applies
@@ -42,7 +42,7 @@ export function TrendsView({ earliest, prefs, agg }: { earliest: Loaded<Earliest
     return <TrendChart points={summaryTrend(rows, type, agg)} form="line" color={groups.body.color} decimals={row.digits} label={row.label} events={events('hr')} agg={agg} width={size?.W} height={size?.H} />; };
   const { W, H } = zoomSize();
   return <>
-    <div className="events"><span className="event"><i className="ev-legacy" />starszy model kalorii</span><span className="event"><i className="ev-hatch" />okres nieporównywalny</span>{fc && <span className="event" title={forecast.data ? forecastHint(forecast.data) : undefined}><i className="ev-fc" />prognoza do 24:00</span>}{agg === 'week' && <span className="event">Słupek bledszy = mniej dób z wartością w tygodniu</span>}</div>
+    {legend && <div className="events"><span className="event"><i className="ev-legacy" />starszy model kalorii</span><span className="event"><i className="ev-hatch" />okres nieporównywalny</span>{fc && <span className="event" title={forecast.data ? forecastHint(forecast.data) : undefined}><i className="ev-fc" />prognoza do 24:00</span>}{agg === 'week' && <span className="event">Słupek bledszy = mniej dób z wartością w tygodniu</span>}</div>}
     <div className="tgrid">
       {ordered.map((metric) => { const body = metric.group === 'body', a = meanValid(rows, metric.key, from, to, body);
         return <section key={metric.key} className="panel tcard"><header><h3 className="th"><i style={{ background: groups[metric.group].color }} />{metric.label}</h3>

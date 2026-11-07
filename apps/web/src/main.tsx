@@ -62,6 +62,7 @@ function App() {
 function Shell() {
   const [route, setRoute] = useState(() => parseHash(location.hash));
   const [trendAgg, setTrendAgg] = useState<'day' | 'week'>('day');
+  const [trendLegend, setTrendLegend] = useState(false);
   // one period shared by the table and the trends
   const [prefs, setPrefs] = useTablePrefs();
   const trendPrefs = prefs, setTrendPrefs = setPrefs;
@@ -141,7 +142,7 @@ function Shell() {
   let content: ReactNode;
   if (route.view === 'dzien') content = <DayView date={date} tab={dayTab} onTab={(tab) => setDay(date, tab)} sync={syncData} onDirty={(value) => { dirty.current = value; }} />;
   else if (route.view === 'tabela') content = <TableView {...tableBounds(prefs, tableEarliest)} cols={prefs.cols} onOpenDay={(next) => openDay(next)} onOpenMetric={(next) => openDay(next)} />;
-  else if (route.view === 'trendy') content = <TrendsView earliest={earliestAll} prefs={trendPrefs} agg={trendAgg} />;
+  else if (route.view === 'trendy') content = <TrendsView earliest={earliestAll} prefs={trendPrefs} agg={trendAgg} legend={trendLegend} />;
   else if (route.view === 'treningi') content = <WorkoutsView />;
   else if (route.view === 'jedzenie') content = <FoodView tab={foodTab} onTab={(tab) => go(tabHash('jedzenie', tab, foodTabs))} />;
   else if (route.view === 'zrodla') content = <SourcesView tab={srcTab} onTab={(tab) => go(tabHash('zrodla', tab, srcTabs))} sync={syncData} onSyncChanged={() => setSyncTick((value) => value + 1)} />;
@@ -157,7 +158,7 @@ function Shell() {
       <div className="side-foot"><button type="button" className="sync" disabled={refreshBusy} title={`${sync.error ? 'Stan niedostępny' : lastOk ? `Odświeżono ${whenOf(lastOk)}` : 'Brak odczytu'}${syncData?.automatic ? ` · automatycznie co ${syncData.automatic} min` : ''} · kliknij, aby odświeżyć teraz`} onClick={() => void refreshNow()}><span className={`dot ${syncBad || refreshFailed ? 'warn' : ''} ${refreshBusy ? 'busy' : ''}`} /><span>{refreshBusy ? 'odświeżanie…' : refreshFailed ? 'nie udało się odświeżyć' : sync.error ? 'stan niedostępny' : lastOk ? `odświeżono ${whenOf(lastOk).replace(/^dziś /, '')}` : 'brak odczytu'}{!refreshBusy && !refreshFailed && syncBad && syncData?.last ? ' · błąd' : ''}</span></button></div>
     </aside>
     <div className="main">
-      <header className="topbar"><h1>{route.view === 'dzien' ? fmtDL(date) : titles[route.view]}</h1>{route.view === 'dzien' && date === appToday() && <span className="live">w toku{lastOk ? ` · stan na ${timeOf(lastOk)}` : ''}</span>}{context}
+      <header className="topbar"><h1>{route.view === 'dzien' ? fmtDL(date) : titles[route.view]}</h1>{route.view === 'trendy' && <button type="button" className="btn ghost" aria-pressed={trendLegend} aria-expanded={trendLegend} onClick={() => setTrendLegend(!trendLegend)}>Legenda</button>}{route.view === 'dzien' && date === appToday() && <span className="live">w toku{lastOk ? ` · stan na ${timeOf(lastOk)}` : ''}</span>}{context}
         <div className="menuwrap"><button type="button" className="btn primary" aria-label="Dodaj" title="Dodaj" aria-haspopup="menu" aria-expanded={addOpen} onClick={() => setAddOpen(!addOpen)}>{I.plus}<span className="hide-sm">Dodaj</span></button>
           {addOpen && <div className="menu" role="menu"><button type="button" role="menuitem" onClick={() => { setAddOpen(false); setDay(route.view === 'dzien' ? date : appToday(), 'przebieg'); setTimeout(() => document.getElementById('usernote')?.focus(), 150); }}>Notatka do dnia</button>
             <button type="button" role="menuitem" disabled>Posiłek</button><button type="button" role="menuitem" disabled>Pomiar wagi</button></div>}</div></header>
