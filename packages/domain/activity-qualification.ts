@@ -9,6 +9,8 @@ export interface ActivityEvidence {
   /** `read_before_end`: the day has ended, but its newest read was made while it was still in progress. */
   day: 'complete' | 'ongoing' | 'read_before_end';
   zeroConfirmed: boolean;
+  /** google-activity-v2: the day boundary is confirmed by the steps of the same day, but this metric's own windows do not sum to its daily value. */
+  windowsDisagree?: boolean;
 }
 
 export type ActivityAssessment =
@@ -30,5 +32,5 @@ export function assessActivity(evidence: ActivityEvidence): ActivityAssessment {
   if (evidence.day === 'ongoing') return { status: 'provisional', value: evidence.value, reason: 'ongoing_day' };
   if (evidence.day === 'read_before_end') return { status: 'provisional', value: evidence.value, reason: 'read_before_day_end' };
   if (evidence.coverage !== 'confirmed') return { status: 'incomplete', value: null, reason: evidence.coverage === 'partial' ? 'partial_coverage' : 'unknown_coverage' };
-  return { status: 'valid', value: evidence.value, reason: null };
+  return { status: 'valid', value: evidence.value, reason: evidence.windowsDisagree ? 'windows_mismatch' : null };
 }

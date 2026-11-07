@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
 import { dayResponseSchema, forecastSchema, groups, heartRateDaySchema, heartRateRangeSchema, metricOf, metrics, post, rangeSchema, seriesSchema, useJson, userNoteSchema, type DayRow, type Forecast, type MetricKey, type Snapshot, type SyncStatus } from './api.ts';
-import { DayMini, EnergyLegend, HourChart, HR_LEGEND, HrDayChart, HrDayMini, type HourKey } from './charts.tsx';
+import { aggregateSpans, DayMini, EnergyLegend, HourChart, HR_LEGEND, HrDayChart, HrDayMini, type HourKey } from './charts.tsx';
 import { dayHours, dayTotal, forecastHint, hrOf, lastMeasured, meanValid, valueOf, type DayHours } from './derive.ts';
 import { StatusChip, hourMetricLabel } from './details.tsx';
 import { addDays, fmtD, formatRational, nf, appToday, whenOf, firstDay } from './format.ts';
@@ -130,7 +130,7 @@ function DayFlow({ date, rows, hours, snapshot, legacy, seriesRead, loading, for
     const hk = hourKeyOf[key];
     return <KpiCard key={key} date={date} rows={rows} snapshot={snapshot} metricKey={key} forecast={forecast} quiet bare className={hk ? 'tall' : 'sq'}
       onZoom={hk ? () => onZoom({ type: 'hour', key: hk }) : undefined}
-      mini={hk ? <DayMini hours={loading || empty(hk) ? [] : hours.hours} metric={hk} /> : undefined} />;
+      mini={hk ? <DayMini hours={loading || empty(hk) ? [] : hours.hours} windows={hours.windows} metric={hk} /> : undefined} />;
   };
   return <>
     <div className="kpis kpis-3">
@@ -158,7 +158,7 @@ function DayZoom({ zoom, setZoom, showHr, onShowHr, snapshot, hours, legacy, ser
     const title = <>{hourMetricLabel(zoom.key)}{total ? `: ${total.text}${total.computed ? ' (suma godzin)' : ''}` : ''}{zoom.key === 'total' && forecast && <> · <span title={forecastHint(forecast)} style={{ cursor: 'help' }}>prognoza {nf(forecast.forecastKcal)} kcal</span></>}</>;
     return <ZoomDialog title={title} onClose={close}
       controls={<><Segmented label="Metryka" items={hourOptions} value={zoom.key} onChange={(key) => setZoom({ ...zoom, key })} />{hours.hr.length > 0 && <div className="seg" role="group" aria-label="Wykres tętna"><button type="button" aria-pressed={showHr} onClick={() => onShowHr(!showHr)}>Tętno</button></div>}</>}
-      legend={none ? null : <>{zoom.key === 'total' && <EnergyLegend forecast={forecast ? forecastHint(forecast) : null} />}{showHr && hours.hr.length > 0 && <span><i style={{ background: 'var(--c-band)' }} />tętno, prawa oś (bpm)</span>}</>}>
+      legend={none ? null : <>{zoom.key === 'total' && <EnergyLegend forecast={forecast ? forecastHint(forecast) : null} aggregate={aggregateSpans(hours.windows).size > 0} />}{showHr && hours.hr.length > 0 && <span><i style={{ background: 'var(--c-band)' }} />tętno, prawa oś (bpm)</span>}</>}>
       {loading ? <Loading /> : none ? <p className="sub">Brak rozkładu godzinowego dla tej doby.</p> : <HourChart windows={hours.windows} hours={hours.hours} metric={zoom.key} height={H} width={W} hr={showHr ? hours.hr : undefined} />}</ZoomDialog>;
   }
   return <ZoomDialog title={`Tętno${hrToday ? `: śr. ${nf(hrToday.avg)} · ${nf(hrToday.min)}–${nf(hrToday.max)} bpm` : ''}`} legend={HR_LEGEND} onClose={close}>

@@ -10,7 +10,7 @@ Modułowy monolit TypeScript: React + Vite w przeglądarce, lokalny serwer Node 
 | --- | --- |
 | `apps/web` | Widoki Dzień, Tabela dni, Trendy, Źródła danych, Ustawienia; placeholdery treningów i jedzenia ([projekt UI](design/ui.md)) |
 | `apps/server` | REST, sesja lokalna, OAuth Google, `GoogleSyncService`, importy Takeout/CSV, skrypty CLI (import, weryfikacja, kopia, migracja, `google:read`) |
-| `packages/domain` | Doba w strefie z ustawienia (`day-zone-v1`), kwalifikacja (`google-energy-v1`, `google-activity-v1`, `google-body-v1`), repliki pomiarów, uwagi, jednostki, prognoza; bez UI/HTTP |
+| `packages/domain` | Doba w strefie z ustawienia (`day-zone-v1`), kwalifikacja (`google-energy-v1`, `google-activity-v2`, `google-body-v1`), repliki pomiarów, uwagi, jednostki, prognoza; bez UI/HTTP |
 | `packages/contracts` | Schematy Zod wejść/wyjść (dzień, snapshot, rekordy źródłowe, import CSV) |
 | `packages/storage` | Migracje, zadania i strony odczytów Google, snapshoty dób, notatki, importy CSV, kopia i weryfikacja |
 | `packages/adapters` | Google Health (plan porcji, rollUp/dailyRollUp/list, limity 429), Takeout (katalog i ZIP), CSV z mapowaniem |

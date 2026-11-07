@@ -143,7 +143,7 @@ test('kroki i dystans: wartość producenta dla doby warszawskiej, gdy okna sumu
     assert.deepEqual(matched.metrics.steps, { status: 'valid', value: { numerator: '1200', denominator: '1' } });
     assert.deepEqual(matched.metrics.distance, { status: 'valid', value: { numerator: '845123', denominator: '1000000' } });
     // calories were not read for this day: no data and no note
-    assert.deepEqual([matched.activity, matched.issues, matched.metrics.total_energy.status], [{ rule: 'google-activity-v1', stepsMatchWindows: true, distanceMatchWindows: true }, [], 'missing']);
+    assert.deepEqual([matched.activity, matched.issues, matched.metrics.total_energy.status], [{ rule: 'google-activity-v2', stepsMatchWindows: true, distanceMatchWindows: true }, [], 'missing']);
     const unmatched = days.get('2026-06-11')!;
     assert.deepEqual([unmatched.metrics.steps.status, unmatched.metrics.distance.status, unmatched.activity?.stepsMatchWindows], ['incomparable', 'valid', false]);
     assert.ok(unmatched.issues.some((issue) => issue.metric === 'steps' && issue.code === 'incomparable_day'));
@@ -151,6 +151,27 @@ test('kroki i dystans: wartość producenta dla doby warszawskiej, gdy okna sumu
     // the current day: provisional, no note, the window relation assumed
     const ongoing = projectGoogleDays(db, '2026-06-11', '2026-06-11', Date.parse('2026-06-11T12:00:00Z'))[0]!;
     assert.deepEqual([ongoing.metrics.steps.status, ongoing.issues.filter((issue) => issue.metric === 'steps')], ['provisional', []]);
+  } finally { dispose(); }
+});
+
+test('google-activity-v2: niezgodne okna dystansu przy zgodnych krokach — wartość dobowa z uwagą; bez zgodnych kroków nieporównywalna', async () => {
+  const { db, dispose } = await store();
+  try {
+    const dailyCount = (date: string, field: 'steps' | 'distance', value: string) => ({ civilStartTime: civil(date), civilEndTime: civil(next(date)), [field]: field === 'steps' ? { countSum: value } : { millimetersSum: value } });
+    for (const [date, stepsInWindows] of [['2026-06-10', '100'], ['2026-06-11', '90']] as const) {
+      read(db, 'steps', date, next(date), [dailyCount(date, 'steps', '1200')]);
+      read(db, 'distance', date, next(date), [dailyCount(date, 'distance', '3168563')]);
+      read(db, 'steps-10m', warsawDay(date).start, warsawDay(date).end, windows(date, (index) => index < 12 ? { steps: { countSum: stepsInWindows } } : null));
+      read(db, 'distance-10m', warsawDay(date).start, warsawDay(date).end, windows(date, (index) => index === 0 ? { distance: { millimetersSum: '5205576' } } : null));
+    }
+    const days = new Map(projectGoogleDays(db, '2026-06-10', '2026-06-11', Date.parse('2026-06-14T08:00:00Z')).map((day) => [day.date, day]));
+    const mismatched = days.get('2026-06-10')!;
+    assert.deepEqual(mismatched.metrics.distance, { status: 'valid', value: { numerator: '3168563', denominator: '1000000' } });
+    assert.deepEqual(mismatched.issues, [{ metric: 'distance', code: 'windows_mismatch', state: 'active' }]);
+    assert.deepEqual([mismatched.activity?.stepsMatchWindows, mismatched.activity?.distanceMatchWindows], [true, false]);
+    // steps do not match on 06-11, so nothing confirms the day boundary: both stay incomparable
+    const unconfirmed = days.get('2026-06-11')!;
+    assert.deepEqual([unconfirmed.metrics.steps.status, unconfirmed.metrics.distance.status], ['incomparable', 'incomparable']);
   } finally { dispose(); }
 });
 

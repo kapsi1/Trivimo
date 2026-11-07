@@ -10,7 +10,7 @@ const value = z.object({ status: z.enum(['valid', 'provisional', 'missing', 'inc
   .refine((item) => item.status !== 'missing' || item.value === null);
 export const issueSchema = z.object({
   metric: z.enum(['weight', 'body_fat', 'steps', 'distance', 'total_energy', 'active_energy']),
-  code: z.enum(['basal_only', 'incomparable_source', 'incomplete_coverage', 'unknown_origin', 'identity_conflict', 'invalid_value', 'unknown_unit', 'incomparable_day', 'unresolved_overlap', 'legacy_model']),
+  code: z.enum(['basal_only', 'incomparable_source', 'incomplete_coverage', 'unknown_origin', 'identity_conflict', 'invalid_value', 'unknown_unit', 'incomparable_day', 'unresolved_overlap', 'legacy_model', 'windows_mismatch']),
   state: z.enum(['active', 'resolved']),
 }).strict();
 const summaryItem = z.object({
@@ -39,7 +39,7 @@ export const snapshotInputSchema = z.object({
     activeWithHeartRateKcal: z.string().regex(/^\d{1,9}\.\d{2}$/).nullable(), activeWithoutHeartRateKcal: z.string().regex(/^\d{1,9}\.\d{2}$/).nullable(),
   }).strict().optional(),
   /** Steps and distance qualification evidence: rule version and whether the day's windows sum to the daily value. */
-  activity: z.object({ rule: z.literal('google-activity-v1'), stepsMatchWindows: z.boolean().nullable(), distanceMatchWindows: z.boolean().nullable() }).strict().optional(),
+  activity: z.object({ rule: z.enum(['google-activity-v1', 'google-activity-v2']), stepsMatchWindows: z.boolean().nullable(), distanceMatchWindows: z.boolean().nullable() }).strict().optional(),
   /** Weight and body fat evidence: rule version, records read for the day and how many were copies of the same measurement. */
   body: z.object({
     rule: z.literal('google-body-v1'), weightRecords: z.number().int().nonnegative().nullable(), weightReplicas: z.number().int().nonnegative().nullable(),

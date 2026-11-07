@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { addDays, diffDays, fitAxis, fmtD, isoWeek, MON, mondayOf, nf, niceTicks } from './format.ts';
 
 /** Tooltip lines as a data attribute: first line is the title (date, hours or week), then value lines. */
@@ -53,9 +53,32 @@ export function energyTip(hrWindows: number | null, windows: number): string[] {
 }
 /** One ten-minute window of the day; `hr` is the window's mean heart rate (null: no measurement, undefined: heart rate not read). */
 export interface SlotPoint { index: number; start: number; range: string; total: number | null; active: number | null; steps: number | null; distance: number | null; fc: number | null; now: boolean; future: boolean; hr: number | null | undefined }
+/** A total-calories window that holds one aggregate record for a longer stretch: the windows after it have no total at all. */
+export interface AggregateSpan { from: number; to: number; total: number; windows: number; avg: number }
+/**
+ * Windows of total calories where the producer put one record for a longer stretch into the window it starts in (checked
+ * 2026-11: the total-calories API has no list, only 10-minute roll-ups). Recognized by the gap: a window with a total followed
+ * by windows with none, closed by a later window with a total. A gap running into the unread rest of the day or into "now" is
+ * not one. The stretch is inferred from the gap, never stated by the producer; nothing here changes a stored value.
+ * Keyed by window index for every window of the stretch.
+ */
+export function aggregateSpans(windows: SlotPoint[]): Map<number, AggregateSpan> {
+  const spans = new Map<number, AggregateSpan>();
+  for (let i = 0; i < windows.length; i++) {
+    const total = windows[i]!.total;
+    if (total === null) continue;
+    let j = i + 1; while (j < windows.length && windows[j]!.total === null) j++;
+    if (j - i < 2 || j >= windows.length || windows.slice(i, j + 1).some((w) => w.future || w.now)) continue;
+    const span = { from: i, to: j - 1, total, windows: j - i, avg: total / (j - i) };
+    for (let k = i; k < j; k++) spans.set(windows[k]!.index, span);
+    i = j - 1;
+  }
+  return spans;
+}
 /** Tooltip lines of one window: its time, the value and (for calories) whose estimate it is. */
-function slotLines(s: SlotPoint, metric: HourKey, stacked: boolean, withHr: boolean): string[] {
+function slotLines(s: SlotPoint, metric: HourKey, stacked: boolean, withHr: boolean, span?: AggregateSpan): string[] {
   const decimals = metric === 'distance' ? 2 : 0, unit = hourUnits[metric], out = [s.range];
+  if (stacked && span) return [s.range, `Rekord zbiorczy: ${nf(span.total)} kcal na ok. ${span.windows * 10} min`, '(zakres wnioskowany z luki w danych, nie pomiar)', `średnio ok. ${nf(span.avg / 10, 1)} kcal/min`, ...(s.active !== null ? [`Aktywne w tym oknie: ${nf(s.active)} kcal`] : [])];
   if (s.future && !(stacked && s.fc !== null)) out.push('—');
   else if (stacked) { out.push(s.total !== null ? `${nf(s.total)} kcal` : '—'); if (s.fc !== null) out.push(`Prognoza: ${nf((s.total ?? 0) + s.fc)} kcal`); }
   else out.push(s[metric] === null ? '—' : `${nf(s[metric]!, decimals)} ${unit}`);
@@ -70,8 +93,10 @@ function slotLines(s: SlotPoint, metric: HourKey, stacked: boolean, withHr: bool
  */
 export function HourChart({ windows, hours, metric, height = 150, width = 640, hr }: { windows: SlotPoint[]; hours: HourPoint[]; metric: HourKey; height?: number; width?: number; hr?: HrWindow[] }) {
   const H = height, W = width, L = 36, B = 18, T = 8, big = H > 200, color = metric === 'steps' || metric === 'distance' ? 'var(--c-activity)' : 'var(--c-energy)';
-  const win = hr ?? [], R = win.length ? 40 : 0, PW = W - R, stacked = metric === 'total';
-  const values = windows.flatMap((h) => [h[metric], stacked && h.fc !== null ? (h.total ?? 0) + h.fc : null]).filter((v): v is number => v !== null);
+  const win = hr ?? [], R = win.length ? 40 : 0, PW = W - R, stacked = metric === 'total', hatch = `agg${useId().replace(/:/g, '')}`;
+  const spans = stacked ? aggregateSpans(windows) : new Map<number, AggregateSpan>();
+  // an aggregate record is drawn as its average over the stretch, so one long record does not stretch the axis
+  const values = windows.flatMap((h) => { const span = spans.get(h.index); return span ? [span.avg, h.active] : [h[metric], stacked && h.fc !== null ? (h.total ?? 0) + h.fc : null]; }).filter((v): v is number => v !== null);
   if (!values.length) return <p className="sub">Brak danych 10-minutowych.</p>;
   // the axis ends just above the highest bar (not at the next round tick), so the plot is not left half empty
   const peak = Math.max(...values, 1), top = peak * 1.05, ticks = niceTicks(0, peak, big ? 4 : 2).filter((t) => t <= top);
@@ -89,10 +114,22 @@ export function HourChart({ windows, hours, metric, height = 150, width = 640, h
   }
   const every = W > 900 ? 1 : 3, gap = Math.min(0.6, step * 0.15);
   return <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Rozkład w oknach 10-minutowych, ${unit}${win.length ? ', z tętnem' : ''}`}>
+    {spans.size > 0 && <defs><pattern id={hatch} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="color-mix(in srgb, var(--c-energy) 14%, transparent)" /><line x1="0" y1="0" x2="0" y2="6" stroke="var(--c-energy)" strokeWidth="2" opacity="0.55" /></pattern></defs>}
     {ticks.map((t) => <g key={t}><line className="grid" x1={L} x2={PW} y1={y(t)} y2={y(t)} /><text x={L - 6} y={y(t) + 3.5} textAnchor="end">{nf(t, metric === 'distance' ? 1 : 0)}</text></g>)}
     {windows.map((h) => {
       const x = L + h.index * step + gap / 2, w = Math.max(0.8, step - gap), opacity = h.now ? 0.55 : 1;
       const total = h.total, rest = total === null ? null : Math.max(0, total - (h.active ?? 0)); // active above total (the series disagree in this window): no negative bar
+      const span = spans.get(h.index);
+      if (span) {
+        const sx = L + h.index * step, ya = y(span.avg);
+        return <g key={h.start} opacity={0.95}>
+          <rect x={sx} y={ya} width={step} height={Math.max(0, base - ya)} fill={`url(#${hatch})`} />
+          <line x1={sx} x2={sx + step} y1={ya} y2={ya} stroke="var(--c-energy)" strokeWidth={1} strokeDasharray="3 2" />
+          {h.index === windows[span.from]!.index && <line x1={sx} x2={sx} y1={ya} y2={base} stroke="var(--c-energy)" strokeWidth={1} strokeDasharray="3 2" />}
+          {h.index === windows[span.to]!.index && <line x1={sx + step} x2={sx + step} y1={ya} y2={base} stroke="var(--c-energy)" strokeWidth={1} strokeDasharray="3 2" />}
+          {!!h.active && <rect x={sx + gap / 2} y={y(h.active)} width={Math.max(0.8, step - gap)} height={Math.max(0, base - y(h.active))} fill="var(--c-energy)" opacity={0.6} />}
+        </g>;
+      }
       return <g key={h.start}>
         {stacked && total !== null && rest !== null && <><rect x={x} y={y(rest)} width={w} height={Math.max(0, base - y(rest))} fill="color-mix(in srgb, var(--c-energy) 32%, transparent)" opacity={opacity} />
           {!!h.active && <rect x={x} y={y(total)} width={w} height={Math.max(0, y(rest) - y(total))} fill="var(--c-energy)" opacity={opacity} />}</>}
@@ -103,21 +140,25 @@ export function HourChart({ windows, hours, metric, height = 150, width = 640, h
     })}
     {hrMarks}<line className="axis" x1={L} x2={PW} y1={base} y2={base} />
     {hours.map((h, i) => i % every === 0 || h.label.endsWith('′') ? <text key={`l${h.start}`} x={L + (i * 6 + 3) * step} y={H - 4} textAnchor="middle">{h.label}</text> : null)}
-    {windows.map((h) => <rect key={`t${h.start}`} className="hit" x={L + h.index * step} y={T} width={step} height={base - T} {...tip(slotLines(h, metric, stacked, !!hr))} />)}
+    {windows.map((h) => <rect key={`t${h.start}`} className="hit" x={L + h.index * step} y={T} width={step} height={base - T} {...tip(slotLines(h, metric, stacked, !!hr, spans.get(h.index)))} />)}
   </svg>;
 }
 
 /** The day in hours as a card-sized chart (same size as the 14-day sparkline): bars from zero, kcal split like the big chart. Cards stay hourly; the zoomed chart has ten-minute windows. */
-export function DayMini({ hours, metric }: { hours: HourPoint[]; metric: HourKey }) {
+export function DayMini({ hours, metric, windows }: { hours: HourPoint[]; metric: HourKey; windows?: SlotPoint[] }) {
   const W = 140, H = 34, n = hours.length, step = (W - 8) / Math.max(1, n), stacked = metric === 'total', decimals = metric === 'distance' ? 2 : 0;
-  const values = hours.flatMap((h) => h[metric] === null ? [] : [h[metric]!]);
-  const lines = (h: HourPoint) => [h.range, h.future ? '—' : h[metric] === null ? '—' : `${nf(h[metric]!, decimals)} ${hourUnits[metric]}`, ...((metric === 'total' || metric === 'active') && !h.future && h[metric] !== null ? energyTip(h.hrWindows, 6) : [])];
-  const hits = hours.map((h, i) => <rect key={`h${i}`} className="hit" x={4 + i * step} y={0} width={step} height={H} {...tip(lines(h))} />);
+  // aggregate records (see aggregateSpans) are drawn as their average over the stretch, like any other window (no distinct mark in this small chart): per hour the part that comes from them replaces the lump
+  const agg = hours.map(() => ({ lump: 0, avg: 0 }));
+  if (stacked && windows) for (const [index, span] of aggregateSpans(windows)) { const cell = agg[Math.floor(index / 6)]; if (!cell) continue; cell.avg += span.avg; if (index === windows[span.from]!.index) cell.lump += span.total; }
+  const shown = hours.map((h, i) => agg[i]!.avg > 0 ? (h.total ?? 0) - agg[i]!.lump + agg[i]!.avg : h[metric]);
+  const values = shown.flatMap((v) => v === null ? [] : [v]);
+  const lines = (h: HourPoint, i: number) => [h.range, h.future ? '—' : shown[i] === null ? '—' : `${nf(shown[i]!, decimals)} ${hourUnits[metric]}`, ...((metric === 'total' || metric === 'active') && !h.future && h[metric] !== null ? energyTip(h.hrWindows, 6) : [])];
+  const hits = hours.map((h, i) => <rect key={`h${i}`} className="hit" x={4 + i * step} y={0} width={step} height={H} {...tip(lines(h, i))} />);
   if (!values.length) return <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true"><line x1={0} x2={W} y1={30} y2={30} className="axis" strokeDasharray="2 3" />{hits}</svg>;
   const max = Math.max(...values), y = (v: number) => 30 - (v / (max || 1)) * 26, color = metric === 'steps' || metric === 'distance' ? 'var(--c-activity)' : 'var(--c-energy)';
   return <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true">
     {hours.map((h, i) => {
-      const v = h[metric]; if (v === null) return null;
+      const v = shown[i]!; if (v === null) return null;
       const x = 4 + i * step + 0.5, w = Math.max(1, step - 1), rest = stacked ? Math.max(0, v - (h.active ?? 0)) : v;
       return <g key={i} opacity={h.now ? 0.5 : 1}><rect x={x} y={y(rest)} width={w} height={Math.max(0.5, 30 - y(rest))} fill={stacked ? 'color-mix(in srgb, var(--c-energy) 32%, transparent)' : color} />
         {stacked && !!h.active && <rect x={x} y={y(v)} width={w} height={Math.max(0, y(rest) - y(v))} fill="var(--c-energy)" />}</g>;
@@ -246,6 +287,6 @@ export const weekTitle = (monday: string) => `Tydzień ${isoWeek(monday)} · ${f
 
 export const HR_LEGEND = <><span><i style={{ background: 'var(--c-band)' }} />średnia okna</span><span><i style={{ background: 'color-mix(in srgb, var(--c-band) 30%, transparent)' }} />min–maks.</span></>;
 /** `forecast`: tooltip saying what the dashed part assumes, null without a forecast. */
-export function EnergyLegend({ forecast }: { forecast: string | null }) {
-  return <><span><i style={{ background: 'var(--c-energy)' }} />aktywne</span><span><i style={{ background: 'color-mix(in srgb, var(--c-energy) 32%, transparent)' }} />spalone poza aktywnymi</span>{forecast && <span title={forecast}><i className="i-fc" />prognoza</span>}</>;
+export function EnergyLegend({ forecast, aggregate }: { forecast: string | null; aggregate?: boolean }) {
+  return <><span><i style={{ background: 'var(--c-energy)' }} />aktywne</span><span><i style={{ background: 'color-mix(in srgb, var(--c-energy) 32%, transparent)' }} />spalone poza aktywnymi</span>{aggregate && <span title="Jeden rekord producenta na dłuższy odcinek; narysowany jako średnia z odcinka wnioskowanego z luki w danych, nie jako pomiar."><i style={{ background: 'repeating-linear-gradient(135deg, var(--c-energy) 0 2px, transparent 2px 4px)', border: '1px dashed var(--c-energy)' }} />rekord zbiorczy (średnia z odcinka)</span>}{forecast && <span title={forecast}><i className="i-fc" />prognoza</span>}</>;
 }

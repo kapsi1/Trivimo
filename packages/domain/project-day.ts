@@ -26,6 +26,7 @@ function qualifiedMetric(metric: QualifiedMetric, assessment: Assessment, issues
   if (assessment.reason && assessment.reason !== 'missing_value' && assessment.reason !== 'ongoing_day') {
     const code: IssueCode = assessment.reason === 'basal_only' ? 'basal_only'
       : assessment.reason === 'legacy_model' ? 'legacy_model'
+        : assessment.reason === 'windows_mismatch' ? 'windows_mismatch'
         : assessment.reason === 'unknown_origin' ? 'unknown_origin'
           : ['partial_coverage', 'unknown_coverage', 'unconfirmed_zero', 'read_before_day_end'].includes(assessment.reason) ? 'incomplete_coverage'
             : assessment.reason === 'invalid_value' ? 'invalid_value' : assessment.reason === 'unknown_unit' ? 'unknown_unit'

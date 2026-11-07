@@ -30,6 +30,8 @@ Pełny katalog API zastępuje dawne ograniczenia Health Sync do wybranych pól. 
 
 **2026-11-06 — odświeżanie co 5 minut, bez list źródeł.** Najmniejszy dozwolony interwał to 5 minut (wcześniej 15); limit Google to 300 żądań na minutę na użytkownika, a jeden przebieg to około 11 żądań. Masa i tkanka tłuszczowa są czytane najwyżej raz na godzinę. Automatyczne odświeżanie nie pobiera już list źródeł (kroki, kalorie aktywne), a kolumna „Źródła” w tabeli dni została usunięta (zastępuje wpis z 2026-11-03); kolumna „Opaska” zostaje, bo opiera się na oknach tętna. Zapisane wcześniej listy źródeł pozostają w bazie jako oryginały.
 
+**2026-11-07 — dystans przy niezgodnych oknach (`google-activity-v2`):** wartość dobowa pozostaje ważna z uwagą, gdy kroki doby potwierdzają granicę, a okna dystansu się nie zgadzają (potwierdzone w aplikacji Health dla 22–24.10). Dobowa wartość producenta jest źródłem prawdy, okna są tylko kontrolą granicy doby.
+
 **2026-11-03 — kroki i dystans (`google-activity-v1`):** wartość dobowa producenta („uzgodnienie producenta”), telefon nie jest wykluczany.
 
 **2026-11-04 — masa i tkanka tłuszczowa (`google-body-v1`):** średnia unikalnych pomiarów doby z API; kopie z różnych aplikacji liczone raz; Takeout tylko do porównania.

@@ -106,9 +106,11 @@ function windowSum(windows: { value: string | null }[] | undefined): bigint | nu
 /**
  * Day snapshots from saved Google pages for the read days of [from, to]; a day never read gets no snapshot.
  * Calories follow rule google-energy-v1 (the band share marks whose estimate it is). Steps and distance follow
- * google-activity-v1: the producer's all-sources daily value, which on 2026 data equals the band on days with it and
+ * google-activity-v2: the producer's all-sources daily value, which on 2026 data equals the band on days with it and
  * one phone source otherwise, never a sum of replicas; it counts for the day when the day's ten-minute windows
- * sum to it exactly (for a day in progress the relation checked on completed days is assumed).
+ * sum to it exactly (for a day in progress the relation checked on completed days is assumed). Exception: the
+ * distance windows may disagree when the steps of the same day match their windows (the day boundary is then
+ * confirmed); the daily value stays valid with the note `windows_mismatch`.
  */
 export function projectGoogleDays(db: DatabaseSync, from: string, to: string, nowMs: number): DaySnapshotInput[] {
   if ((Date.parse(to) - Date.parse(from)) / 86400000 > 365) throw new Error('range_too_large');
@@ -131,9 +133,10 @@ export function projectGoogleDays(db: DatabaseSync, from: string, to: string, no
     const matches = (read: { value: string | null } | undefined, windows: bigint | null) => read?.value == null || windows === null ? null : BigInt(read.value) === windows;
     const stepsMatch = matches(stepsRead, windowSum(stepWindows.get(day.date))), distanceMatch = matches(distanceRead, windowSum(distanceWindows.get(day.date)));
     const activity = (kind: 'steps' | 'distance', read: { value: string | null; readAt: number } | undefined, match: boolean | null): ActivityEvidence => ({
+      ...(kind === 'distance' && match === false && stepsMatch === true ? { windowsDisagree: true } : {}),
       kind, value: read?.value == null ? null : kind === 'distance' ? millimetresToKm(read.value) : read.value, unit: kind === 'steps' ? 'count' : 'km',
       reconciliation: 'confirmed', sourceFamily: 'resolved', coverage: 'confirmed', day: progressOf(read), zeroConfirmed: read?.value != null,
-      dayBoundary: nowMs < day.end || match === true ? 'zone_interval' : match === false ? 'producer_day_unmatched' : 'unknown',
+      dayBoundary: nowMs < day.end || match === true || (kind === 'distance' && match === false && stepsMatch === true) ? 'zone_interval' : match === false ? 'producer_day_unmatched' : 'unknown',
     });
     const share = band.get(day.date)!; const activeRead = active.get(day.date);
     // without a read of the day's windows the model cannot be told, so the day is not comparable until they are read;
@@ -167,7 +170,7 @@ export function projectGoogleDays(db: DatabaseSync, from: string, to: string, no
       body: { rule: 'google-body-v1', weightRecords: weight.records, weightReplicas: weight.replicas, bodyFatRecords: bodyFat.records, bodyFatReplicas: bodyFat.replicas },
       steps: activity('steps', stepsRead, stepsMatch), distance: activity('distance', distanceRead, distanceMatch),
       totalEnergy: evidence('total', totalRead), activeEnergy: evidence('active', activeRead),
-      activity: { rule: 'google-activity-v1', stepsMatchWindows: stepsMatch, distanceMatchWindows: distanceMatch },
+      activity: { rule: 'google-activity-v2', stepsMatchWindows: stepsMatch, distanceMatchWindows: distanceMatch },
       energy: { rule: 'google-energy-v1', model, heartRateWindows: heart, dayWindows: share.totalWindows, activeWithHeartRateKcal: share.activeEnergy?.bandKcal ?? null, activeWithoutHeartRateKcal: share.activeEnergy?.otherKcal ?? null },
     }), zone, ...(summaryItems.length ? { summaries: { rule: 'google-daily-summaries-v2' as const, items: summaryItems } } : {}) });
   }

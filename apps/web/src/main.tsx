@@ -76,6 +76,10 @@ function Shell() {
   const current = useRef(location.hash);
   const today = appToday();
   const date = validDay(route.day, today);
+  // the Dzień tab reopens on the day last shown there (kept while the app is open), not on today
+  const lastDay = useRef(date);
+  if (route.view === 'dzien') lastDay.current = date;
+  const dayLink = dayHash(validDay(lastDay.current, today), dayTabs[0]);
   const dayTab = pick(dayTabs, route.tab), srcTab = pick(srcTabs, route.tab), foodTab = pick(foodTabs, route.tab);
   const sync = useJson('/api/google/sync-status', syncStatusSchema, syncTick);
   // poll often while a refresh runs, so the day in progress updates as soon as its new snapshot is published
@@ -122,8 +126,8 @@ function Shell() {
   const refreshBusy = refreshing || !!syncData?.running;
   const lastOk = syncData?.last?.result === 'ok' ? syncData.last.at : syncData?.kinds.map((kind) => kind.lastReadAt).filter((at): at is string => !!at).sort().at(-1);
   const syncBad = sync.error || (syncData?.last && syncData.last.result !== 'ok');
-  const nav = (view: View, ic: ReactNode, label: string, hash: string = view, soon = false) => <a className={`nav ${soon ? 'is-soon' : ''}`} href={`#${hash}`} aria-current={route.view === view && (hash === view || (view === 'jedzenie' ? foodTab : route.tab) === hash.split('/')[1]) ? 'page' : undefined}>{ic}<span>{label}</span></a>;
-  const bottom = (view: View, ic: ReactNode, label: string) => <button type="button" aria-current={route.view === view ? 'page' : undefined} onClick={() => go(view)}>{ic}<span>{label}</span></button>;
+  const nav = (view: View, ic: ReactNode, label: string, hash: string = view, soon = false, href: string = hash) => <a className={`nav ${soon ? 'is-soon' : ''}`} href={`#${href}`} aria-current={route.view === view && (hash === view || (view === 'jedzenie' ? foodTab : route.tab) === hash.split('/')[1]) ? 'page' : undefined}>{ic}<span>{label}</span></a>;
+  const bottom = (view: View, ic: ReactNode, label: string) => <button type="button" aria-current={route.view === view ? 'page' : undefined} onClick={() => go(view === 'dzien' ? dayLink : view)}>{ic}<span>{label}</span></button>;
 
   let context: ReactNode = null;
   if (route.view === 'dzien') context = <DateControl date={date} onDate={setDay} />;
@@ -143,7 +147,7 @@ function Shell() {
     <BackfillNotice backfill={syncData?.backfill} onCoverage={route.view === 'zrodla' && srcTab === 'pokrycie'} go={go} />
     <aside className="side" aria-label="Nawigacja główna">
       <div className="brand"><LogoMark className="brand-mark" /><b>Trivimo</b><button type="button" className="sidetoggle" aria-expanded={!collapsed} aria-label={collapsed ? 'Rozwiń panel nawigacji' : 'Zwiń panel do ikon'} title={collapsed ? 'Rozwiń panel' : 'Zwiń panel'} onClick={toggleSide}>{collapsed ? I.right : I.left}</button></div>
-      <nav className="navgroup" aria-label="Dane"><h4>Dane</h4>{nav('dzien', I.day, 'Dzień')}{nav('trendy', I.trend, 'Trendy')}{nav('tabela', I.table, 'Tabela dni')}{nav('treningi', I.run, 'Treningi', 'treningi', true)}</nav>
+      <nav className="navgroup" aria-label="Dane"><h4>Dane</h4>{nav('dzien', I.day, 'Dzień', 'dzien', false, dayLink)}{nav('trendy', I.trend, 'Trendy')}{nav('tabela', I.table, 'Tabela dni')}{nav('treningi', I.run, 'Treningi', 'treningi', true)}</nav>
       <nav className="navgroup" aria-label="Jedzenie"><h4>Jedzenie</h4>{nav('jedzenie', I.book, 'Dziennik', 'jedzenie/dziennik', true)}{nav('jedzenie', I.food, 'Produkty i przepisy', 'jedzenie/produkty', true)}{nav('jedzenie', I.plan, 'Planer', 'jedzenie/planer', true)}</nav>
       <nav className="navgroup" aria-label="System"><h4>System</h4>{nav('zrodla', I.src, 'Źródła danych')}{nav('ustawienia', I.gear, 'Ustawienia')}</nav>
       <div className="side-foot"><button type="button" className="sync" disabled={refreshBusy} title={`${sync.error ? 'Stan niedostępny' : lastOk ? `Odświeżono ${whenOf(lastOk)}` : 'Brak odczytu'}${syncData?.automatic ? ` · automatycznie co ${syncData.automatic} min` : ''} · kliknij, aby odświeżyć teraz`} onClick={() => void refreshNow()}><span className={`dot ${syncBad || refreshFailed ? 'warn' : ''} ${refreshBusy ? 'busy' : ''}`} /><span>{refreshBusy ? 'odświeżanie…' : refreshFailed ? 'nie udało się odświeżyć' : sync.error ? 'stan niedostępny' : lastOk ? `odświeżono ${whenOf(lastOk).replace(/^dziś /, '')}` : 'brak odczytu'}{!refreshBusy && !refreshFailed && syncBad && syncData?.last ? ' · błąd' : ''}</span></button></div>

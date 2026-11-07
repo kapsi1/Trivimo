@@ -24,3 +24,9 @@ test('wymaga właściwej jednostki i całkowitej liczby kroków', () => {
   assert.equal(assessActivity({ ...steps, unit: 'km' }).reason, 'unknown_unit');
   assert.equal(assessActivity({ ...steps, kind: 'distance', unit: 'km', value: '1.250' }).status, 'valid');
 });
+
+test('google-activity-v2: niezgodne okna dystansu przy potwierdzonej dobie dają wartość z uwagą, nie nieporównywalność', () => {
+  const distance: ActivityEvidence = { ...steps, kind: 'distance', unit: 'km', value: '3.168563' };
+  assert.deepEqual(assessActivity({ ...distance, windowsDisagree: true }), { status: 'valid', value: '3.168563', reason: 'windows_mismatch' });
+  assert.equal(assessActivity({ ...distance, windowsDisagree: true, dayBoundary: 'unknown' }).status, 'incomparable');
+});
