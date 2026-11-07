@@ -2,6 +2,12 @@
 
 Najnowsze wpisy na górze. Starsze (2026-11-02 – 2026-11-04): [archiwum](completed/04-test-results-archive.md). Pakiety instaluje pnpm; skrypty `npm run …` w raporcie działają tak samo jak `pnpm run …`.
 
+## 2026-11-07 — wskaźniki „Inne wskaźniki” w Trendach
+
+- Zmiana: sześć kart z wykresem liniowym (dzień/tydzień) po karcie tętna; `summaryTrend` i `summaryMean` w `apps/web/src/derive.ts`, zdjęto placeholder „Tętno spoczynkowe (M2)”. Bez zmian kontraktu i magazynu.
+- `pnpm run typecheck`: bez błędów. W przeglądarce (localhost:5173, dane użytkownika): 13 kart, średnie okresu, VO₂max „Brak wartości w tym okresie”, powiększenie karty temperatury działa, brak błędów w konsoli. `pnpm test`: 192 testy zaliczone.
+- Nie sprawdzono: `pnpm run build` po tej zmianie, agregacji Tygodnie i telefonu, doby z konfliktem w tooltipie wykresu, niezależnego przeliczenia średnich; `summaryTrend` nie ma testu automatycznego (moduł importuje komponenty .tsx).
+
 ## 2026-11-07 — dystans przy niezgodnych oknach (`google-activity-v2`)
 
 - Diagnostyka na danych użytkownika (tylko odczyt, bez zapisu do bazy i repo; skrypt poza repozytorium, bez wypisywania tokenu i identyfikatorów): dla 2026-10-14 – 10-27 dobowy dystans różni się od sumy okien `distance-10m` (oba znaki, do 3,6 km), kroki zgodne; przesunięcie granic doby ±6 h nie daje równości, strefa Europe/Warsaw bez zmian. Lista rekordów `distance` z API pokazała wiele równoległych źródeł (Fitbit `PASSIVELY_MEASURED` i `DERIVED`, Health Connect). Użytkownik porównał z aplikacją Health: 22.10 3,16 km, 23.10 0,12 km, 24.10 8,14 km — zgodne z wartością dobową (różnica ≤ 0,01 km), niezgodne z oknami.

@@ -264,27 +264,28 @@ export function TrendChart({ points, form, color, decimals, label, events = [], 
   </svg>;
 }
 
-/** Heart rate over days or weeks: a vertical min–max stroke and a line of the mean of window means. */
+/** Heart rate over days or weeks: a vertical min–max stroke per day or week (no mean). */
 export function HrTrendChart({ points, events = [], highlight, width = 640, height = 150, agg = 'day' }: { points: HrTrendPt[]; events?: AxisEvent[]; highlight?: string; width?: number; height?: number; agg?: 'day' | 'week' }) {
   const ok = points.filter((point) => point.avg !== null);
   if (!ok.length) return <p className="sub">Brak pomiarów tętna w tym okresie.</p>;
   const f = frame(points, agg, width, height), { L, T, B, H, W, step, n } = f, big = H > 200;
   const { ticks, lo: t0, hi: t1 } = fitAxis(Math.min(...ok.map((point) => point.min!)), Math.max(...ok.map((point) => point.max!)), big ? 5 : 3);
-  const y = (v: number) => T + (H - B - T) * (1 - (v - t0) / (t1 - t0)), sw = Math.max(1, Math.min(5, step * 0.5));
-  const path = points.reduce((acc, point, i) => point.avg === null ? acc : `${acc}${acc ? 'L' : 'M'}${f.x(i).toFixed(1)},${y(point.avg).toFixed(1)}`, '');
-  return <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Tętno: ${ok.length} wartości z ${n}`}>
+  const y = (v: number) => T + (H - B - T) * (1 - (v - t0) / (t1 - t0)), sw = Math.max(1, Math.min(16, step * 0.7));
+  return <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Tętno:${ok.length} wartości z ${n}`}>
     <defs>{hatch}</defs>
     {ticks.map((t) => <g key={t}><line className="grid" x1={L} x2={W} y1={y(t)} y2={y(t)} /><text x={L - 6} y={y(t) + 3.5} textAnchor="end">{t}</text></g>)}
     <AxisDecor f={f} points={points} events={events} highlight={highlight} />
-    {points.map((point, i) => point.avg === null ? null : <line key={point.date} x1={f.x(i)} x2={f.x(i)} y1={y(point.max!)} y2={y(point.min!)} stroke="color-mix(in srgb, var(--c-band) 40%, transparent)" strokeWidth={sw} strokeLinecap="round" />)}
-    <path d={path} fill="none" stroke="var(--c-band)" strokeWidth={1.6} strokeLinejoin="round" opacity={0.85} />
-    {points.map((point, i) => point.avg === null ? null : <circle key={`c${point.date}`} cx={f.x(i)} cy={y(point.avg)} r={n > 120 ? 1.6 : big ? 3 : 2.4} fill="var(--c-band)" />)}
+    {/* a rounded bar whose top and bottom edges are exactly max and min (a round line cap would stick out by half the width) */}
+    {points.map((point, i) => { if (point.avg === null) return null; const top = y(point.max!), h = Math.max(0.5, y(point.min!) - top);
+      return <rect key={point.date} x={f.x(i) - sw / 2} y={top} width={sw} height={h} rx={Math.min(sw / 2, h / 2)} fill="color-mix(in srgb, var(--c-band) 60%, transparent)" />; })}
     <line className="axis" x1={L} x2={W} y1={H - B} y2={H - B} />
     {points.map((point, i) => <rect key={`t${point.date}`} className="hit" x={L + i * step} y={T} width={step} height={H - B - T} {...tip(point.tip)} />)}
   </svg>;
 }
 export const weekTitle = (monday: string) => `Tydzień ${isoWeek(monday)} · ${fmtD(monday)}–${fmtD(addDays(monday, 6))}`;
 
+/** Legend of the heart-rate trend charts: only the min–max stroke. */
+export const HR_RANGE_LEGEND = <span><i style={{ background: 'color-mix(in srgb, var(--c-band) 60%, transparent)' }} />min–maks.</span>;
 export const HR_LEGEND = <><span><i style={{ background: 'var(--c-band)' }} />średnia okna</span><span><i style={{ background: 'color-mix(in srgb, var(--c-band) 30%, transparent)' }} />min–maks.</span></>;
 /** `forecast`: tooltip saying what the dashed part assumes, null without a forecast. */
 export function EnergyLegend({ forecast, aggregate }: { forecast: string | null; aggregate?: boolean }) {

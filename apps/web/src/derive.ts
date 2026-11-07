@@ -3,6 +3,8 @@ import { metricOf, type DayRow, type Forecast, type HeartRateDay, type HeartRate
 import { energyTip, weekTitle, type AxisEvent, type HourKey, type HourPoint, type SlotPoint, type HrTrendPt, type HrWindow, type TrendPt } from './charts.tsx';
 import { addDays, fmtDL, formatRational, getDayZone, hourOf, mondayOf, nf, timeOf, toNumber } from './format.ts';
 import { trendPoints } from './trends.ts';
+import { summaryRowOf, summaryValue } from './summaries.tsx';
+import { summaryNumber, type SummaryType } from './summary-number.ts';
 
 /** A day's value as a number for charts and means: only valid or provisional values count, anything else is a gap. */
 export function valueOf(snapshot: Snapshot | null | undefined, key: MetricKey): number | null {
@@ -124,12 +126,38 @@ export function metricTrend(rows: readonly DayRow[], key: MetricKey, agg: 'day' 
       tip: [weekTitle(monday), value === null ? '—' : `śr. ${nf(value, metric.decimals)}${metric.unit ? ` ${metric.unit}` : ''}`, `${ok.length} z ${points.length} dób z wartością`] };
   });
 }
+/**
+ * Points of one producer daily summary over days or ISO weeks. A day without a single value (absent, unread, different points
+ * of one day) is a gap, never zero; its tooltip says which. A week is the mean of the days with a value.
+ */
+export function summaryTrend(rows: readonly DayRow[], type: SummaryType, agg: 'day' | 'week'): TrendPt[] {
+  const row = summaryRowOf(type);
+  const days: TrendPt[] = rows.map((item) => {
+    const value = summaryNumber(item.snapshot, type), found = item.snapshot?.summaries?.items.find((candidate) => candidate.type === type);
+    const text = found?.status === 'conflict' ? `${summaryValue(row, found)} ${row.unit} (różne punkty, pominięte w wykresie)` : value === null ? '—' : `${nf(value, row.digits)} ${row.unit}`;
+    return { date: item.date, value, provisional: false, legacy: false, tip: [fmtDL(item.date), text] };
+  });
+  if (agg === 'day') return days;
+  const weeks = new Map<string, TrendPt[]>();
+  for (const point of days) { const monday = mondayOf(point.date); weeks.set(monday, [...(weeks.get(monday) ?? []), point]); }
+  return [...weeks].map(([monday, points]) => {
+    const ok = points.filter((point) => point.value !== null);
+    const value = ok.length ? ok.reduce((sum, point) => sum + point.value!, 0) / ok.length : null;
+    return { date: monday, value, provisional: ok.length < points.length && ok.length > 0, legacy: false, coverage: ok.length / points.length,
+      tip: [weekTitle(monday), value === null ? '—' : `śr. ${nf(value, row.digits)} ${row.unit}`, `${ok.length} z ${points.length} dób z wartością`] };
+  });
+}
+/** Mean of the days with a value in [from, to] (conflict, absent and unread days skipped) and how many there were. */
+export function summaryMean(rows: readonly DayRow[], type: SummaryType): { mean: number | null; n: number } {
+  const values = rows.flatMap((row) => { const value = summaryNumber(row.snapshot, type); return value === null ? [] : [value]; });
+  return { mean: values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null, n: values.length };
+}
 export function heartTrend(summaries: readonly HeartRateSummary[], from: string, to: string, agg: 'day' | 'week'): HrTrendPt[] {
   const byDate = new Map(summaries.map((item) => [item.date, item]));
   const days: HrTrendPt[] = [];
   for (let date = from; date <= to; date = addDays(date, 1)) {
     const value = hrOf(byDate.get(date));
-    days.push({ date, avg: value?.avg ?? null, min: value?.min ?? null, max: value?.max ?? null, tip: [fmtDL(date), value ? `śr. ${nf(value.avg)} bpm` : '—', value ? `${nf(value.min)}–${nf(value.max)} bpm` : ''] });
+    days.push({ date, avg: value?.avg ?? null, min: value?.min ?? null, max: value?.max ?? null, tip: [fmtDL(date), value ? `${nf(value.min)}–${nf(value.max)} bpm` : '—'] });
   }
   if (agg === 'day') return days;
   const weeks = new Map<string, HrTrendPt[]>();
@@ -138,7 +166,7 @@ export function heartTrend(summaries: readonly HeartRateSummary[], from: string,
     const ok = points.filter((point) => point.avg !== null);
     if (!ok.length) return { date: monday, avg: null, min: null, max: null, tip: [weekTitle(monday), '—'] };
     const avg = ok.reduce((sum, point) => sum + point.avg!, 0) / ok.length, min = Math.min(...ok.map((point) => point.min!)), max = Math.max(...ok.map((point) => point.max!));
-    return { date: monday, avg, min, max, tip: [weekTitle(monday), `śr. ${nf(avg)} bpm`, `${nf(min)}–${nf(max)} bpm`] };
+    return { date: monday, avg, min, max, tip: [weekTitle(monday), `${nf(min)}–${nf(max)} bpm`] };
   });
 }
 

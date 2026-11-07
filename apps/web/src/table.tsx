@@ -331,7 +331,7 @@ export function TableView({ from, to, cols, onOpenDay, onOpenMetric }: { from: s
   const headCell = (key: ColumnKey, index: number) => {
     const style = widthAt(index + 1);
     if (isMetric(key)) { const metric = metricOf(key); return <th key={key} scope="col" style={style} aria-sort={ariaSort(key)}>{sortButton(key, <>{metric.short}{metric.unit && <span className="faint"> {metric.unit}</span>}</>, metric.label)}</th>; }
-    if (isSummary(key)) { const row = summaryOfColumn(key); return <th key={key} scope="col" style={style} aria-sort={ariaSort(key)} title={row.label}>{sortButton(key, <>{row.short}<span className="faint"> {row.unit}</span></>, row.label)}</th>; }
+    if (isSummary(key)) { const row = summaryOfColumn(key); return <th key={key} scope="col" style={style} aria-sort={ariaSort(key)} title={row.hint ? `${row.label}: ${row.hint}` : row.label}>{sortButton(key, <>{row.short}<span className="faint"> {row.unit}</span></>, row.label)}</th>; }
     if (key === 'food') return <th key={key} scope="col" style={style} className="faint">Spożyte kcal</th>;
     if (key === 'band') return <th key={key} scope="col" style={style} title="Część doby, w której urządzenie mierzyło tętno (okna 10-minutowe). Dowód pomiaru, nie noszenia przez całe okno.">Opaska</th>;
     return <th key={key} scope="col" style={style} className="l">{columnLabels[key]}</th>;
